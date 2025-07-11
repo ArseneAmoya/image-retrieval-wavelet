@@ -32,7 +32,7 @@ def rank_normalised(seq):
 
 class TrueRanker(torch.autograd.Function):
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, sequence, lambda_val):
         rank = rank_normalised(sequence)
         ctx.lambda_val = lambda_val
@@ -40,7 +40,7 @@ class TrueRanker(torch.autograd.Function):
         return rank
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, grad_output):
         sequence, rank = ctx.saved_tensors
         assert grad_output.shape == rank.shape

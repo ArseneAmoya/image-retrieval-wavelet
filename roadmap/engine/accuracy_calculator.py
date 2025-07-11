@@ -124,6 +124,13 @@ class CustomCalculator(AccuracyCalculator):
             for x in [query, reference, query_labels, reference_labels]
         ]
 
+        # Debug: print shapes and dtypes
+        print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
+        print("query_labels dtype:", query_labels.dtype, "reference_labels dtype:", reference_labels.dtype)
+        # Flatten if not 1D
+        query_labels = query_labels.view(-1)
+        reference_labels = reference_labels.view(-1)
+
         self.curr_function_dict = self.get_function_dict(include, exclude)
 
         kwargs = {

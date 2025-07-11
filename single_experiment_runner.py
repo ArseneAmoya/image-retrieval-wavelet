@@ -3,11 +3,11 @@ import os
 import hydra
 import torch
 
-import roadmap.run as run
+import run
 import roadmap.utils as lib
 
 
-@hydra.main(config_path='config', config_name='default')
+@hydra.main(config_path='config', config_name='default', version_base="1.1")
 def single_experiment_runner(cfg):
     """
     Parses hydra config, check for potential resuming of training
