@@ -1,7 +1,7 @@
 # @package _group_
 experiment_name: ???
-log_dir: /share/DEEPLEARNING/datasets/image_retrieval/experiments/
-seed: ???
+log_dir: .
+seed: 333
 resume: null
 maybe_resume: False
 force_lr: null
@@ -19,7 +19,7 @@ save_model: 50
 eval_split: test
 principal_metric: mean_average_precision_at_r_level0
 log_grad: False
-with_AP: False
+with_AP: True
 landmarks: False
 
 split: null

@@ -3,6 +3,7 @@ __pycache__
 .ipynb_checkpoints
 .pytest_cache
 .DS_Store
+.vscode/
 
 build/
 dist/
@@ -15,3 +16,5 @@ personal_experiment
 .idea
 outputs
 scripts
+
+test_models.py

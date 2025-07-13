@@ -13,7 +13,7 @@ max_iter: 50
 
 train_eval_freq: -1
 val_eval_freq: -1
-test_eval_freq: 5
+test_eval_freq: 
 eval_bs: 96
 save_model: 50
 eval_split: test

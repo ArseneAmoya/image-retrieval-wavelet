@@ -111,8 +111,8 @@ class CustomCalculator(AccuracyCalculator):
     def get_accuracy(
         self,
         query,
-        reference,
         query_labels,
+        reference,
         reference_labels,
         embeddings_come_from_same_source,
         include=(),
@@ -125,8 +125,8 @@ class CustomCalculator(AccuracyCalculator):
         ]
 
         # Debug: print shapes and dtypes
-        print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
-        print("query_labels dtype:", query_labels.dtype, "reference_labels dtype:", reference_labels.dtype)
+        # print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
+        # print("query_labels dtype:", query_labels.dtype, "reference_labels dtype:", reference_labels.dtype)
         # Flatten if not 1D
         query_labels = query_labels.view(-1)
         reference_labels = reference_labels.view(-1)
@@ -140,6 +140,7 @@ class CustomCalculator(AccuracyCalculator):
             "reference_labels": reference_labels,
             "embeddings_come_from_same_source": embeddings_come_from_same_source,
             "label_comparison_fn": self.label_comparison_fn,
+            "ref_includes_query": embeddings_come_from_same_source
         }
 
         if any(x in self.requires_knn() for x in self.get_curr_metrics()):
@@ -186,7 +187,7 @@ class CustomCalculator(AccuracyCalculator):
 def get_accuracy_calculator(
     exclude_ranks=None,
     k=2047,
-    with_AP=False,
+    with_AP=True,
     **kwargs,
 ):
     exclude = kwargs.pop('exclude', [])

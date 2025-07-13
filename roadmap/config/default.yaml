@@ -2,17 +2,17 @@ defaults:
 
     - experience: default
 
-    - dataset: sop
+    - dataset: cub
 
-    - loss: roadmap
+    - loss: smoothap
 
     - memory: default
 
     - model: resnet
 
-    - optimizer: sop
+    - optimizer: cub
 
-    - transform: sop
+    - transform: cub
 
     - hydra/job_logging: colorlog
 

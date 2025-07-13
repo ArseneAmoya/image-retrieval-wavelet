@@ -7,6 +7,7 @@ import timm
 import roadmap.utils as lib
 
 from .create_projection_head import create_projection_head
+from .wresnet import WaveResNet
 
 
 def get_backbone(name, pretrained=True):
@@ -103,6 +104,11 @@ def get_backbone(name, pretrained=True):
         backbone.reset_classifier(-1)
         out_dim = 768
         pooling = nn.Identity()
+    elif name == 'wresnet':
+        lib.LOGGER.info("using WResNet")
+        out_dim = 2048
+        backbone = WaveResNet(decom_level=3, wave='haar', num_cls=200, ll_only=False, attention=True)
+        pooling = nn.Identity()
     else:
         raise ValueError(f"{name} is not recognized")
 
@@ -171,3 +177,5 @@ class RetrievalNet(nn.Module):
             X = self.fc(X)
             X = F.normalize(X, p=2, dim=1)
             return X
+
+

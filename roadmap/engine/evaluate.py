@@ -29,6 +29,7 @@ class GlobalEmbeddingSpaceTester(testers.GlobalEmbeddingSpaceTester):
             # added the option of disabling TQDM
             for i, data in enumerate(tqdm(dataloader, disable=os.getenv('TQDM_DISABLE'))):
                 img, label = self.data_and_label_getter(data)
+                #print(f"Batch {i} - {img.shape} - {label.shape}")
                 label = c_f.process_label(label, "all", self.label_mapper)
                 q = self.get_embeddings_for_eval(trunk_model, embedder_model, img)
                 if label.dim() == 1:
@@ -46,6 +47,7 @@ class GlobalEmbeddingSpaceTester(testers.GlobalEmbeddingSpaceTester):
                         device=self.data_device,
                         dtype=q.dtype,
                     )
+                #print(f"Batch {i} - {q.shape} - {label.shape}")
                 e = s + q.size(0)
                 all_q[s:e] = q
                 labels[s:e] = label

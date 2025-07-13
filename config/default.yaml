@@ -6,15 +6,15 @@ defaults:
 
     - dataset: cub
 
-    - loss: roadmap
+    - loss: smoothap
 
     - memory: default
 
     - model: resnet
 
-    - optimizer: sop
+    - optimizer: cub
 
-    - transform: sop
+    - transform: cub
 
     - override hydra/job_logging: colorlog
 

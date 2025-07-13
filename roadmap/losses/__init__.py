@@ -3,6 +3,7 @@ from .calibration_loss import CalibrationLoss
 from .fast_ap import FastAP
 from .softbin_ap import SoftBinAP
 from .pair_loss import PairLoss
+from .cross_entropy_loss import SoftmaxCrossEntropy
 from .smooth_rank_ap import (
     HeavisideAP,
     SmoothAP,
@@ -19,4 +20,5 @@ __all__ = [
     'HeavisideAP',
     'SmoothAP',
     'SupAP',
+    'SoftmaxCrossEntropy'
 ]
