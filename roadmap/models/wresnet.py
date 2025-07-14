@@ -246,9 +246,10 @@ class WaveResNet(nn.Module):
         x = self.backbone(x)
         #print(y.shape, "y")
         if not self.ll_only:
-            x = torch.stack([x, self.lh_backbone(high[:,:, 0]), self.hl_backbone(high[:,:, 1]), self.hh_backbone(high[:,:, 2])], dim=1)
+            x = torch.cat([x, self.lh_backbone(high[:,:, 0]), self.hl_backbone(high[:,:, 1]), self.hh_backbone(high[:,:, 2])], dim=1)
             #print(y.shape, "all")
         if(self.att):
+            x = x.view(x.size(0), 4, self.OUT_SIZE)
             x = self.attention(x)
 
         return x#torch.flatten(x, 1)

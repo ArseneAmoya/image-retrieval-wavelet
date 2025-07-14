@@ -4,6 +4,7 @@ from .inshop import InShopDataset
 from .revisited_dataset import RevisitedDataset
 from .sfm120k import SfM120kDataset
 from .sop import SOPDataset
+from .cifar import CifarDataset
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     'RevisitedDataset',
     'SfM120kDataset',
     'SOPDataset',
+    'CifarDataset',
 ]
