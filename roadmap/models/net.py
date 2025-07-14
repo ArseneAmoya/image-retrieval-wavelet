@@ -105,7 +105,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 768
         pooling = nn.Identity()
     elif name == 'wresnet':
-        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get('attention', True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get("feature_size", 512)}")
+        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get('attention', True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)}")
         out_dim = 2048
         backbone = WaveResNet(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
