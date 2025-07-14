@@ -12,3 +12,4 @@ kwargs:
   decom_level: 2
   wave: haar
   feature_size: 512
+  attention_type: eca

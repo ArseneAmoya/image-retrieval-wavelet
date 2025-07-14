@@ -168,7 +168,32 @@ class CBAM(nn.Module):
         if not self.no_spatial:
             x_out = self.SpatialGate(x_out)
         return x_out#(x.permute(0,2,1)@y).squeeze(-1)/self.chan
+class Eca1D_layer(nn.Module):
+    """Constructs a 1D ECA module.
 
+    Args:
+        channel: Number of channels of the input feature map
+        k_size: Adaptive selection of kernel size
+    """
+    def __init__(self, channel, k_size=3):
+        super(Eca1D_layer, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+        self.chan = channel
+
+    def forward(self, x):
+        # feature descriptor on the global spatial information
+        y = self.avg_pool(x)
+        #print(y.shape)
+
+        # Two different branches of ECA module
+        y = self.conv(y.transpose(-1, -2)).transpose(-1, -2)
+
+        # Multi-scale information fusion
+        y = self.sigmoid(y)
+
+        return (x.permute(0,2,1)@y).squeeze(-1)/self.chan#, y
 class WaveResNet(nn.Module):
     def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
@@ -200,6 +225,8 @@ class WaveResNet(nn.Module):
             self.hl_backbone = copy.deepcopy(self.backbone)
             self.hh_backbone = copy.deepcopy(self.backbone)
         if self.att:
+            if kwargs.get('attention_type', None) == "eca":
+                self.attention = Eca1D_layer(4)
             self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
         else :
             self.attention = nn.Identity()
