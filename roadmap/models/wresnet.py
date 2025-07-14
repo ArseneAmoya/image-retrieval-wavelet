@@ -198,7 +198,7 @@ class WaveResNet(nn.Module):
     def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WaveResNet, self).__init__()
-        self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=3, wave= wave, mode='zero')
+        self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=decom_level, wave= wave, mode='zero')
         self.backbone = resnet50(weights = ResNet50_Weights.DEFAULT)
         self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
         #self.backbone.pre_logit = nn.Linear(2048, 1024)
