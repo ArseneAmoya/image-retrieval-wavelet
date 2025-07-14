@@ -6,5 +6,5 @@ kwargs:
 sampler:
   name: MPerClassSampler
   kwargs:
-    batch_size: 12
+    batch_size: 8
     samples_per_class: 4

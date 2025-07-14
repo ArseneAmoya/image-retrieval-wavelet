@@ -10,7 +10,7 @@ from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet
 
 
-def get_backbone(name, pretrained=True):
+def get_backbone(name, pretrained=True, **kwargs):
     if name == 'resnet18':
         lib.LOGGER.info("using ResNet-18")
         out_dim = 512
@@ -105,9 +105,9 @@ def get_backbone(name, pretrained=True):
         out_dim = 768
         pooling = nn.Identity()
     elif name == 'wresnet':
-        lib.LOGGER.info("using WResNet")
+        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get("attention", True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :, kwargs.get('wave', 'haar')")
         out_dim = 2048
-        backbone = WaveResNet(decom_level=3, wave='haar', num_cls=200, ll_only=False, attention=True)
+        backbone = WaveResNet(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
     else:
         raise ValueError(f"{name} is not recognized")
@@ -127,6 +127,7 @@ class RetrievalNet(nn.Module):
         pooling='default',
         projection_normalization_layer='none',
         pretrained=True,
+        *args, **kwargs
     ):
         super().__init__()
 
@@ -143,7 +144,7 @@ class RetrievalNet(nn.Module):
         if with_autocast:
             lib.LOGGER.info("Using mixed precision")
 
-        self.backbone, default_pooling, out_features = get_backbone(backbone_name, pretrained=pretrained)
+        self.backbone, default_pooling, out_features = get_backbone(backbone_name, pretrained=pretrained, **kwargs)
         if pooling == 'default':
             self.pooling = default_pooling
         elif pooling == 'none':
