@@ -17,7 +17,7 @@ def load_and_evaluate(
     data_dir=None,
 ):
     lib.LOGGER.info(f"Evaluating : \033[92m{path}\033[0m")
-    state = torch.load(lib.expand_path(path), map_location='cpu')
+    state = torch.load(lib.expand_path(path), map_location='cpu', weights_only=False)
     cfg = state["config"]
 
     lib.LOGGER.info("Loading model...")
@@ -51,7 +51,7 @@ def load_and_evaluate(
         epoch=state["epoch"],
         batch_size=bs,
         num_workers=nw,
-        exclude=['mean_average_precision'],
+        #exclude=['mean_average_precision'],
     )
 
     lib.LOGGER.info("Evaluation completed...")

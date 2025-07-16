@@ -8,7 +8,7 @@ kwargs:
   norm_features: False
   without_fc: False
   with_autocast: True
-  attention: False
+  attention: True
   decom_level: 1
   wave: haar
   feature_size: 512
