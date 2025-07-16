@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 class ResNetCE(nn.Module):
     def __init__(self, embed_dim: int, num_classes: int, pretrained: bool = False ):
-        super(ResNetCE).__init__()
+        super().__init__()
         self.backbone = models.resnet50(weights=ResNet50_Weights.DEFAULT)
         self.backbone.fc = nn.Identity()  # Remove the final fully connected layer
         #self.fc = nn.Linear(2048, embed_dim)
