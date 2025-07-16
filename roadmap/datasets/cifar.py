@@ -10,7 +10,8 @@ class CifarDataset(BaseDataset):
         self.transform = transform
 
         train = (mode == "train")
-        dataset = CIFAR100(root=self.data_dir, train=train, download=True)
+        print(f"Loading CIFAR100 dataset in {mode} mode with transform: {transform}")
+        dataset = CIFAR100(root="../../data/cifar100", train=train, download=True, transform=transform)
         self.paths = np.arange(len(dataset))
         self.labels = np.array(dataset.targets)
 
@@ -20,6 +21,4 @@ class CifarDataset(BaseDataset):
 
     def __getitem__(self, idx):
         img, label = self.dataset[self.paths[idx]]
-        if self.transform:
-            img = self.transform(img)
         return {"image": img, "label": label}

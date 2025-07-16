@@ -17,5 +17,8 @@ personal_experiment
 .idea
 outputs
 scripts
+data
+
+experiments/
 
 test_models.py

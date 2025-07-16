@@ -253,3 +253,68 @@ class WaveResNet(nn.Module):
             x = self.attention(x)
 
         return x#torch.flatten(x, 1)
+
+class WaveResNetCE(nn.Module):
+    def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
+        self.OUT_SIZE = kwargs.get("feature_size", 2048)
+        super(WaveResNetCE, self).__init__()
+        self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=decom_level, wave= wave, mode='zero')
+        self.backbone = resnet50(weights = ResNet50_Weights.DEFAULT)
+        self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
+        #self.backbone.pre_logit = nn.Linear(2048, 1024)
+        self.backbone.conv1 = nn.Conv2d(3, 64, (1,1))
+        self.backbone.maxpool = nn.Identity()
+
+
+#         if(maps):
+#             self.backbone.avgpool = nn.Identity()
+#             self.backbone.flatten =  nn.Identity()
+
+        # else:
+
+        self.backbone.avgpool = nn.AdaptiveAvgPool3d((self.OUT_SIZE, 1, 1))
+        #ct = 0
+        self.att = kwargs.get("attention", False)
+#         for child in self.backbone.children():
+#             #ct += 1
+#             #if ct < 7:
+#             for param in child.parameters():
+#                 param.requires_grad = False
+        if not ll_only :
+            self.lh_backbone = copy.deepcopy(self.backbone)
+            self.hl_backbone = copy.deepcopy(self.backbone)
+            self.hh_backbone = copy.deepcopy(self.backbone)
+        if self.att:
+            if kwargs.get('attention_type', None) == "eca":
+                self.attention = Eca1D_layer(4)
+            else:
+                self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
+        else :
+            self.attention = nn.Identity()
+
+        self.level = decom_level -1
+        self.ll_only = ll_only
+
+        in_features = self.OUT_SIZE * (4 if (not ll_only) and not self.att else 1)
+        self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
+        # ct = 0
+        # for child in self.left.children():
+        #     ct += 1
+        #     if ct < 7:
+        #         for param in child.parameters():
+        #             param.requires_grad = False
+    def forward(self, x):
+        x, high = self.dwt(x)
+        high = high[self.level]
+        x = self.backbone(x)
+        #print(y.shape, "y")
+        if not self.ll_only:
+            x = torch.cat([x, self.lh_backbone(high[:,:, 0]), self.hl_backbone(high[:,:, 1]), self.hh_backbone(high[:,:, 2])], dim=1)
+            #print(y.shape, "all")
+        if(self.att):
+            x = x.view(x.size(0), 4, self.OUT_SIZE)
+            x = self.attention(x)
+        if self.training:          # ⇢ mode entrainement : logits
+            return self.classifier(x)
+        else:                      # ⇢ mode évaluation / test : embeddings
+            return x

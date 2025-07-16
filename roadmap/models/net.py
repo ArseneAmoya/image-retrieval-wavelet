@@ -7,7 +7,8 @@ import timm
 import roadmap.utils as lib
 
 from .create_projection_head import create_projection_head
-from .wresnet import WaveResNet
+from .wresnet import WaveResNet, WaveResNetCE
+from .resnet_ce import ResNetCE
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -105,10 +106,21 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 768
         pooling = nn.Identity()
     elif name == 'wresnet':
-        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get('attention', True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)}")
+        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get('attention', True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
         out_dim = 2048
         backbone = WaveResNet(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
+    elif name == 'wresnet_ce':
+        lib.LOGGER.info(f"using WResNet, attention : {kwargs.get('attention', True)}, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
+        out_dim = 512
+        backbone = WaveResNetCE(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        pooling = nn.Identity()
+    elif name == 'resnet_ce':
+        lib.LOGGER.info("using ResNet-CE")
+        backbone = ResNetCE(pretrained=pretrained,**kwargs)
+        out_dim = 512
+        pooling = nn.Identity()
+       
     else:
         raise ValueError(f"{name} is not recognized")
 
@@ -143,8 +155,10 @@ class RetrievalNet(nn.Module):
         self.with_autocast = with_autocast
         if with_autocast:
             lib.LOGGER.info("Using mixed precision")
+        
+        self.backbone_name = backbone_name
 
-        self.backbone, default_pooling, out_features = get_backbone(backbone_name, pretrained=pretrained, **kwargs)
+        self.backbone, default_pooling, out_features = get_backbone(backbone_name, pretrained=pretrained, embed_dim=embed_dim, **kwargs)
         if pooling == 'default':
             self.pooling = default_pooling
         elif pooling == 'none':
@@ -169,8 +183,11 @@ class RetrievalNet(nn.Module):
             lib.LOGGER.info("Not using a linear projection layer")
 
     def forward(self, X):
-        with torch.cuda.amp.autocast(enabled=self.with_autocast):
+        with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
+            if self.backbone_name.endswith('ce'):
+                # For ResNet-CE, we need to flatten the output
+                return X
             X = self.pooling(X)
 
             X = X.view(X.size(0), -1)

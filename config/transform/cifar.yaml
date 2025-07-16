@@ -1,17 +1,14 @@
 # @package _group_
 train:
-  RandomCrop:
-    size: 32
-    padding: 4
   RandomHorizontalFlip:
     p: 0.5
   ToTensor: {}
   Normalize:
-    mean: [0.5071, 0.4867, 0.4408]
-    std: [0.2675, 0.2565, 0.2761]
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]
 
 test:
   ToTensor: {}
   Normalize:
-    mean: [0.5071, 0.4867, 0.4408]
-    std: [0.2675, 0.2565, 0.2761]
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]

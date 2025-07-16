@@ -1,5 +1,6 @@
 from torch import optim
 import torchvision.transforms as transforms
+import torch
 
 from roadmap import losses
 from roadmap import samplers
@@ -7,6 +8,7 @@ from roadmap import datasets
 from roadmap import models
 from roadmap import engine
 from roadmap import utils as lib
+from torchsummary import summary
 
 
 class Getter:
@@ -55,7 +57,13 @@ class Getter:
         return optimizers, schedulers
 
     def get_scheduler(self, opt, config):
-        sch = getattr(optim.lr_scheduler, config.name)(opt, **config.kwargs)
+        if config.name == "SequentialLR":
+            schedulers_cfg = config.kwargs.schedulers  # Pas de pop !
+            schedulers = [getattr(optim.lr_scheduler, s.name)(opt, **s.kwargs) for s in schedulers_cfg]
+            print("remaining kwargs", config.kwargs)
+            sch = optim.lr_scheduler.SequentialLR(opt, schedulers=schedulers, milestones=config.kwargs.milestones)
+        else:
+            sch = getattr(optim.lr_scheduler, config.name)(opt, **config.kwargs)
         lib.LOGGER.info(sch)
         return sch
 
@@ -109,6 +117,7 @@ class Getter:
 
     def get_model(self, config):
         net = getattr(models, config.name)(**config.kwargs)
+    
         if config.freeze_batch_norm:
             lib.LOGGER.info("Freezing batch norm")
             net = lib.freeze_batch_norm(net)
