@@ -11,7 +11,7 @@ warm_up_key: fc
 
 max_iter: 50
 
-train_eval_freq: -1
+train_eval_freq: 5
 val_eval_freq: -1
 test_eval_freq: 5
 eval_bs: 96
