@@ -10,7 +10,7 @@
       pct_start: 0.3
       div_factor: 10
       final_div_factor: 100
-      epochs: 100
+      epochs: 200
       steps_per_epoch: 375
   scheduler_on_epoch:
   scheduler_on_val:
