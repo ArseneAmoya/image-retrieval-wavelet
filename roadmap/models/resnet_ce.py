@@ -10,10 +10,10 @@ class ResNetCE(nn.Module):
         super().__init__()
         self.backbone = models.resnet50(weights=ResNet50_Weights.DEFAULT)
         self.backbone.fc = nn.Identity()  # Remove the final fully connected layer
-        self.fc = nn.Linear(2048, embed_dim)
+        #self.fc = nn.Linear(2048, embed_dim)
         self.layer_norm = nn.BatchNorm1d(2048)
         nn.LayerNorm(embed_dim)
-        self.classifier = nn.Linear(embed_dim, num_classes)
+        self.classifier = nn.Linear(2048, num_classes)
 
     def forward(self, x) -> torch.Tensor:
         x = self.backbone(x)
@@ -21,13 +21,13 @@ class ResNetCE(nn.Module):
 
         x = torch.flatten(x, 1)
         x = self.layer_norm(x)
-        embed = self.fc(x)
+        #embed = self.fc(x)
 
         if self.training:
-            logits = self.classifier(embed)
+            logits = self.classifier(x)
             return logits
         else:
-            x = F.normalize(embed, dim=1, p=2)
+            x = F.normalize(x, dim=1, p=2)
 
             return x
 
