@@ -289,6 +289,7 @@ class WaveResNetCE(nn.Module):
                 self.attention = Eca1D_layer(4)
             else:
                 self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
+                print("Using CBAM attention")
         else :
             self.attention = nn.Identity()
 
