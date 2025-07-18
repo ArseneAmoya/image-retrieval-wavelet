@@ -43,7 +43,7 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
         restore_epoch = 0
     else:
         lib.LOGGER.info(f"Resuming from state : {checkpoint_dir}")
-        state = torch.load(checkpoint_dir, map_location='cpu')
+        state = torch.load(checkpoint_dir, map_location='cpu', weights_only=False)
         restore_epoch = state['epoch']
 
     if log_dir is None:

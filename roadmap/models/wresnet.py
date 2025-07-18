@@ -5,6 +5,8 @@ import numpy as np
 import torch.nn.functional as F
 from pytorch_wavelets import DWTForward, DWTInverse
 from torchvision.models import resnet50, ResNet50_Weights
+import roadmap.utils as lib
+
 
 class Cdf97Lifting(nn.Module):
     def __init__(self, n_levels = 2, *args, **kwargs) -> None:
@@ -227,8 +229,10 @@ class WaveResNet(nn.Module):
         if self.att:
             if kwargs.get('attention_type', None) == "eca":
                 self.attention = Eca1D_layer(4)
+                lib.LOGGER.info("Using ECA attention")
             else:
                 self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
+                lib.LOGGER.info("Using CBAM attention")
         else :
             self.attention = nn.Identity()
 
@@ -287,6 +291,7 @@ class WaveResNetCE(nn.Module):
         if self.att:
             if kwargs.get('attention_type', None) == "eca":
                 self.attention = Eca1D_layer(4)
+                print("Using ECA attention")
             else:
                 self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
                 print("Using CBAM attention")

@@ -37,7 +37,7 @@ def single_experiment_runner(cfg):
             lib.LOGGER.warning("Checkpoint does not exists")
             return
 
-        at_epoch = torch.load(resume, map_location='cpu')["epoch"]
+        at_epoch = torch.load(resume, map_location='cpu', weights_only=False)["epoch"]
         if at_epoch >= cfg.experience.max_iter:
             lib.LOGGER.warning(f"Exiting trial, experiment {cfg.experience.experiment_name} already finished")
             return
@@ -47,7 +47,7 @@ def single_experiment_runner(cfg):
         if os.path.isfile(state_path):
             resume = state_path
             lib.LOGGER.warning(f"Resuming experience because weights were found @ {resume}")
-            at_epoch = torch.load(resume, map_location='cpu')["epoch"]
+            at_epoch = torch.load(resume, map_location='cpu', weights_only=False)["epoch"]
             if at_epoch >= cfg.experience.max_iter:
                 lib.LOGGER.warning(f"Exiting trial, experiment {cfg.experience.experiment_name} already finished")
                 return
