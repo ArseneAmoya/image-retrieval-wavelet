@@ -51,7 +51,7 @@ def load_and_evaluate(
         epoch=state["epoch"],
         batch_size=bs,
         num_workers=nw,
-        #exclude=['mean_average_precision'],
+        exclude=['mean_average_precision'],
     )
 
     lib.LOGGER.info("Evaluation completed...")

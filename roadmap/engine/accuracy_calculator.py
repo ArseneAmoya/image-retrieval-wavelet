@@ -5,10 +5,10 @@ from pytorch_metric_learning.utils.accuracy_calculator import (
     get_label_match_counts,
     get_lone_query_labels,
 )
-
+from torchmetrics.retrieval import RetrievalRPrecision, RetrievalMAP, RetrievalPrecisionRecallCurve, RetrievalPrecision
 import roadmap.utils as lib
 from .get_knn import get_knn
-
+import pandas as pd
 
 EQUALITY = torch.eq
 
@@ -23,7 +23,18 @@ class CustomCalculator(AccuracyCalculator):
     ):
         super().__init__(*args, **kwargs)
         self.with_faiss = with_faiss
-
+    
+    def n_relevance_at_k(self, knn_labels, query_labels, k):
+        r = self.label_comparison_fn(query_labels, knn_labels[:, :k])
+        return r.float().sum(1)
+    
+    # def calculate_rc_from_1_to_10(self, knn_labels, query_labels, label_counts, **kwargs):
+    #     rc_values = []
+    #     for i in range(1, 11):
+    #         rc = self.rc_at_k(knn_labels, query_labels, i)
+    #         rc_values.append(rc.mean())
+    #     return rc_values
+    
     def recall_at_k(self, knn_labels, query_labels, k):
         recall = self.label_comparison_fn(query_labels, knn_labels[:, :k])
         return recall.any(1).float().mean().item()
@@ -105,8 +116,57 @@ class CustomCalculator(AccuracyCalculator):
             1000,
         )
 
+    def calculate_rpr(self, query_labels, knn_labels, knn_distances, not_lone_query_mask, **kwargs):
+        r_precision = RetrievalRPrecision()
+        relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
+        indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
+        mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
+        return r_precision(
+            preds=(1 / (1 + knn_distances))[mask],
+            target=relevances[mask],
+            indexes= indexes[mask]
+        ).item()
+    
+    def calculate_pr(self, query_labels, knn_labels, knn_distances, not_lone_query_mask, **kwargs):
+        r_precision = RetrievalPrecision(top_k=1)
+        relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
+        indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
+        mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
+
+        return r_precision(
+            preds=(1/(knn_distances+1))[mask],  # Avoid division by zero
+            target=relevances[mask],
+            indexes= indexes[mask],
+        ).item()
+    
+    def calculate_map(self, query_labels, knn_labels, knn_distances,not_lone_query_mask,  **kwargs):
+        r_map = RetrievalMAP()
+        relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
+        indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
+        mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
+
+        return r_map(
+            preds=(1/(knn_distances+1))[mask],  # Avoid division by zero
+            target=relevances[mask],
+            indexes= indexes[mask],
+        ).item()
+    
+    def calculate_pr_rc(self, query_labels, knn_labels, knn_distances,not_lone_query_mask,  **kwargs):
+        pr_rc = RetrievalPrecisionRecallCurve()
+        relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
+        indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
+        mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
+        pr, rc, _ = pr_rc(preds=(1/(knn_distances+1))[mask],  # Avoid division by zero
+            target=relevances[mask],
+            indexes= indexes[mask]
+        )
+
+        pd.DataFrame({"pr": pr.cpu().numpy(), "rc":rc.cpu().numpy()}).to_csv("pr_rc.csv")
+        return 0
+
+
     def requires_knn(self):
-        return super().requires_knn() + ["recall_classic"]
+        return super().requires_knn() + ["recall_classic","rpr", "pr", 'pr_rc']
 
     def get_accuracy(
         self,
@@ -186,7 +246,7 @@ class CustomCalculator(AccuracyCalculator):
 
 def get_accuracy_calculator(
     exclude_ranks=None,
-    k=2047,
+    k=9999,
     with_AP=True,
     **kwargs,
 ):

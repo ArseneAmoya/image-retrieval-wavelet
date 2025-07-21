@@ -5,8 +5,8 @@
     lr: 0.00001
     weight_decay: 0.0004
   scheduler_on_epoch:
-    name: MultiStepLR
-    kwargs:
+     name: MultiStepLR
+     kwargs:
         milestones: [30, 70]
         gamma: 0.3
         last_epoch: -1
