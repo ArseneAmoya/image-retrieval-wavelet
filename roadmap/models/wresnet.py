@@ -135,6 +135,30 @@ class ChannelGate(nn.Module):
 
         scale = F.sigmoid( channel_att_sum ).unsqueeze(-1)
         return (x.permute(0,2,1)@scale).squeeze(-1)/self.gate_channels#, scale
+    def alphas(self, x):
+        channel_att_sum = None
+        for pool_type in self.pool_types:
+            if pool_type=='avg':
+                avg_pool = nn.AdaptiveAvgPool1d(1)(x)# F.avg_pool1d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                channel_att_raw = self.mlp( avg_pool )
+            elif pool_type=='max':
+                max_pool = nn.AdaptiveMaxPool1d(1)(x)# F.max_pool1d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                channel_att_raw = self.mlp( max_pool )
+            elif pool_type=='lp':
+                lp_pool = F.lp_pool2d( x, 2, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                channel_att_raw = self.mlp( lp_pool )
+            elif pool_type=='lse':
+                # LSE pool only
+                lse_pool = logsumexp_2d(x)
+                channel_att_raw = self.mlp( lse_pool )
+
+            if channel_att_sum is None:
+                channel_att_sum = channel_att_raw
+            else:
+                channel_att_sum = channel_att_sum + channel_att_raw
+
+        scale = F.sigmoid( channel_att_sum ).unsqueeze(-1)
+        return scale
 
 def logsumexp_2d(tensor):
     tensor_flatten = tensor.view(tensor.size(0), tensor.size(1), -1)
@@ -157,6 +181,11 @@ class SpatialGate(nn.Module):
         x_out = self.spatial(x_compress)
         scale = F.sigmoid(x_out) # broadcasting
         return x * scale
+    def alphas(self, x):
+        x_compress = self.compress(x)
+        x_out = self.spatial(x_compress)
+        scale = F.sigmoid(x_out)
+        return scale
 
 class CBAM(nn.Module):
     def __init__(self, gate_channels=4, reduction_ratio=1, pool_types=['avg', 'max'], no_spatial=True):
@@ -170,6 +199,11 @@ class CBAM(nn.Module):
         if not self.no_spatial:
             x_out = self.SpatialGate(x_out)
         return x_out#(x.permute(0,2,1)@y).squeeze(-1)/self.chan
+    def alphas(self, x):
+        x_out = self.ChannelGate.alphas(x)
+        if not self.no_spatial:
+            x_out = self.SpatialGate.alphas(x_out)
+        return x_out
 class Eca1D_layer(nn.Module):
     """Constructs a 1D ECA module.
 
@@ -196,6 +230,18 @@ class Eca1D_layer(nn.Module):
         y = self.sigmoid(y)
 
         return (x.permute(0,2,1)@y).squeeze(-1)/self.chan#, y
+    def alphas(self, x):
+        # feature descriptor on the global spatial information
+        y = self.avg_pool(x)
+        #print(y.shape)
+
+        # Two different branches of ECA module
+        y = self.conv(y.transpose(-1, -2)).transpose(-1, -2)
+
+        # Multi-scale information fusion
+        y = self.sigmoid(y)
+
+        return y
 class WaveResNet(nn.Module):
     def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
@@ -257,6 +303,18 @@ class WaveResNet(nn.Module):
             x = self.attention(x)
 
         return x#torch.flatten(x, 1)
+    def alphas(self, x):
+        x, high = self.dwt(x)
+        high = high[self.level]
+        x = self.backbone(x)
+        if not self.ll_only:
+            x = torch.cat([x, self.lh_backbone(high[:,:, 0]), self.hl_backbone(high[:,:, 1]), self.hh_backbone(high[:,:, 2])], dim=1)
+        if(self.att):
+            x = x.view(x.size(0), 4, self.OUT_SIZE)
+            x = self.attention.alphas(x)
+            return x
+        else:
+            return None
 
 class WaveResNetCE(nn.Module):
     def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
@@ -324,3 +382,15 @@ class WaveResNetCE(nn.Module):
             return self.classifier(x)
         else:                      # ⇢ mode évaluation / test : embeddings
             return x
+    def alphas(self, x):
+        x, high = self.dwt(x)
+        high = high[self.level]
+        x = self.backbone(x)
+        if not self.ll_only:
+            x = torch.cat([x, self.lh_backbone(high[:,:, 0]), self.hl_backbone(high[:,:, 1]), self.hh_backbone(high[:,:, 2])], dim=1)
+        if(self.att):
+            x = x.view(x.size(0), 4, self.OUT_SIZE)
+            x = self.attention.alphas(x)
+            return x
+        else:
+            return None

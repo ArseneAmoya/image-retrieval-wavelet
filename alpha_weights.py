@@ -8,6 +8,48 @@ from roadmap.getter import Getter
 import roadmap.utils as lib
 import roadmap.engine as eng
 
+from torch import nn
+from torchsummary import summary
+import matplotlib.pyplot as plt
+#from models import *
+
+#from Smooth_AP_loss import SmoothAP
+
+#import datasets as data
+from tqdm import tqdm
+#from model import IndLeftRightDisparity
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using {device} device")
+
+
+def generate_alphas(dataloader, model_ft):
+    """
+    Parameters
+    ----------
+    files : list
+        The list of images directories to index.
+    model :
+    Returns
+    -------
+    X: Tensor componed of features vectors of images.
+
+    """
+    model_ft.eval()
+    summary(model_ft, (3, 32, 32))
+    #print(model_ft)
+#    datas = data.EvaluationDataset(files)
+#    dataloader = torch.utils.data.DataLoader(datas, batch_size=1)
+    output = 0
+    with torch.no_grad():
+
+        for inputs in tqdm(dataloader):
+            img = inputs["image"].to(device)#inp = [a.to(device) for a in inputs]#inp = [a.to(device) for a in inputs]#
+            #print(inp[0].shape, len(inp))
+            output += model_ft.backbone.alphas(img).sum(0)#.reshape(1,2048)
+
+        output /= len(dataloader.dataset)
+    return output
+
 
 def load_and_evaluate(
     path,
@@ -15,7 +57,6 @@ def load_and_evaluate(
     bs,
     nw,
     data_dir=None,
-    **kwargs
 ):
     lib.LOGGER.info(f"Evaluating : \033[92m{path}\033[0m")
     state = torch.load(lib.expand_path(path), map_location='cpu', weights_only=False)
@@ -43,28 +84,27 @@ def load_and_evaluate(
         lib.LOGGER.info(dts)
     else:
         dts = getter.get_dataset(transform, set, cfg.dataset)
+        dataloader = torch.utils.data.DataLoader(
+            dts,
+            batch_size=bs,
+            shuffle=False,
+            num_workers=nw,
+            pin_memory=True,
+        )
+    
+    if isinstance(dataloader, torch.utils.data.DataLoader):
+        lib.LOGGER.info(f"Dataset size: {len(dataloader.dataset)}")
+        lib.LOGGER.info(f"Computing alphas")
+        output = generate_alphas(dataloader, net)
+        print(output)
 
-    lib.LOGGER.info("Dataset created...")
+        
 
-    metrics = eng.evaluate(
-        net=net,
-        test_dataset=dts,
-        epoch=state["epoch"],
-        batch_size=bs,
-        num_workers=nw,
-        exclude=['mean_average_precision'],
-        k=kwargs.get('k', 2047),
-    )
 
-    lib.LOGGER.info("Evaluation completed...")
-    for split, mtrc in metrics.items():
-        for k, v in mtrc.items():
-            if k == 'epoch':
-                continue
-            lib.LOGGER.info(f"{split} --> {k} : {np.around(v*100, decimals=2)}")
+    
+    
 
-    return metrics
-
+    lib.LOGGER.info("Alphas computed...")
 
 if __name__ == '__main__':
 
@@ -76,7 +116,6 @@ if __name__ == '__main__':
     parser.add_argument("--nw", type=int, default=10, help='Num workers for DataLoader')
     parser.add_argument("--data-dir", type=str, default=None, help='Possible override of the datadir in the dataset config')
     parser.add_argument("--metric-dir", type=str, default=None, help='Path in which to store the metrics')
-    parser.add_argument("--k", type=int, default=2047, help='k for the k-NN evaluation')
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -92,24 +131,12 @@ if __name__ == '__main__':
         args.config = paths
 
     for path in args.config:
-        metrics = load_and_evaluate(
+        alphas = load_and_evaluate(
             path=path,
             set=args.set,
             bs=args.bs,
             nw=args.nw,
             data_dir=args.data_dir,
-            k=args.k,
         )
         print()
         print()
-
-        if args.metric_dir is not None:
-            with open(args.metric_dir, 'a') as f:
-                f.write(path)
-                f.write("\n")
-                for split, mtrc in metrics.items():
-                    for k, v in mtrc.items():
-                        if k == 'epoch':
-                            continue
-                        f.write(f"{split} --> {k} : {np.around(v*100, decimals=2)}\n")
-                f.write("\n\n")
