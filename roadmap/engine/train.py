@@ -97,7 +97,7 @@ def train(
                     batch_size=config.experience.eval_bs,
                     num_workers=config.experience.num_workers,
                     with_AP=config.experience.with_AP,
-                    exclude=['map', 'rpr', 'pr_rc', 'pr']
+                    exclude=['map', 'rpr', 'pr_rc', 'pr'],
                     **dataset_dict,
                 )
             torch.cuda.empty_cache()
