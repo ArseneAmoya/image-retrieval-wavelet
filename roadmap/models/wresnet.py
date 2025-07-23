@@ -349,10 +349,10 @@ class WaveResNetCE(nn.Module):
         if self.att:
             if kwargs.get('attention_type', None) == "eca":
                 self.attention = Eca1D_layer(4)
-                print("Using ECA attention")
+                lib.LOGGER.info("Using ECA attention")
             else:
                 self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
-                print("Using CBAM attention")
+                lib.LOGGER.info("Using CBAM attention")
         else :
             self.attention = nn.Identity()
 
