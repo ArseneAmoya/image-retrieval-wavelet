@@ -5,6 +5,7 @@ from .revisited_dataset import RevisitedDataset
 from .sfm120k import SfM120kDataset
 from .sop import SOPDataset
 from .cifar import CifarDataset
+from .stanforddog12 import StanfordDog12Dataset
 
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     'SfM120kDataset',
     'SOPDataset',
     'CifarDataset',
+    'StanfordDog12Dataset',
 ]

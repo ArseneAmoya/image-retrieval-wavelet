@@ -25,6 +25,8 @@ class StanfordDog12Dataset(BaseDataset):
         labels = np.array([int(a[0]) - 1 for a in mat['labels']])  # Convert to zero-based index
         self.paths = paths
         self.labels = labels
+        self.get_instance_dict()
+
 
 
       

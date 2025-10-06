@@ -8,3 +8,4 @@ sampler:
   kwargs:
     batch_size: 128
     samples_per_class: 4
+num_classes: 120
