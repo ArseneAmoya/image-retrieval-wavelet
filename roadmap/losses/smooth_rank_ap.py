@@ -10,9 +10,16 @@ from tqdm.auto import tqdm
 
 import roadmap.utils as lib
 
+class Heaviside(torch.autograd.Function):
+    def forward(ctx, inputs, val=1 ):
+        ctx.save_for_backward(inputs)
+        return torch.heaviside(inputs, torch.tensor(val, device = inputs.device, dtype = inputs.dtype))
+    def backward(ctx, grad_output):
+        return None, None
+h =Heaviside.apply
 
 def heaviside(tens, val=1., target=None, general=None):
-    return torch.heaviside(tens, values=torch.tensor(val, device=tens.device, dtype=tens.dtype))
+    return h(tens, torch.tensor(val, device=tens.device, dtype=tens.dtype))
 
 
 def tau_sigmoid(tensor, tau, target=None, general=None):
@@ -52,7 +59,7 @@ def step_rank(tens, tau, rho, offset=None, delta=None, start=0.5, target=None, g
 
     tens[~target & neg_mask] = tau_sigmoid(tens[~target & neg_mask], tau_n).type(tens.dtype)
 
-    tens[target] = torch.heaviside(tens[target], values=torch.tensor(1., device=tens.device, dtype=tens.dtype))
+    tens[target] = h(tens[target], torch.tensor(1., device=tens.device, dtype=tens.dtype))
 
     return tens
 
