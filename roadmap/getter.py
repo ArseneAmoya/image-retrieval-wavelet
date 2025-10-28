@@ -2,6 +2,7 @@ from torch import optim
 import torchvision.transforms as transforms
 import torch
 
+from roadmap import transforms as custom_transforms
 from roadmap import losses
 from roadmap import samplers
 from roadmap import datasets
@@ -23,7 +24,10 @@ class Getter:
     def get_transform(self, config):
         t_list = []
         for k, v in config.items():
-            t_list.append(getattr(transforms, k)(**v))
+            if hasattr(custom_transforms, k):
+                t_list.append(getattr(custom_transforms, k)(**v))
+            else:
+                t_list.append(getattr(transforms, k)(**v))
 
         transform = transforms.Compose(t_list)
         lib.LOGGER.info(transform)
