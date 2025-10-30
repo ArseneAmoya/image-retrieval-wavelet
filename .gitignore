@@ -22,6 +22,6 @@ data
 
 experiments/
 
-test_models.py
+test_*
 
 *ROADMAP*
