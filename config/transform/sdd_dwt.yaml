@@ -20,7 +20,7 @@ test:
   #   mean: [0.485, 0.456, 0.406]
   #   std: [0.229, 0.224, 0.225]
   CustomTransform:
-    decompose_levels: 3
+    decompose_levels: 1
     basis: haar
   Resize:
     size: [256, 256]
