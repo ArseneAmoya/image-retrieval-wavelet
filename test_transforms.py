@@ -8,7 +8,7 @@ os.path
 def test_transforms():
     # Charge la config
     transform_cfg = OmegaConf.load('config/transform/sdd_dwt.yaml')
-    
+    print(transform_cfg)
     # Crée les transformations via le getter
     getter = Getter()
     train_transform = getter.get_transform(transform_cfg.train)

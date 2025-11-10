@@ -2,6 +2,7 @@ from pytorch_wavelets import DWTForward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .wavelets import fast_haar_2d_op
 class Cdf97Lifting(nn.Module):
     def __init__(self, n_levels = 2, *args, **kwargs) -> None:
         super(Cdf97Lifting, self).__init__(*args, **kwargs)
@@ -30,7 +31,7 @@ class Cdf97Lifting(nn.Module):
         x = F.pad(x, (0, pad_right, 0, pad_bottom))
         y = self.fwt97_batch(self.fwt97_batch(x).transpose(2,1)).transpose(2,1)
         ll = y[:, :h//2, :w//2].view(b,-1,h//2, w//2).squeeze(1)
-        details = torch.stack([y[:, h//2:, :w//2].view(b,-1,h//2, w//2), y[:, :h//2, w//2:].view(b,-1,h//2, w//2), y[:, h//2:, w//2:].view(b,-1,h//2, w//2)], dim = 2).squeeze(1)
+        details = torch.stack([y[:, h//2:, :w//2].view(b,-1,h//2, w//2), y[:, :h//2, w//2:].view(b,-1,h//2, w//2), y[:, h//2:, w//2:].view(b,-1,h//2, w//2)], dim = -3).squeeze(1)
 
         return ll, details
 
@@ -74,9 +75,32 @@ class Cdf97Lifting(nn.Module):
             det.append(high)
         return x, det
 
+class HaarLifting(nn.Module):
+    def __init__(self, n_levels=1, *args, **kwargs):
+        super(HaarLifting, self).__init__(*args, **kwargs)
+        self.n_levels = n_levels
+    def forward_one(self, x):
+        c, h, w = x.shape[-3:]
+        pad_right = w % 2
+        pad_bottom = h % 2
+        x = F.pad(x, (0, pad_right, 0, pad_bottom))
+        ll, lh, hl, hh = fast_haar_2d_op(x)
+        return ll, torch.stack([lh, hl, hh], dim=-3)
+    def forward(self, x):
+        details = []
+        for _ in range(self.n_levels):
+            x, high = self.forward_one(x)
+            details.append(high)
+        return x, details
+ 
+
+WAVELET_DICT = {
+    "haar": HaarLifting,
+    "cdf97": Cdf97Lifting
+}
 class CustomTransform:
     def __init__(self, decompose_levels=3, basis="haar", coarse_only = True, device='cuda'):
-        self.dwt = Cdf97Lifting(n_levels = decompose_levels) if basis == "cdf97" else DWTForward(J=decompose_levels, wave= basis, mode='zero')
+        self.dwt = WAVELET_DICT[basis](n_levels = decompose_levels)#Cdf97Lifting(n_levels = decompose_levels) if basis == "cdf97" else DWTForward(J=decompose_levels, wave= basis, mode='zero')
         self.coarse_only = coarse_only
         self.decompose_levels = decompose_levels
         self.device = device
@@ -92,6 +116,6 @@ class CustomTransform:
             # return torch.stack([l.unsqueeze(1)] + h, dim=1)
     
 # img = torch.randn(2,3, 64, 64)
-# transform = CustomTransform(decompose_levels=2, basis="cdf97", corse_only=True)
+# transform = CustomTransform(decompose_levels=3, basis="haar", coarse_only=True)
 # transformed_img = transform(img)
 # print(transformed_img.shape)  # Should print the shape of the transformed image

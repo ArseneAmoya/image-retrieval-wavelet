@@ -1,12 +1,11 @@
 import numpy as np
 
-from wavelets.utils import NCHW_FORMAT, NHWC_FORMAT, DEFAULT_DATA_FORMAT, COEFFS_SCALES_2D, \
+from .utils import NCHW_FORMAT, NHWC_FORMAT, DEFAULT_DATA_FORMAT, COEFFS_SCALES_2D, \
     prepare_coeffs_for_1d_op, prepare_coeffs_for_inv_1d_op, \
     extract_coeffs_from_channels, extract_coeffs_from_spatial, \
     merge_coeffs_into_channels, merge_coeffs_into_spatial, \
     join_coeffs_after_1d_op, join_coeffs_after_inv_1d_op, \
     test_lifting_scheme
-from vis_utils import prepare_input_image, show_lifting_results
 
 
 d1 = -1. # step 1 for [i]
@@ -70,7 +69,7 @@ def fast_inv_haar_1d_op(x_coefs, kernel, scale_coeffs, across_cols=False, across
 
 
 #@tf.function(jit_compile=True)
-def fast_haar_2d_op(x, kernel, scale_1d_coeffs, scale_2d_coeffs, coeffs_scales_2d, data_format=DEFAULT_DATA_FORMAT):
+def fast_haar_2d_op(x, kernel=DEFAULT_KERNEL, scale_1d_coeffs=True, scale_2d_coeffs=True, coeffs_scales_2d=COEFFS_SCALES_2D, data_format=NCHW_FORMAT):
     # 1. Apply across rows
     x = fast_haar_1d_op(x, kernel, scale_coeffs=scale_1d_coeffs, across_cols=False, across_rows=True, data_format=data_format)
     # 2. Apply across cols
@@ -83,11 +82,11 @@ def fast_haar_2d_op(x, kernel, scale_1d_coeffs, scale_2d_coeffs, coeffs_scales_2
         x_LH *= coeffs_scales[1]
         x_HL *= coeffs_scales[2]
         x_HH *= coeffs_scales[3]
-    x_output = merge_coeffs_into_channels([x_LL, x_LH, x_HL, x_HH], data_format=data_format)
-    return x_output
+    #x_output = merge_coeffs_into_channels([x_LL, x_LH, x_HL, x_HH], data_format=data_format)
+    return x_LL, x_LH, x_HL, x_HH
 
 
-def fast_inv_haar_2d_op(x, kernel, scale_1d_coeffs, scale_2d_coeffs, coeffs_scales_2d, data_format=DEFAULT_DATA_FORMAT):
+def fast_inv_haar_2d_op(x, kernel=DEFAULT_KERNEL, scale_1d_coeffs=True, scale_2d_coeffs=True, coeffs_scales_2d=COEFFS_SCALES_2D, data_format=DEFAULT_DATA_FORMAT):
     # x_LL, x_LH, x_HL, x_HH = x_coeffs
     # 1. Rearrange images from channels into spatial
     x_LL, x_LH, x_HL, x_HH = extract_coeffs_from_channels(x, data_format=data_format)
@@ -104,17 +103,3 @@ def fast_inv_haar_2d_op(x, kernel, scale_1d_coeffs, scale_2d_coeffs, coeffs_scal
     x = fast_inv_haar_1d_op(x, kernel, scale_coeffs=scale_1d_coeffs, across_cols=False, across_rows=True, data_format=data_format)
     return x
 
-
-# ----- Main -----
-
-if __name__ == '__main__':
-    image, _ = prepare_input_image()
-    data_format = NHWC_FORMAT
-    #data_format = NCHW_FORMAT
-    vis_anz_image, error = test_lifting_scheme(image,
-                                               kernel=DEFAULT_KERNEL,
-                                               forward_2d_op=fast_haar_2d_op,
-                                               backward_2d_op=fast_inv_haar_2d_op,
-                                               data_format=data_format)
-
-    show_lifting_results(src_image=image, anz_image=vis_anz_image, wavelet_name='Haar')

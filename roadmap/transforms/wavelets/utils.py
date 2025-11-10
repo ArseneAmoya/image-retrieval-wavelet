@@ -240,25 +240,27 @@ def test_lifting_scales(image, name, kernel, forward_2d_op, normalize_input=True
 
 def prepare_coeffs_for_1d_op(x, across_cols=False, across_rows=False, data_format=DEFAULT_DATA_FORMAT):
     assert not (across_cols and across_rows) and (across_cols or across_rows)
+    #print(x.shape)
     # o - odd, e - even
     if data_format == NCHW_FORMAT:
         if across_cols:
             # Inputs have shape NCHW and operation is applied across W axis (cols)
-            x_ev_0 = x[:, :, :, 0::2]
-            x_od_0 = x[:, :, :, 1::2]
+            x_ev_0 = x[..., 0::2]
+            x_od_0 = x[..., 1::2]
         else: # across_rows:
             # Inputs have shape NCHW and operation is applied across H axis (rows)
-            x_ev_0 = x[:, :, 0::2, :]
-            x_od_0 = x[:, :, 1::2, :]
+            x_ev_0 = x[..., 0::2, :]
+            x_od_0 = x[..., 1::2, :]
     else:  # data_format == NHWC_FORMAT:
-        if across_cols:
-            # Inputs have shape NHWC and operation is applied across W axis (cols)
-            x_ev_0 = x[:, :, 0::2, :]
-            x_od_0 = x[:, :, 1::2, :]
-        else: # across_rows:
-            # Inputs have shape NHWC and operation is applied across H axis (rows)
-            x_ev_0 = x[:, 0::2, :, :]
-            x_od_0 = x[:, 1::2, :, :]
+        raise NotImplementedError("NHWC format not implemented yet in prepare_coeffs_for_1d_op.") # check the equaality of x[..., 0::2] and x[:, :, 0::2, :] before building this section
+        # if across_cols:
+        #     # Inputs have shape NHWC and operation is applied across W axis (cols)
+        #     x_ev_0 = x[..., 0::2, :]
+        #     x_od_0 = x[..., 1::2, :]
+        # else: # across_rows:
+        #     # Inputs have shape NHWC and operation is applied across H axis (rows)
+        #     x_ev_0 = x[..., 0::2, :, :]
+        #     x_od_0 = x[..., 1::2, :, :]
     return (x_ev_0, x_od_0)
 
 
@@ -290,17 +292,17 @@ def join_coeffs_after_1d_op(coeffs, across_cols=False, across_rows=False, data_f
     if across_cols:
         if data_format == NCHW_FORMAT:
             # Shapes of x_s and x_d here: [N, C, H, W // 2]
-            x = torch.cat([x_s, x_d], dim=3)
+            x = torch.cat([x_s, x_d], dim=-1)
         else:  # data_format == NHWC_FORMAT:
             # Shapes of x_s and x_d here: [N, H, W // 2, C]
-            x = torch.cat([x_s, x_d], dim=2)
+            x = torch.cat([x_s, x_d], dim=-2)
     else: # across_rows:
         if data_format == NCHW_FORMAT:
             # Shapes of x_s and x_d here: [N, C, H // 2, W]
-            x = torch.cat([x_s, x_d], dim=2)
+            x = torch.cat([x_s, x_d], dim=-2)
         else:  # data_format == NHWC_FORMAT:
             # Shapes of x_s and x_d here: [N, H // 2, W, C]
-            x = torch.cat([x_s, x_d], dim=1)
+            x = torch.cat([x_s, x_d], dim=-3)
     return x
 
 
@@ -345,16 +347,16 @@ def merge_coeffs_into_channels(x_coeffs, data_format=DEFAULT_DATA_FORMAT):
 def extract_coeffs_from_channels(x, data_format=DEFAULT_DATA_FORMAT):
     if data_format == NCHW_FORMAT:
         n = x.shape[1] // 4
-        x_LL = x[:, (0 * n) : (1 * n), :, :]
-        x_LH = x[:, (1 * n) : (2 * n), :, :]
-        x_HL = x[:, (2 * n) : (3 * n), :, :]
-        x_HH = x[:, (3 * n) : (4 * n), :, :]
+        x_LL = x[..., (0 * n) : (1 * n), :, :]
+        x_LH = x[..., (1 * n) : (2 * n), :, :]
+        x_HL = x[..., (2 * n) : (3 * n), :, :]
+        x_HH = x[..., (3 * n) : (4 * n), :, :]
     else: # if data_format == NHWC_FORMAT:
         n = x.shape[3] // 4
-        x_LL = x[:, :, :, (0 * n) : (1 * n)]
-        x_LH = x[:, : ,:, (1 * n) : (2 * n)]
-        x_HL = x[:, :, :, (2 * n) : (3 * n)]
-        x_HH = x[:, :, :, (3 * n) : (4 * n)]
+        x_LL = x[..., (0 * n) : (1 * n)]
+        x_LH = x[..., (1 * n) : (2 * n)]
+        x_HL = x[..., (2 * n) : (3 * n)]
+        x_HH = x[..., (3 * n) : (4 * n)]
     return x_LL, x_LH, x_HL, x_HH
 
 
@@ -373,17 +375,18 @@ def merge_coeffs_into_spatial(x_coeffs, data_format=DEFAULT_DATA_FORMAT):
 
 def extract_coeffs_from_spatial(x, data_format=DEFAULT_DATA_FORMAT):
     if data_format == NCHW_FORMAT:
-        _, C, H, W = x.shape
-        x_LL = x[:, :, : H // 2, : W // 2]
-        x_LH = x[:, :, H // 2 :, : W // 2]
-        x_HL = x[:, :, : H // 2, W // 2: ]
-        x_HH = x[:, :, H // 2 :, W // 2: ]
+            
+        C, H, W = x.shape[-3:]
+        x_LL = x[..., : H // 2, : W // 2]
+        x_LH = x[..., H // 2 :, : W // 2]
+        x_HL = x[..., : H // 2, W // 2: ]
+        x_HH = x[..., H // 2 :, W // 2: ]
     else:  # data_format == NHWC_FORMAT:
-        _, H, W, C = x.shape
-        x_LL = x[:, : H // 2, : W // 2, :]
-        x_LH = x[:, H // 2 :, : W // 2, :]
-        x_HL = x[:, : H // 2, W // 2 :, :]
-        x_HH = x[:, H // 2 :, W // 2 :, :]
+        H, W, C = x.shape[-3:]
+        x_LL = x[..., : H // 2, : W // 2, :]
+        x_LH = x[..., H // 2 :, : W // 2, :]
+        x_HL = x[..., : H // 2, W // 2 :, :]
+        x_HH = x[..., H // 2 :, W // 2 :, :]
     return x_LL, x_LH, x_HL, x_HH
 
 
