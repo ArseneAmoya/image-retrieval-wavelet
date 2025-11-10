@@ -431,3 +431,31 @@ class WCNN(nn.Module):
         x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])], dim=1)
             #print(y.shape, "all")
         return x
+    
+class WCNN_Attention(nn.Module):
+    '''
+        Combining WCNN with attention mechanism (CBAM or ECA)
+    '''
+    def __init__(self, backbone = "wcnn", multibranch_backbone = "resnet18", pretrained=True, attention_type="cbam", *args, **kwargs) -> None:
+        super(WCNN_Attention, self).__init__()
+
+        if backbone == "wcnn":
+            self.backbone = WCNN(backbone= multibranch_backbone, pretrained=pretrained, *args, **kwargs)
+        if attention_type == "eca":
+            self.attention = Eca1D_layer(4)
+            lib.LOGGER.info("Using ECA attention")
+        else:
+            self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
+            lib.LOGGER.info("Using CBAM attention")
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = x.view(x.size(0), 4, -1)
+        x = self.attention(x)
+        return x
+    
+    def alphas(self, x):
+        x = self.backbone(x)
+        x = x.view(x.size(0), 4, -1)
+        x = self.attention.alphas(x)
+        return x

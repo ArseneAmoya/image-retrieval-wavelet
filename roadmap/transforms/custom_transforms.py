@@ -99,18 +99,17 @@ WAVELET_DICT = {
     "cdf97": Cdf97Lifting
 }
 class CustomTransform:
-    def __init__(self, decompose_levels=3, basis="haar", coarse_only = True, device='cuda'):
-        self.dwt = WAVELET_DICT[basis](n_levels = decompose_levels)#Cdf97Lifting(n_levels = decompose_levels) if basis == "cdf97" else DWTForward(J=decompose_levels, wave= basis, mode='zero')
+    def __init__(self, decompose_levels=3, basis="haar", coarse_only=True, device='cuda'):
+        self.dwt = WAVELET_DICT[basis](n_levels=decompose_levels)
         self.coarse_only = coarse_only
         self.decompose_levels = decompose_levels
-        self.device = device
+        # Don't store device in transform - let DataLoader handle device placement
+    
     def __call__(self, img):
-        # This is a placeholder for a real transformation.
-        # For now, it just returns the image as is.
-        img = img.to(self.device)
-        l, h = self.dwt(img)
+        # Keep data on CPU during transforms
+        l, h = self.dwt(img)  # Let model move data to GPU
         if self.coarse_only:
-            return torch.cat([l.unsqueeze(-3),h[self.decompose_levels -1]], dim=-3)
+            return torch.cat([l.unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
         else:
             raise NotImplementedError("Full decomposition not implemented yet.")
             # return torch.stack([l.unsqueeze(1)] + h, dim=1)

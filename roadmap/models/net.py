@@ -7,7 +7,7 @@ import timm
 import roadmap.utils as lib
 
 from .create_projection_head import create_projection_head
-from .wresnet import WaveResNet, WaveResNetCE, WCNN
+from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention
 from .resnet_ce import ResNetCE
 
 
@@ -124,6 +124,11 @@ def get_backbone(name, pretrained=True, **kwargs):
         lib.LOGGER.info("using ResNet-CE")
         backbone = ResNetCE(pretrained=pretrained,**kwargs)
         out_dim = 512
+        pooling = nn.Identity()
+    elif name == 'wcnn_attention':
+        lib.LOGGER.info(f"using WCNN with Attention, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
+        out_dim = 512
+        backbone = WCNN_Attention(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
        
     else:

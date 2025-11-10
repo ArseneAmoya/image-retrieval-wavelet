@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     # Instanciation du modèle RetrievalNet avec wresnet
     model = RetrievalNet(
-        backbone_name='wcnn',
+        backbone_name='wcnn_attention',
         embed_dim=512,
         norm_features=False,
         without_fc=False,
