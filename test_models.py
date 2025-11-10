@@ -1,4 +1,20 @@
 import torch.nn as nn
+from roadmap.getter import Getter
+from omegaconf import OmegaConf
+from PIL import Image
+import torch
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def test_transforms(transform_cfg_path='config/transform/sdd_dwt.yaml'):
+    # Charge la config
+    transform_cfg = OmegaConf.load(transform_cfg_path)
+    print(transform_cfg)
+    # Crée les transformations via le getter
+    getter = Getter()
+    train_transform = getter.get_transform(transform_cfg.train)
+    test_transform = getter.get_transform(transform_cfg.test)
+    return train_transform, test_transform
 
 
 def freeze_batch_norm(model):
@@ -19,11 +35,13 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     width = 224
 
     # Batch d'images aléatoires
-    x = torch.randn(batch_size, channels, height, width)
+    x = Image.open("../../data/car.jpg").convert('RGB')
+    transforms, _ = test_transforms()
+    x_transformed = transforms(x)
 
     # Instanciation du modèle RetrievalNet avec wresnet
     model = RetrievalNet(
-        backbone_name='wresnet',
+        backbone_name='wcnn',
         embed_dim=512,
         norm_features=False,
         without_fc=False,
@@ -31,7 +49,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
         pooling='default',
         projection_normalization_layer='none',
         pretrained=False  # ou True si tu veux charger des poids pré-entraînés
-    )
+    ).to(device)
 
     if freeze_bn:
         freeze_batch_norm(model)
@@ -39,9 +57,9 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     model.eval()
     with torch.no_grad():
-        output = model(x)
+        output = model(x_transformed.unsqueeze(0))  # Ajoute une dimension batch
     print("Output shape:", output.shape)  # Doit être [batch_size, embed_dim]
 
 if __name__ == "__main__":
     # Simule config.freeze_batch_norm=True
-    test_retrievalnet_with_wresnet(freeze_bn=True)
+    test_retrievalnet_with_wresnet(freeze_bn=False)

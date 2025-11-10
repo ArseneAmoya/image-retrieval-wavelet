@@ -5,7 +5,12 @@ import numpy as np
 import torch.nn.functional as F
 from pytorch_wavelets import DWTForward, DWTInverse
 from torchvision.models import resnet50, ResNet50_Weights
+import torchvision.models as models
 import roadmap.utils as lib
+
+WEIGHTS_DICT = {
+    'resnet18': models.ResNet18_Weights,
+}
 
 
 class Cdf97Lifting(nn.Module):
@@ -394,3 +399,35 @@ class WaveResNetCE(nn.Module):
             return x
         else:
             return None
+        
+
+class WCNN(nn.Module):
+    '''
+    Implementing a Multibranch CNN where each branch process one sub-band of the DWT, the subbands are extracted outside the network.
+    '''
+    def __init__(self, backbone = "resnet18", pretrained=True, *args, **kwargs) -> None:
+        self.OUT_SIZE = kwargs.get("feature_size", 512)
+        super(WCNN, self).__init__()
+        self.backbone = getattr(models, backbone)(weights = WEIGHTS_DICT[backbone].DEFAULT if pretrained else None)
+        self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
+        #self.backbone.pre_logit = nn.Linear(2048, 1024)
+
+        self.backbone.avgpool = nn.AdaptiveAvgPool3d((self.OUT_SIZE, 1, 1))
+        #ct = 0
+       
+#         for child in self.backbone.children():
+#             #ct += 1
+#             #if ct < 7:
+#             for param in child.parameters():
+#                 param.requires_grad = False
+        self.lh_backbone = copy.deepcopy(self.backbone)
+        self.hl_backbone = copy.deepcopy(self.backbone)
+        self.hh_backbone = copy.deepcopy(self.backbone)
+    
+
+        in_features = self.OUT_SIZE * 4
+        self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
+    def forward(self, x):
+        x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])], dim=1)
+            #print(y.shape, "all")
+        return x
