@@ -6,7 +6,7 @@ import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/sdd_dwt.yaml'):
+def test_transforms(transform_cfg_path='config/transform/sdd_dwt_all_subs.yaml'):
     # Charge la config
     transform_cfg = OmegaConf.load(transform_cfg_path)
     print(transform_cfg)
@@ -37,20 +37,12 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     # Batch d'images aléatoires
     x = Image.open("../../data/car.jpg").convert('RGB')
     transforms, _ = test_transforms()
-    x_transformed = transforms(x)
+    x_transformed = transforms(x).to(device)
 
+    model_configs = OmegaConf.load('config/model/wcnn_attention_all_subs.yaml')
+    getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
-    model = RetrievalNet(
-        backbone_name='wcnn_attention',
-        embed_dim=512,
-        norm_features=False,
-        without_fc=False,
-        with_autocast=False,
-        pooling='default',
-        projection_normalization_layer='none',
-        pretrained=False  # ou True si tu veux charger des poids pré-entraînés
-    ).to(device)
-
+    model = getter.get_model(model_configs).to(device)
     if freeze_bn:
         freeze_batch_norm(model)
         print("BatchNorm layers have been frozen.")

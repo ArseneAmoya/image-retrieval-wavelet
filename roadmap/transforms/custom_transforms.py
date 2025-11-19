@@ -2,7 +2,12 @@ from pytorch_wavelets import DWTForward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.transforms.functional as F2
+from collections.abc import Sequence
+
 from .wavelets import fast_haar_2d_op
+
+
 class Cdf97Lifting(nn.Module):
     def __init__(self, n_levels = 2, *args, **kwargs) -> None:
         super(Cdf97Lifting, self).__init__(*args, **kwargs)
@@ -55,7 +60,6 @@ class Cdf97Lifting(nn.Module):
         X[:, 2::2] += a2 * (X[:, 1:-1:2] + X[:, 3::2]) #update 1
         X[:,0] += 2 * a2 * X[:, 1] #Symetric extension
 
-
         X[:, 1:-1:2]  += a3 * (X[:, 0:-2:2] + X[:, 2::2]) #predict 2
         X[:, -1] += 2 * a3 * X[:, -2] #Symetric extension
 
@@ -92,7 +96,35 @@ class HaarLifting(nn.Module):
             x, high = self.forward_one(x)
             details.append(high)
         return x, details
- 
+
+class ResizeSubBands(nn.Module):
+    def __init__(self, size,  interpolation=F2.InterpolationMode.BILINEAR, max_size=None, antialias=True):
+        super(ResizeSubBands, self).__init__()
+        if not isinstance(size, (int, Sequence)):
+            raise TypeError(f"Size should be int or sequence. Got {type(size)}")
+        if isinstance(size, Sequence) and len(size) not in (1, 2):
+            raise ValueError("If size is a sequence, it should have 1 or 2 values")
+        self.size = size
+        self.max_size = max_size
+        if isinstance(interpolation, int):
+            interpolation = F2._interpolation_modes_from_int(interpolation)
+        self.interpolation = interpolation
+        self.antialias = antialias
+
+    def forward(self, img):
+        """
+        Args:
+            img (PIL Image or Tensor): Image to be scaled.
+
+        Returns:
+            PIL Image or Tensor: Rescaled image.
+        """
+        l, h = img
+
+        l = F2.resize(l, self.size, self.interpolation, self.max_size, self.antialias)
+        subbands = [l.unsqueeze(-3), *(F2.resize(im, self.size, self.interpolation, self.max_size, self.antialias) for im in h)]
+        resized_and_stacked = torch.cat(subbands, dim=-3)
+        return resized_and_stacked
 
 WAVELET_DICT = {
     "haar": HaarLifting,
@@ -111,7 +143,7 @@ class CustomTransform:
         if self.coarse_only:
             return torch.cat([l.unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
         else:
-            raise NotImplementedError("Full decomposition not implemented yet.")
+            return l, h
             # return torch.stack([l.unsqueeze(1)] + h, dim=1)
     
 # img = torch.randn(2,3, 64, 64)

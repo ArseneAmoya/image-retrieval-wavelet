@@ -431,6 +431,43 @@ class WCNN(nn.Module):
         x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])], dim=1)
             #print(y.shape, "all")
         return x
+
+class WCNN_ALL(nn.Module):
+    '''
+    Implementing a Multibranch CNN where each branch process one sub-band of the DWT, the subbands are extracted outside the network.
+    '''
+    def __init__(self, backbone = "resnet18", pretrained=True, *args, **kwargs) -> None:
+        self.OUT_SIZE = kwargs.get("feature_size", 512)
+        super(WCNN_ALL, self).__init__()
+        self.backbone = getattr(models, backbone)(weights = WEIGHTS_DICT[backbone].DEFAULT if pretrained else None)
+        self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
+        #self.backbone.pre_logit = nn.Linear(2048, 1024)
+
+        #self.backbone.avgpool = nn.AdaptiveAvgPool3d((self.OUT_SIZE, 1, 1))
+        #ct = 0
+       
+#         for child in self.backbone.children():
+#             #ct += 1
+#             #if ct < 7:
+#             for param in child.parameters():
+#                 param.requires_grad = False
+        self.lh_backbone = copy.deepcopy(self.backbone)
+        self.hl_backbone = copy.deepcopy(self.backbone)
+        self.hh_backbone = copy.deepcopy(self.backbone)
+
+        self.lh2_backbone = copy.deepcopy(self.backbone)
+        self.hl2_backbone = copy.deepcopy(self.backbone)
+        self.hh2_backbone = copy.deepcopy(self.backbone)
+
+    
+
+        # in_features = self.OUT_SIZE * 7
+        # self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
+    def forward(self, x):
+        x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3]), self.lh2_backbone(x[:,:, 4]), self.hl2_backbone(x[:,:, 5]), self.hh2_backbone(x[:,:, 6])], dim=1)
+            #print(y.shape, "all")
+        return x    
+
     
 class WCNN_Attention(nn.Module):
     '''
@@ -438,24 +475,36 @@ class WCNN_Attention(nn.Module):
     '''
     def __init__(self, backbone = "wcnn", multibranch_backbone = "resnet18", pretrained=True, attention_type="cbam", *args, **kwargs) -> None:
         super(WCNN_Attention, self).__init__()
+        coarse_only = kwargs.get("coarse_only", False)
 
+        if not coarse_only:
+            backbone = backbone + "_all"
+        lib.LOGGER.info(f"Instantiating WCNN_Attention with backbone {backbone} and multibranch_backbone {multibranch_backbone}")
         if backbone == "wcnn":
             self.backbone = WCNN(backbone= multibranch_backbone, pretrained=pretrained, *args, **kwargs)
+            self.num_subands = 4
+        elif backbone == "wcnn_all":
+            self.backbone = WCNN_ALL(backbone= multibranch_backbone, pretrained=pretrained, *args, **kwargs)
+            self.num_subands = 1 + 3* (kwargs.get("decom_level", 1))
+        else:
+            raise ValueError(f"Backbone {backbone} not recognized for WCNN_Attention")
+
         if attention_type == "eca":
-            self.attention = Eca1D_layer(4)
+            self.attention = Eca1D_layer(self.num_subands)
             lib.LOGGER.info("Using ECA attention")
         else:
-            self.attention = CBAM() #ChannelAttention(self.OUT_SIZE)
+            self.attention = CBAM(gate_channels=self.num_subands) #ChannelAttention(self.OUT_SIZE)
             lib.LOGGER.info("Using CBAM attention")
+        
 
     def forward(self, x):
         x = self.backbone(x)
-        x = x.view(x.size(0), 4, -1)
+        x = x.view(x.size(0), self.num_subands, -1)
         x = self.attention(x)
         return x
     
     def alphas(self, x):
         x = self.backbone(x)
-        x = x.view(x.size(0), 4, -1)
+        x = x.view(x.size(0), self.num_subands, -1)
         x = self.attention.alphas(x)
         return x
