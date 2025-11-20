@@ -451,6 +451,7 @@ class WCNN_ALL(nn.Module):
 #             #if ct < 7:
 #             for param in child.parameters():
 #                 param.requires_grad = False
+        self.backbone2 = copy.deepcopy(self.backbone)
         self.lh_backbone = copy.deepcopy(self.backbone)
         self.hl_backbone = copy.deepcopy(self.backbone)
         self.hh_backbone = copy.deepcopy(self.backbone)
@@ -464,7 +465,7 @@ class WCNN_ALL(nn.Module):
         # in_features = self.OUT_SIZE * 7
         # self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
     def forward(self, x):
-        x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3]), self.lh2_backbone(x[:,:, 4]), self.hl2_backbone(x[:,:, 5]), self.hh2_backbone(x[:,:, 6])], dim=1)
+        x = torch.cat([self.backbone(x[:, :, 0]), self.backbone2(x[:, :, 1]), self.lh_backbone(x[:,:, 2]), self.hl_backbone(x[:,:, 3]), self.hh_backbone(x[:,:, 4]), self.lh2_backbone(x[:,:, 5]), self.hl2_backbone(x[:,:, 6]), self.hh2_backbone(x[:,:, 7])], dim=1)
             #print(y.shape, "all")
         return x    
 
@@ -485,7 +486,7 @@ class WCNN_Attention(nn.Module):
             self.num_subands = 4
         elif backbone == "wcnn_all":
             self.backbone = WCNN_ALL(backbone= multibranch_backbone, pretrained=pretrained, *args, **kwargs)
-            self.num_subands = 1 + 3* (kwargs.get("decom_level", 1))
+            self.num_subands = 4* (kwargs.get("decom_level", 1))
         else:
             raise ValueError(f"Backbone {backbone} not recognized for WCNN_Attention")
 

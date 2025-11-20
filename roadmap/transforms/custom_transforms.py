@@ -92,10 +92,12 @@ class HaarLifting(nn.Module):
         return ll, torch.stack([lh, hl, hh], dim=-3)
     def forward(self, x):
         details = []
+        approx = []
         for _ in range(self.n_levels):
             x, high = self.forward_one(x)
             details.append(high)
-        return x, details
+            approx.append(x)
+        return approx, details
 
 class ResizeSubBands(nn.Module):
     def __init__(self, size,  interpolation=F2.InterpolationMode.BILINEAR, max_size=None, antialias=True):
@@ -114,15 +116,15 @@ class ResizeSubBands(nn.Module):
     def forward(self, img):
         """
         Args:
-            img (PIL Image or Tensor): Image to be scaled.
+            img (Tuple of tensors): Subbands to be scaled.
 
         Returns:
-            PIL Image or Tensor: Rescaled image.
+            Tensor: Rescaled subbands.
         """
         l, h = img
 
-        l = F2.resize(l, self.size, self.interpolation, self.max_size, self.antialias)
-        subbands = [l.unsqueeze(-3), *(F2.resize(im, self.size, self.interpolation, self.max_size, self.antialias) for im in h)]
+        l = (F2.resize(li, self.size, self.interpolation, self.max_size, self.antialias).unsqueeze(-3) for li in l)
+        subbands = [*l, *(F2.resize(im, self.size, self.interpolation, self.max_size, self.antialias) for im in h)]
         resized_and_stacked = torch.cat(subbands, dim=-3)
         return resized_and_stacked
 
