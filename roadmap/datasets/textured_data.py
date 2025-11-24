@@ -26,8 +26,8 @@ class TexturedDataset(BaseDataset):
         else:
             dataset = dataset[mode]
             self.imgs = dataset.imgs
-        paths = np.array([a for (a, b) in dataset.imgs])
-        labels = np.array([b for (a, b) in dataset.imgs])
+        paths = np.array([a for (a, b) in self.imgs])
+        labels = np.array([b for (a, b) in self.imgs])
 
         self.paths = []
         self.labels = []
