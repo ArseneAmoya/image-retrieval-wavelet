@@ -143,7 +143,7 @@ class CustomTransform:
         # Keep data on CPU during transforms
         l, h = self.dwt(img)  # Let model move data to GPU
         if self.coarse_only:
-            return torch.cat([l.unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
+            return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
         else:
             return l, h
             # return torch.stack([l.unsqueeze(1)] + h, dim=1)

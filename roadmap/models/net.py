@@ -126,7 +126,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 512
         pooling = nn.Identity()
     elif name == 'wcnn_attention':
-        lib.LOGGER.info(f"using WCNN with Attention, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
+        lib.LOGGER.info(f"using WCNN with Attention, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}, coarse_only : {kwargs.get('coarse_only', False)}   ")
         out_dim = 512
         backbone = WCNN_Attention(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
@@ -148,7 +148,7 @@ class RetrievalNet(nn.Module):
         with_autocast=False,
         pooling='default',
         projection_normalization_layer='none',
-        pretrained=True,
+        pretrained=False,
         *args, **kwargs
     ):
         super().__init__()

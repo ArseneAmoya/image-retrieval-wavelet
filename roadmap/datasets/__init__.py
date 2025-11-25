@@ -6,6 +6,7 @@ from .sfm120k import SfM120kDataset
 from .sop import SOPDataset
 from .cifar import CifarDataset
 from .stanforddog12 import StanfordDog12Dataset
+from .textured_data import TexturedDataset
 
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     'SOPDataset',
     'CifarDataset',
     'StanfordDog12Dataset',
+    'TexturedDataset',
 ]

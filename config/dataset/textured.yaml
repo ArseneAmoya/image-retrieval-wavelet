@@ -1,0 +1,12 @@
+# @package _group_
+name: TexturedDataset
+kwargs:
+  data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\textured
+
+sampler:
+  name: MPerClassSampler
+  kwargs:
+    batch_size: 64
+    samples_per_class: 4
+num_classes: 64
+
