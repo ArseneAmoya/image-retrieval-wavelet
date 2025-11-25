@@ -408,7 +408,9 @@ class WCNN(nn.Module):
     def __init__(self, backbone = "resnet18", pretrained=True, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 512)
         super(WCNN, self).__init__()
+
         self.backbone = getattr(models, backbone)(weights = WEIGHTS_DICT[backbone].DEFAULT if pretrained else None)
+        lib.LOGGER.info(f"Instantiating WCNN with backbone {backbone} and pretrained={pretrained}")
         self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
         #self.backbone.pre_logit = nn.Linear(2048, 1024)
 

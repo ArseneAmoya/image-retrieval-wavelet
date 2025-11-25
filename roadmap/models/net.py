@@ -118,7 +118,7 @@ def get_backbone(name, pretrained=True, **kwargs):
     elif name == 'wcnn':
         lib.LOGGER.info(f"using WCNN, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
         out_dim = 2048
-        backbone = WCNN(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        backbone = WCNN(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
     elif name == 'resnet_ce':
         lib.LOGGER.info("using ResNet-CE")
@@ -128,7 +128,7 @@ def get_backbone(name, pretrained=True, **kwargs):
     elif name == 'wcnn_attention':
         lib.LOGGER.info(f"using WCNN with Attention, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}, coarse_only : {kwargs.get('coarse_only', False)}   ")
         out_dim = 512
-        backbone = WCNN_Attention(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        backbone = WCNN_Attention(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
        
     else:

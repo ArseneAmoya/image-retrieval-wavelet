@@ -10,11 +10,12 @@ train:
     decompose_levels: 1
     basis: haar
     coarse_only: True
-
   Resize:
     size: [256, 256]
-  RandomCrop:
-    size: [224, 224]
+  RandomResizedCrop:
+    scale: [0.16, 1]
+    ratio: [0.75, 1.33]
+    size: 224
   RandomHorizontalFlip:
     p: 0.5
   
