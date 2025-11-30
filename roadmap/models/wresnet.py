@@ -511,3 +511,27 @@ class WCNN_Attention(nn.Module):
         x = x.view(x.size(0), self.num_subands, -1)
         x = self.attention.alphas(x)
         return x
+    
+
+class WCNN_Attention_CE(WCNN_Attention):
+    '''
+        WCNN with attention for classification task
+    '''
+    def __init__(self, backbone = "wcnn", multibranch_backbone = "resnet18", pretrained=True, attention_type="cbam", *args, **kwargs) -> None:
+        super(WCNN_Attention_CE, self).__init__(backbone, multibranch_backbone, pretrained, attention_type, *args, **kwargs)
+        features_size = kwargs.get("feature_size", None)
+        num_classes = kwargs.get("num_classes", None)
+        assert features_size is not None, "feature_size must be specified for WCNN_Attention_CE"
+        assert num_classes is not None, "num_classes must be specified for WCNN_Attention_CE"
+        lib.LOGGER.info(f"Training with cross entropy with feature size {features_size} with {num_classes} classes")
+        self.classifier = nn.Linear(features_size, num_classes)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = x.view(x.size(0), self.num_subands, -1)
+        x = self.attention(x)
+        if self.training:
+            return self.classifier(x)
+        return x
+    
+    

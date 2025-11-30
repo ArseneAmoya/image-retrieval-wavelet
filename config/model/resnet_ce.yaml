@@ -3,7 +3,7 @@ name: RetrievalNet
 freeze_batch_norm: False
 freeze_pos_embedding: False
 kwargs:
-  backbone_name: resnet_ce
+  backbone_name: resnet18_ce
   embed_dim: 512
   norm_features: False
   without_fc: True

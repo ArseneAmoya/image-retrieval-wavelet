@@ -7,7 +7,7 @@ import timm
 import roadmap.utils as lib
 
 from .create_projection_head import create_projection_head
-from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention
+from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
 
 
@@ -115,6 +115,11 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 512
         backbone = WaveResNetCE(**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
+    elif name == 'wcnn_attention_ce':
+        lib.LOGGER.info(f"using WCNN with Attention for cross entropy, decom_level :, {kwargs.get('decom_level', 'not specified')}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 'unspecidied')} {kwargs.get('feature_size', 'unspecified')}, coarse_only : {kwargs.get('coarse_only', False)}   ")
+        out_dim = 512
+        backbone = WCNN_Attention_CE(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        pooling = nn.Identity()
     elif name == 'wcnn':
         lib.LOGGER.info(f"using WCNN, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}")
         out_dim = 2048
@@ -122,7 +127,12 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'resnet_ce':
         lib.LOGGER.info("using ResNet-CE")
-        backbone = ResNetCE(pretrained=pretrained,**kwargs)
+        backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet50",**kwargs)
+        out_dim = 512
+        pooling = nn.Identity()
+    elif name == 'resnet18_ce':
+        lib.LOGGER.info(f"using ResNet 18 for cross entropy, num classes : {kwargs.get('num_classes', "not specified")}")
+        backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet18",**kwargs)
         out_dim = 512
         pooling = nn.Identity()
     elif name == 'wcnn_attention':
@@ -205,5 +215,3 @@ class RetrievalNet(nn.Module):
             X = self.fc(X)
             X = F.normalize(X, p=2, dim=1)
             return X
-
-
