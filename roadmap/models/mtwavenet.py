@@ -89,7 +89,7 @@ class ResNetStage(nn.Module):
         return self.block(x)
 
 class FourBranchResNet(nn.Module):
-    def __init__(self, num_classes=1000):
+    def __init__(self, num_classes=None):
         super(FourBranchResNet, self).__init__()
         
         
@@ -109,8 +109,14 @@ class FourBranchResNet(nn.Module):
             layer2 = base_resnet.layer2 # 128 channels
             layer3 = base_resnet.layer3 # 256 channels
             layer4 = base_resnet.layer4 # 512 channels
-            
-            self.branches.append(nn.ModuleList([stem, layer1, layer2, layer3, layer4]))
+            module_list = [stem, layer1, layer2, layer3, layer4]
+            if num_classes is not None:
+                module_list.append(nn.Linear(512, num_classes))
+            else:
+                module_list.append(nn.Identity())
+           # Fully connected layer
+            self.branches.append(nn.ModuleList(module_list))
+
 
 
         self.att_block1 = CrossBandAttention(channels_per_branch=64)
@@ -121,7 +127,6 @@ class FourBranchResNet(nn.Module):
         # --- Tête de classification finale ---
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # 512 channels * 4 branches (si on concatène à la fin)
-        self.fc = nn.Linear(512 * 4, num_classes) 
 
     def forward(self, x_list):
         """
@@ -160,14 +165,15 @@ class FourBranchResNet(nn.Module):
             x = self.avgpool(feats[i])
             x = torch.flatten(x, 1)
             embeddings.append(x)
+        
+        if self.training:
+            # Pendant l'entraînement, on retourne les classes de chaque branche
+            return [self.branches[i][-1](embeddings[i]) for i in range(4)]
             
         # Concaténation des 4 vecteurs finaux
         final_vec = torch.cat(embeddings, dim=1)
-        
-        # Classification
-        out = self.fc(final_vec)
-        
-        return out
+                
+        return final_vec
 
 # --- Test du modèle ---
 if __name__ == "__main__":

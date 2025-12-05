@@ -9,6 +9,7 @@ import roadmap.utils as lib
 from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
+from .mtwavenet import FourBranchResNet
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -140,6 +141,11 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 512
         backbone = WCNN_Attention(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
+    elif name == 'mtwavenet':
+        lib.LOGGER.info(f"using Multi-Branch TWaveNet, num classes : {kwargs.get('num_classes', 'not specified')}")
+        backbone = FourBranchResNet(num_classes=kwargs.get('num_classes', None), **kwargs)
+        out_dim = 512 * 4
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")
@@ -206,7 +212,6 @@ class RetrievalNet(nn.Module):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
             if self.backbone_name.endswith('ce'):
-                # For ResNet-CE, we need to flatten the output
                 return X
             X = self.pooling(X)
 
