@@ -41,7 +41,7 @@ class ChannelGate(nn.Module):
         max_out = self.max_pool(x)
         avg_out = self.avg_pool(x)
         channel_att_sum = self.mlp(max_out) + self.mlp(avg_out)
-        scale = F.sigmoid( channel_att_sum ).unsqueeze(-1)
+        scale = F.sigmoid( channel_att_sum )
         return scale
 
 
@@ -66,14 +66,22 @@ class CrossBandAttention(nn.Module):
         super(CrossBandAttention, self).__init__()
         self.num_channels = channels_per_branch * num_branches
         self.ChannelGate = ChannelGate(self.num_channels, reduction_ratio)
+        self.num_branches = num_branches
         self.no_spatial=no_spatial
         if not no_spatial:
             self.SpatialGate = SpatialGate()
     def forward(self, x):
-        x_out = self.ChannelGate(x) * x
+        x = torch.cat(x, dim=1)  # Concatène le long du canal
+        b, c, h, w = x.shape
+        att = self.ChannelGate(x)
+        att =att.unsqueeze(-1).unsqueeze(-1).expand(b, c, h, w)
+        x_out = att * x
         if not self.no_spatial:
-            x_out = self.SpatialGate(x_out) * x_out
-        return x_out#(x.permute(0,2,1)@y).squeeze(-1)/self.chan
+            att = self.SpatialGate(x_out).expand(b, c, h, w)
+            x_out = att * x_out
+        x_out = list(torch.split(x_out, self.num_channels // 4, dim=1))
+
+        return x_out
     def alphas(self, x):
         x_out = self.ChannelGate(x)
         return x_out
@@ -89,14 +97,14 @@ class ResNetStage(nn.Module):
         return self.block(x)
 
 class FourBranchResNet(nn.Module):
-    def __init__(self, num_classes=None):
+    def __init__(self, num_classes=None, *args, **kwargs):
         super(FourBranchResNet, self).__init__()
         
         
         self.branches = nn.ModuleList()
         
         for _ in range(4):
-            base_resnet = models.resnet18(pretrained=True)
+            base_resnet = models.resnet18(pretrained=None)
             
             stem = nn.Sequential(
                 base_resnet.conv1,
@@ -128,16 +136,16 @@ class FourBranchResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # 512 channels * 4 branches (si on concatène à la fin)
 
-    def forward(self, x_list):
+    def forward(self, x):
         """
-        x_list: liste de 4 images [Batch, 3, H, W]
+        x_list: tensor [Batch, 3, 4, H, W]
         """
-        assert len(x_list) == 4, "Il faut exactement 4 entrées."
+        assert x.size(-3) == 4, "Il faut exactement 4 entrées."
         
         # --- Stage 0 (Stem) ---
         feats = []
         for i in range(4):
-            feats.append(self.branches[i][0](x_list[i]))
+            feats.append(self.branches[i][0](x[..., i, :, :])) # Stem
             
         # --- Stage 1 + Attention ---
         for i in range(4):
@@ -169,18 +177,8 @@ class FourBranchResNet(nn.Module):
         if self.training:
             # Pendant l'entraînement, on retourne les classes de chaque branche
             return [self.branches[i][-1](embeddings[i]) for i in range(4)]
-            
-        # Concaténation des 4 vecteurs finaux
-        final_vec = torch.cat(embeddings, dim=1)
+        else:
+            final_vec = torch.cat(embeddings, dim=1)
+            final_vec = F.normalize(final_vec, dim=1, p=2)
                 
         return final_vec
-
-# --- Test du modèle ---
-if __name__ == "__main__":
-    model = FourBranchResNet(num_classes=10)
-    
-    # Création de 4 "images" aléatoires
-    inputs = [torch.randn(2, 3, 224, 224) for _ in range(4)]
-    
-    output = model(inputs)
-    print(f"Output shape: {output.shape}") # Doit être [2, 10]

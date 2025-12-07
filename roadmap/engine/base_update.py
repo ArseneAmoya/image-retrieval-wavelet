@@ -20,7 +20,6 @@ def _batch_optimization(
     with torch.cuda.amp.autocast(enabled=(scaler is not None)):
         di = net(batch["image"].cuda())
         labels = batch["label"].cuda()
-        scores = torch.mm(di, di.t())
         label_matrix = lib.create_label_matrix(labels)
 
         if memory:
@@ -32,6 +31,8 @@ def _batch_optimization(
         logs = {}
         losses = []
         for crit, weight in criterion:
+            if not hasattr(crit, 'takes_logits'):
+                scores =  torch.mm(di, di.t())
             if hasattr(crit, 'takes_embeddings'):
                 loss = crit(di, labels.view(-1))
                 if memory:
@@ -39,6 +40,7 @@ def _batch_optimization(
                         mem_loss = crit(di, labels.view(-1), memory_embeddings, memory_labels.view(-1))
 
             else:
+                
                 loss = crit(scores, label_matrix)
                 if memory:
                     if epoch >= config.memory.activate_after:

@@ -5,6 +5,7 @@ from .softbin_ap import SoftBinAP
 from .pair_loss import PairLoss
 from .cross_entropy_loss import SoftmaxCrossEntropy
 from torch.nn import CrossEntropyLoss
+from .multi_ce_loss import MultiCrossEntropyLoss
 from .smooth_rank_ap import (
     HeavisideAP,
     SmoothAP,
@@ -22,5 +23,6 @@ __all__ = [
     'SmoothAP',
     'SupAP',
     'SoftmaxCrossEntropy'
-    'CrossEntropyLoss'
+    'CrossEntropyLoss',
+    'MultiCrossEntropyLoss',
 ]

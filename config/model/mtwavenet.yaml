@@ -6,7 +6,7 @@ kwargs:
   backbone_name: mtwavenet
   embed_dim: 2048
   norm_features: False
-  without_fc: False
+  without_fc: True
   with_autocast: True
   attention: True
   decom_level: 1

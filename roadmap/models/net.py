@@ -143,7 +143,9 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'mtwavenet':
         lib.LOGGER.info(f"using Multi-Branch TWaveNet, num classes : {kwargs.get('num_classes', 'not specified')}")
-        backbone = FourBranchResNet(num_classes=kwargs.get('num_classes', None), **kwargs)
+        # Avoid passing `num_classes` twice if it is already present in kwargs
+    
+        backbone = FourBranchResNet(**kwargs)
         out_dim = 512 * 4
         pooling = nn.Identity()
        
@@ -211,7 +213,7 @@ class RetrievalNet(nn.Module):
     def forward(self, X):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
-            if self.backbone_name.endswith('ce'):
+            if self.backbone_name.endswith('ce') or self.backbone_name in ['mtwavenet']:
                 return X
             X = self.pooling(X)
 

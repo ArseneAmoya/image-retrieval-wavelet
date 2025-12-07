@@ -39,7 +39,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     transforms, _ = test_transforms()
     x_transformed = transforms(x).to(device)
 
-    print("Input shape:", x_transformed.shape)  # Doit être [1, 3, H, W]
+    print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
     model_configs = OmegaConf.load('config/model/mtwavenet.yaml')
     getter = Getter()
@@ -49,9 +49,13 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
         freeze_batch_norm(model)
         print("BatchNorm layers have been frozen.")
 
+    # FourBranchResNet expects input of shape [Batch, 3, 4, H, W]
+    # Replicate the image 4 times for the 4 branches
+    batch_size = 1
+    
     model.eval()
     with torch.no_grad():
-        output = model(x_transformed.unsqueeze(0))  # Ajoute une dimension batch
+        output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     print("Output shape:", output.shape)  # Doit être [batch_size, embed_dim]
 
 if __name__ == "__main__":
