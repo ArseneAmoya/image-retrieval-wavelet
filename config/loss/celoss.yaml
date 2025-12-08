@@ -1,5 +1,5 @@
 # @package _group_
-- name:  CrossEntropyLoss
+- name:  CrossEntropy
   weight: 1.0
   kwargs:
     label_smoothing: 0.0

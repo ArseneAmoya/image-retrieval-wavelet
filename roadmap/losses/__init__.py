@@ -3,7 +3,7 @@ from .calibration_loss import CalibrationLoss
 from .fast_ap import FastAP
 from .softbin_ap import SoftBinAP
 from .pair_loss import PairLoss
-from .cross_entropy_loss import SoftmaxCrossEntropy
+from .cross_entropy_loss import CrossEntropy
 from torch.nn import CrossEntropyLoss
 from .multi_ce_loss import MultiCrossEntropyLoss
 from .smooth_rank_ap import (
@@ -23,6 +23,6 @@ __all__ = [
     'SmoothAP',
     'SupAP',
     'SoftmaxCrossEntropy'
-    'CrossEntropyLoss',
+    'CrossEntropy',
     'MultiCrossEntropyLoss',
 ]
