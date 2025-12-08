@@ -3,6 +3,8 @@ import torch.nn as nn
 import torchvision.models as models
 import torch.nn.functional as F
 
+import roadmap.utils as lib
+
 class BasicConv(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, relu=True, bn=True, bias=False):
         super(BasicConv, self).__init__()
@@ -104,7 +106,8 @@ class FourBranchResNet(nn.Module):
         self.branches = nn.ModuleList()
         
         for _ in range(4):
-            base_resnet = models.resnet18(pretrained=None)
+            base_resnet = models.resnet18(pretrained='IMAGENET1K_V1')# if kwargs.get('pretrained', False) else None)
+            lib.LOGGER.info(f"Using ResNet18 backbone, pretrained={kwargs.get('pretrained', False)}")   
             
             stem = nn.Sequential(
                 base_resnet.conv1,

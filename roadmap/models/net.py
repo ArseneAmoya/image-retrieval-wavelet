@@ -145,7 +145,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         lib.LOGGER.info(f"using Multi-Branch TWaveNet, num classes : {kwargs.get('num_classes', 'not specified')}")
         # Avoid passing `num_classes` twice if it is already present in kwargs
     
-        backbone = FourBranchResNet(**kwargs)
+        backbone = FourBranchResNet(pretrained=pretrained, **kwargs)
         out_dim = 512 * 4
         pooling = nn.Identity()
        
