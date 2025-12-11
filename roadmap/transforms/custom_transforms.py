@@ -145,8 +145,8 @@ class CustomTransform:
         if self.coarse_only:
             return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
         else:
-            return l, h
-            # return torch.stack([l.unsqueeze(1)] + h, dim=1)
+            subbands = [li.unsqueeze(-3) for li in l] + [hi for hi in h]
+            return torch.cat(subbands, dim=-3)
     
 # img = torch.randn(2,3, 64, 64)
 # transform = CustomTransform(decompose_levels=3, basis="haar", coarse_only=True)

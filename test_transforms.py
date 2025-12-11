@@ -5,9 +5,10 @@ from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 import os
 os.path
+
 def test_transforms():
     # Charge la config
-    transform_cfg = OmegaConf.load('config/transform/textured_dwt.yaml')
+    transform_cfg = OmegaConf.load('config/transform/sop_dwt_2.yaml')
     print(transform_cfg)
     # Crée les transformations via le getter
     getter = Getter()
@@ -21,6 +22,8 @@ def test_transforms():
     # Applique les transformations
     img_train = train_transform(img)
     img_test = test_transform(img)
+
+    print(img_train[0])  # Affiche le type et la shape du tenseur transformé
 
     # Affiche les résultats
     plt.figure(figsize=(12, 4))
@@ -68,9 +71,9 @@ def test_transforms():
     plt.title('Test Transform details hl')
     plt.imshow(normalize_for_display(img_test[:, 2]))
 
-    plt.subplot(2,5,10)
-    plt.title('Test Transform details hh')  
-    plt.imshow(normalize_for_display(img_test[:, 3])) 
+    # plt.subplot(2,5,10)
+    # plt.title('Test Transform details hh')  
+    # plt.imshow(normalize_for_display(img_test[:, 3])) 
     
     plt.show()
 

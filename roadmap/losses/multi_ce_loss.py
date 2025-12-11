@@ -1,15 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
+from .cross_entropy_loss import CrossEntropy as CrossEntropyLoss
 
 class MultiCrossEntropyLoss(nn.Module):
     takes_embeddings = True
     takes_logits = True
 
-    def __init__(self,  weights: list = [1.0, 1.0, 1.0, 1.0]):
+    def __init__(self,  weights: list = [1.0, 1.0, 1.0, 1.0], label_smoothing: float = 0.1):
         super().__init__()
-        self.loss_fns = nn.ModuleList([CrossEntropyLoss() for _ in range(len(weights))])
+        self.loss_fns = nn.ModuleList([CrossEntropyLoss(label_smoothing=label_smoothing) for _ in range(len(weights))])
         self.weights = weights
 
     def forward(self, preds, targets) -> torch.Tensor:

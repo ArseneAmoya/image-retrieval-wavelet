@@ -1,0 +1,18 @@
+name: RetrievalNet
+freeze_pos_embedding: False
+freeze_batch_norm: True
+kwargs:
+  backbone_name: mtwavenet
+  embed_dim: 2048
+  norm_features: False 
+  without_fc: True
+  with_autocast: True
+  attention: True
+  decom_level: 1
+  wave: haar
+  feature_size: 512
+  attention_type: cbam
+  coarse_only: True
+  num_classes: 100
+  pretrained: True
+  freeze_batch_norm: True

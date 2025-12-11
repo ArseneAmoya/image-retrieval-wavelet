@@ -6,7 +6,7 @@ import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/textured_dwt.yaml'):
+def test_transforms(transform_cfg_path='config/transform/sop_dwt_2.yaml'):
     # Charge la config
     transform_cfg = OmegaConf.load(transform_cfg_path)
     print(transform_cfg)
@@ -41,13 +41,17 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/mtwavenet.yaml')
+    model_configs = OmegaConf.load('config/model/mtwavenet_tuned.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)
     if freeze_bn:
         freeze_batch_norm(model)
         print("BatchNorm layers have been frozen.")
+    
+    for modules in model.modules():
+            if isinstance(modules, nn.BatchNorm2d) or isinstance(modules, nn.SyncBatchNorm):
+                print("BatchNorm layer found:", modules)
 
     # FourBranchResNet expects input of shape [Batch, 3, 4, H, W]
     # Replicate the image 4 times for the 4 branches

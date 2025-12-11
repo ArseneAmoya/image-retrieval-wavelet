@@ -1,11 +1,10 @@
 # @package _group_
 name: SOPDataset
 kwargs:
-  data_dir: /local/DEEPLEARNING/image_retrieval/Stanford_Online_Products
+  data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\Stanford_Online_Products\Stanford_Online_Products
 
 sampler:
-  name: HierarchicalSampler
+  name: RandomSampler
   kwargs:
     batch_size: 128
-    samples_per_class: 4
-    batches_per_super_pair: 10
+num_classes: 11318

@@ -106,7 +106,7 @@ class FourBranchResNet(nn.Module):
         self.branches = nn.ModuleList()
         
         for _ in range(4):
-            base_resnet = models.resnet18(pretrained='IMAGENET1K_V1')# if kwargs.get('pretrained', False) else None)
+            base_resnet = models.resnet18(pretrained=models.ResNet18_Weights.IMAGENET1K_V1)
             lib.LOGGER.info(f"Using ResNet18 backbone, pretrained={kwargs.get('pretrained', False)}")   
             
             stem = nn.Sequential(
@@ -123,9 +123,18 @@ class FourBranchResNet(nn.Module):
             module_list = [stem, layer1, layer2, layer3, layer4]
             if num_classes is not None:
                 module_list.append(nn.Linear(512, num_classes))
+
+                classifier = nn.Linear(512, num_classes)
+    
+                nn.init.constant_(classifier.weight, 0)
+                nn.init.constant_(classifier.bias, 0)
+                
+                module_list.append(nn.Sequential(
+                    nn.Dropout(p=0.5),
+                    classifier
+                ))
             else:
                 module_list.append(nn.Identity())
-           # Fully connected layer
             self.branches.append(nn.ModuleList(module_list))
 
 
@@ -138,7 +147,20 @@ class FourBranchResNet(nn.Module):
         # --- Tête de classification finale ---
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # 512 channels * 4 branches (si on concatène à la fin)
-
+        self.freeze_bn_flag = kwargs.get('freeze_batch_norm', False)
+        if self.freeze_bn_flag:
+            lib.LOGGER.info("Freezing Batch Normalization layers (Boudiaf et al. protocol)")
+            self._freeze_bn()
+        
+    def _freeze_bn(self):
+        # Freezes all BatchNorm layers in the backbone
+        for m in self.modules():
+            for sub_m in m.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eval()              # Fix running stats (mean/var)
+                    m.weight.requires_grad = False
+                    m.bias.requires_grad = False
+                    lib.LOGGER.info(f"Freezed BatchNorm layer: {m}")
     def forward(self, x):
         """
         x_list: tensor [Batch, 3, 4, H, W]
@@ -185,3 +207,14 @@ class FourBranchResNet(nn.Module):
             final_vec = F.normalize(final_vec, dim=1, p=2)
                 
         return final_vec
+    def train(self, mode=True):
+        # 1. Standard behavior: set everything to train mode (Dropout, etc.)
+        super(FourBranchResNet, self).train(mode)
+        
+        # 2. Override: If freezing is on, hunt down every BN layer and force it to eval
+        if self.freeze_bn_flag and mode:
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
+                    m.eval()
+        
+        return self
