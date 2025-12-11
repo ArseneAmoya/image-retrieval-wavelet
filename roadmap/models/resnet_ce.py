@@ -15,7 +15,11 @@ class ResNetCE(nn.Module):
             raise ValueError(f"Backbone '{backbone_name}' is not available in torchvision.models")
         self.backbone.fc = nn.Identity()  # Remove the final fully connected layer
         #self.fc = nn.Linear(2048, embed_dim)
-        self.classifier = nn.Linear(embed_dim, num_classes)
+
+        self.classifier = nn.Sequential(nn.Dropout(0.5),
+                                        nn.Linear(embed_dim, num_classes))
+        nn.init.constant_(self.classifier[1].bias, 0)
+        nn.init.constant_(self.classifier[1].weight, 0)
 
     def forward(self, x) -> torch.Tensor:
         x = self.backbone(x)
