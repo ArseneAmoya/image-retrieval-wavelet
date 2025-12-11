@@ -343,7 +343,7 @@ class FourBranchResNet50(nn.Module):
 
     def train(self, mode=True):
         # 1. Standard behavior: set everything to train mode (Dropout, etc.)
-        super(FourBranchResNet, self).train(mode)
+        super(FourBranchResNet50, self).train(mode)
         
         # 2. Override: If freezing is on, force BN layers back to eval
         if self.freeze_bn_flag and mode:
