@@ -4,6 +4,10 @@ train:
     scale: [0.16, 1]
     ratio: [0.75, 1.33]
     size: 224
+  ColorJitter:
+    brightness: 0.4
+    contrast: 0.4
+    saturation: 0.4
   RandomHorizontalFlip:
     p: 0.5
   ToTensor: {}

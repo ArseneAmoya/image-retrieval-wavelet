@@ -218,3 +218,137 @@ class FourBranchResNet(nn.Module):
                     m.eval()
         
         return self
+    
+class FourBranchResNet50(nn.Module):
+    def __init__(self, num_classes=None, *args, **kwargs):
+        super(FourBranchResNet50, self).__init__()
+        
+        self.branches = nn.ModuleList()
+        
+        for _ in range(4):
+            # CHANGEMENT 1 : Utilisation de ResNet50
+            # Note: Utilisation de la nouvelle syntaxe de poids si disponible, sinon pretrained=True
+            try:
+                weights = models.ResNet50_Weights.IMAGENET1K_V1
+                base_resnet = models.resnet50(weights=weights)
+            except:
+                base_resnet = models.resnet50(pretrained=True)
+                
+            lib.LOGGER.info(f"Using ResNet50 backbone, pretrained={kwargs.get('pretrained', False)}")   
+            
+            stem = nn.Sequential(
+                base_resnet.conv1,
+                base_resnet.bn1,
+                base_resnet.relu,
+                base_resnet.maxpool
+            )
+            
+            # CHANGEMENT 2 : Dimensions des canaux pour ResNet50
+            layer1 = base_resnet.layer1 # Sortie : 256 channels
+            layer2 = base_resnet.layer2 # Sortie : 512 channels
+            layer3 = base_resnet.layer3 # Sortie : 1024 channels
+            layer4 = base_resnet.layer4 # Sortie : 2048 channels
+            
+            module_list = [stem, layer1, layer2, layer3, layer4]
+            
+            if num_classes is not None:
+                # CHANGEMENT 3 : Dimension d'entrée du classifier passée à 2048
+                classifier = nn.Linear(2048, num_classes)
+    
+                # Initialisation à 0 comme recommandé dans le papier Boudiaf et al.
+                nn.init.constant_(classifier.weight, 0)
+                nn.init.constant_(classifier.bias, 0)
+                
+                module_list.append(nn.Sequential(
+                    nn.Dropout(p=0.5), # Dropout explicite
+                    classifier
+                ))
+            else:
+                module_list.append(nn.Identity())
+            
+            self.branches.append(nn.ModuleList(module_list))
+
+        # CHANGEMENT 4 : Mise à jour des blocs d'attention avec les dimensions ResNet50
+        self.att_block1 = CrossBandAttention(channels_per_branch=256)
+        self.att_block2 = CrossBandAttention(channels_per_branch=512)
+        self.att_block3 = CrossBandAttention(channels_per_branch=1024)
+        self.att_block4 = CrossBandAttention(channels_per_branch=2048)
+        
+        # --- Tête de classification finale ---
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        
+        # Gestion du gel de la Batch Norm
+        self.freeze_bn_flag = kwargs.get('freeze_batch_norm', False)
+        if self.freeze_bn_flag:
+            lib.LOGGER.info("Freezing Batch Normalization layers (Boudiaf et al. protocol)")
+            self._freeze_bn()
+        
+    def _freeze_bn(self):
+        # Freezes all BatchNorm layers in the backbone
+        for m in self.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                m.eval()              # Fix running stats (mean/var)
+                m.weight.requires_grad = False
+                m.bias.requires_grad = False
+                # lib.LOGGER.info(f"Freezed BatchNorm layer: {m}")
+
+    def forward(self, x):
+        """
+        x_list: tensor [Batch, 3, 4, H, W]
+        """
+        assert x.size(-3) == 4, "Il faut exactement 4 entrées."
+        
+        # --- Stage 0 (Stem) ---
+        feats = []
+        for i in range(4):
+            feats.append(self.branches[i][0](x[..., i, :, :])) # Stem
+            
+        # --- Stage 1 + Attention ---
+        for i in range(4):
+            feats[i] = self.branches[i][1](feats[i]) # ResNet Layer 1
+        feats = self.att_block1(feats)               # Interaction
+        
+        # --- Stage 2 + Attention ---
+        for i in range(4):
+            feats[i] = self.branches[i][2](feats[i]) # ResNet Layer 2
+        feats = self.att_block2(feats)               # Interaction
+
+        # --- Stage 3 + Attention ---
+        for i in range(4):
+            feats[i] = self.branches[i][3](feats[i]) # ResNet Layer 3
+        feats = self.att_block3(feats)               # Interaction
+
+        # --- Stage 4 + Attention ---
+        for i in range(4):
+            feats[i] = self.branches[i][4](feats[i]) # ResNet Layer 4
+        feats = self.att_block4(feats)               # Interaction
+        
+        # --- Aggregation Finale ---
+        embeddings = []
+        for i in range(4):
+            x = self.avgpool(feats[i])
+            x = torch.flatten(x, 1)
+            embeddings.append(x)
+        
+        if self.training:
+            # Pendant l'entraînement, on retourne les logits de chaque branche
+            # Le classifier est le dernier module [-1] de chaque branche
+            return [self.branches[i][-1](embeddings[i]) for i in range(4)]
+        else:
+            final_vec = torch.cat(embeddings, dim=1)
+            # Normalisation L2 (A tester : désactiver pour CUB si besoin comme vu précédemment)
+            final_vec = F.normalize(final_vec, dim=1, p=2)
+                
+        return final_vec
+
+    def train(self, mode=True):
+        # 1. Standard behavior: set everything to train mode (Dropout, etc.)
+        super(FourBranchResNet, self).train(mode)
+        
+        # 2. Override: If freezing is on, force BN layers back to eval
+        if self.freeze_bn_flag and mode:
+            for m in self.modules():
+                if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                    m.eval()
+        
+        return self
