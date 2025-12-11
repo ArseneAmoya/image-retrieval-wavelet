@@ -220,7 +220,7 @@ class RetrievalNet(nn.Module):
     def forward(self, X):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
-            if self.backbone_name.endswith('ce') or self.backbone_name in ['mtwavenet']:
+            if self.backbone_name.endswith('ce') or self.backbone_name in ['mtwavenet', 'mtwavenet50']:
                 return X
             X = self.pooling(X)
 
