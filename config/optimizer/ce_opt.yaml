@@ -2,7 +2,7 @@
 - name: SGD
   params:
   kwargs:
-    lr: 0.02
+    lr: 0.01
     momentum: 0.0
     weight_decay: 0.0005
     nesterov: False
