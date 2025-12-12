@@ -1,11 +1,14 @@
 # @package _group_
 train:
- 
+  # 1. Resize the original image to be large enough to support a 448 crop
+  Resize:
+    size: [512, 512] 
+  
   # 2. Crop a 448x448 patch (Double your target ResNet input size)
   RandomResizedCrop:
     scale: [0.16, 1]
     ratio: [0.75, 1.33]
-    size: 224  # <--- CHANGED: 224 * 2 = 448
+    size: 448  # <--- CHANGED: 224 * 2 = 448
     
   # 3. Apply Color Augmentation to the full 448px image
   ColorJitter:
@@ -35,9 +38,9 @@ train:
 test:
   # Same logic for test: Resize large -> Crop 448 -> Decompose -> Result 224
   Resize:
-    size: [256, 256]
+    size: [512, 512]
   CenterCrop:
-    size: [224, 224] # <--- CHANGED to 448
+    size: [448, 448] # <--- CHANGED to 448
   ToTensor: {}
   Normalize:
     mean: [0.485, 0.456, 0.406]

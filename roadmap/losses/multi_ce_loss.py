@@ -17,4 +17,4 @@ class MultiCrossEntropyLoss(nn.Module):
         for i,  weight in enumerate(self.weights):
             loss = self.loss_fns[i](preds[i], targets)
             total_loss += weight * loss
-        return total_loss
+        return total_loss/len(self.weights)

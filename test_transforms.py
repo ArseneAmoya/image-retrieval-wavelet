@@ -71,9 +71,9 @@ def test_transforms():
     plt.title('Test Transform details hl')
     plt.imshow(normalize_for_display(img_test[:, 2]))
 
-    # plt.subplot(2,5,10)
-    # plt.title('Test Transform details hh')  
-    # plt.imshow(normalize_for_display(img_test[:, 3])) 
+    plt.subplot(2,5,10)
+    plt.title('Test Transform details hh')  
+    plt.imshow(normalize_for_display(img_test[:, 3])) 
     
     plt.show()
 
