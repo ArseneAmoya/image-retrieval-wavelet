@@ -1,0 +1,16 @@
+# @package _group_
+- name: SGD
+  params:
+  kwargs:
+    lr: 0.003
+    momentum: 0.99
+    weight_decay: 0.0005
+    nesterov: True
+  scheduler_on_epoch:
+      name: MultiStepLR
+      kwargs:
+          milestones: [70]
+          gamma: 0.3
+          last_epoch: -1
+  scheduler_on_step:
+  scheduler_on_val:

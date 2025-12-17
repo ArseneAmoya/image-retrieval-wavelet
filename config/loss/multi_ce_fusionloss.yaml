@@ -1,0 +1,6 @@
+# @package _group_
+- name:  MultiCrossEntropyLoss
+  weight: 1.0
+  kwargs:
+    weights: [0.75, 0.75, 0.75, 0.75, 2.0]
+    label_smoothing: 0.1

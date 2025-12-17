@@ -1,0 +1,14 @@
+# @package _group_
+train:
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+  Normalize:
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]
+
+test:
+  ToTensor: {}
+  Normalize:
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]

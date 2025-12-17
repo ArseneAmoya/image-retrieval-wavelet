@@ -1,0 +1,10 @@
+# @package _group_
+name: SOPDataset
+kwargs:
+  data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\Stanford_Online_Products\Stanford_Online_Products
+
+sampler:
+  name: RandomSampler
+  kwargs:
+    batch_size: 128
+num_classes: 11318
