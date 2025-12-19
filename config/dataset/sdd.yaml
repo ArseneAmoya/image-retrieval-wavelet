@@ -1,0 +1,11 @@
+# @package _group_
+name: StanfordDog12Dataset
+kwargs:
+  data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\stanforddogs
+
+sampler:
+  name: MPerClassSampler
+  kwargs:
+    batch_size: 128
+    samples_per_class: 4
+num_classes: 120

@@ -1,0 +1,30 @@
+- name: AdamW
+  params:
+  kwargs:
+    lr: 0.0003              # 0.1 × batch/128
+    weight_decay: 0.0001
+  scheduler_on_step:   # on gère tout dans SequentialLR
+    name: OneCycleLR
+    kwargs:
+      max_lr: 0.001
+      pct_start: 0.3
+      div_factor: 10
+      final_div_factor: 100
+      epochs: 200
+      steps_per_epoch: 375
+  scheduler_on_epoch:
+  scheduler_on_val:
+
+#  name: SequentialLR
+#     kwargs:
+#       schedulers:
+#         - name: LinearLR
+#           kwargs:
+#             start_factor: 0.1     # 10 % du LR initial
+#             end_factor: 1.0
+#             total_iters: 5        # 5 époques de warm‑up
+#         - name: CosineAnnealingLR
+#           kwargs:
+#             T_max: 195            # 200 – 5
+#             eta_min: 0.0
+#       milestones: [5]

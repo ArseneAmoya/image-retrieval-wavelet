@@ -1,0 +1,12 @@
+# @package _group_
+name: RetrievalNet
+freeze_batch_norm: True
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: resnet18_ce
+  embed_dim: 512
+  norm_features: False
+  without_fc: True
+  with_autocast: True
+  num_classes: ${dataset.num_classes}
+  pretrained: True
