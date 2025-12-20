@@ -9,13 +9,13 @@ force_lr: null
 warm_up: -1
 warm_up_key: fc
 
-max_iter: 50
+max_iter: 20
 
 train_eval_freq: 5
 val_eval_freq: -1
 test_eval_freq: 5
-eval_bs: 96
-save_model: 50
+eval_bs: 128
+save_model: 10
 eval_split: test
 principal_metric: mean_average_precision_at_r_level0
 log_grad: False

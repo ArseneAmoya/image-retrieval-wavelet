@@ -1,9 +1,19 @@
 # @package _group_
-- name: Adam
+- name: SGD
   params:
   kwargs:
-    lr: 0.000001
-    weight_decay: 0.0004
+    
+    lr: 0.02                
+    momentum: 0.0           
+    weight_decay: 0.0005    
+    nesterov: True          
+    
   scheduler_on_epoch:
+      name: CosineAnnealingLR
+      kwargs:
+          T_max: 20          
+          eta_min: 0.0
+          last_epoch: -1
+  
   scheduler_on_step:
   scheduler_on_val:
