@@ -1,7 +1,7 @@
 # @package _group_
 name: Cub200Dataset
 kwargs:
-  data_dir: C:\Users\amoya\OneDrive - SUPCOM\Documents\These\Incremental Learning\Code Icarl\icarl-pytorch\data\CUB_200_2011
+  data_dir: C:\These\Incremental Learning\Code Icarl\icarl-pytorch\data\CUB_200_2011
 
 sampler:
   name: RandomSampler

@@ -1,19 +1,21 @@
 # @package _group_
 - name: SGD
-  params:
+  params: null
   kwargs:
-    
-    lr: 0.02                
-    momentum: 0.0           
-    weight_decay: 0.0005    
-    nesterov: True          
-    
+    lr: 0.02
+    momentum: 0.0
+    weight_decay: 0.0005
+    nesterov: False
+  bias_kwargs:
+    weight_decay: 0.0
+
+  # IMPORTANT : Rien dans epoch
   scheduler_on_epoch:
-      name: CosineAnnealingLR
-      kwargs:
-          T_max: 20          
-          eta_min: 0.0
-          last_epoch: -1
-  
+
+  # TOUT dans step pour le warmcos
   scheduler_on_step:
+      name: warmcos
+      kwargs:
+          total_steps: 940      # 20 epochs * ~47 batches
+          warmup_steps: 100     # Valeur "en dur" du repo officiel
   scheduler_on_val:

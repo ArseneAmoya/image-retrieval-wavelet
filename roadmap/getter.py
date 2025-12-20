@@ -10,6 +10,7 @@ from roadmap import models
 from roadmap import engine
 from roadmap import utils as lib
 from torchsummary import summary
+import math
 
 
 class Getter:
@@ -40,35 +41,99 @@ class Getter:
             "on_step": [],
             "on_val": [],
         }
-        for opt in config:
-            optimizer = getattr(optim, opt.name)
-            if opt.params is not None:
-                optimizer = optimizer(getattr(net, opt.params).parameters(), **opt.kwargs)
-                optimizers[opt.params] = optimizer
+
+        for opt_cfg in config:
+            # 1. Sélection du module cible (Tout le réseau ou une sous-partie)
+            if opt_cfg.params is None:
+                target_module = net
+                name_key = "net"
             else:
-                optimizer = optimizer(net.parameters(), **opt.kwargs)
-                optimizers["net"] = optimizer
-            lib.LOGGER.info(optimizer)
-            if opt.scheduler_on_epoch is not None:
-                schedulers["on_epoch"].append(self.get_scheduler(optimizer, opt.scheduler_on_epoch))
-            if opt.scheduler_on_step is not None:
-                schedulers["on_step"].append(self.get_scheduler(optimizer, opt.scheduler_on_step))
-            if opt.scheduler_on_val is not None:
+                target_module = getattr(net, opt_cfg.params)
+                name_key = opt_cfg.params
+
+            # 2. Séparation des paramètres (Poids vs Biais/BN)
+            # Cette logique est universelle pour PyTorch
+            params_weight = []
+            params_bias = []
+
+            for name, param in target_module.named_parameters():
+                if not param.requires_grad:
+                    continue
+                
+                # Détection des biais et Batch Normalization
+                if 'bias' in name or len(param.shape) == 1: 
+                    params_bias.append(param)
+                else:
+                    params_weight.append(param)
+
+            # 3. Préparation des groupes de paramètres
+            # Groupe 1 : Les poids standards (utilisent opt_cfg.kwargs)
+            # Groupe 2 : Les biais (utilisent opt_cfg.kwargs + opt_cfg.bias_kwargs s'il existe)
+            
+            # On récupère les configs
+            common_kwargs = opt_cfg.kwargs if opt_cfg.kwargs else {}
+            bias_overrides = opt_cfg.bias_kwargs if hasattr(opt_cfg, 'bias_kwargs') and opt_cfg.bias_kwargs else {}
+            
+            # Fusion intelligente pour les biais : common + override
+            bias_kwargs = common_kwargs.copy()
+            bias_kwargs.update(bias_overrides)
+
+            param_groups = [
+                {'params': params_weight, **common_kwargs},
+                {'params': params_bias, **bias_kwargs}
+            ]
+
+            # 4. Instanciation de l'optimiseur
+            # On ne passe plus **kwargs au constructeur global car tout est dans les param_groups
+            optimizer_cls = getattr(optim, opt_cfg.name)
+            optimizer = optimizer_cls(param_groups)
+            
+            optimizers[name_key] = optimizer
+            lib.LOGGER.info(f"Optimizer created for {name_key}: {optimizer}")
+
+            # 5. Gestion des Schedulers (Code inchangé, toujours valide)
+            if opt_cfg.scheduler_on_epoch is not None:
+                schedulers["on_epoch"].append(self.get_scheduler(optimizer, opt_cfg.scheduler_on_epoch))
+            if opt_cfg.scheduler_on_step is not None:
+                schedulers["on_step"].append(self.get_scheduler(optimizer, opt_cfg.scheduler_on_step))
+            if opt_cfg.scheduler_on_val is not None:
                 schedulers["on_val"].append(
-                    (self.get_scheduler(optimizer, opt.scheduler_on_val), opt.scheduler_on_val.key)
+                    (self.get_scheduler(optimizer, opt_cfg.scheduler_on_val), opt_cfg.scheduler_on_val.key)
                 )
 
         return optimizers, schedulers
 
     def get_scheduler(self, opt, config):
-        if config.name == "SequentialLR":
-            schedulers_cfg = config.kwargs.schedulers  # Pas de pop !
+        # --- Cas Spécifique : Reproduction Boudiaf et al. (Warm Cosine) ---
+        if config.name == 'warmcos':
+            # On récupère le nombre total d'itérations (T_max) et le warmup
+            total_steps = config.kwargs.get('total_steps')
+            warmup_steps = config.kwargs.get('warmup_steps', 100) # Défaut à 100 comme dans leur repo
+            
+            if total_steps is None:
+                raise ValueError("Pour 'warmcos', vous devez spécifier 'total_steps' dans kwargs")
+
+            # La formule exacte de leur repo :
+            # min((i + 1) / 100, (1 + math.cos(math.pi * i / total_steps)) / 2)
+            lr_lambda = lambda step: min(
+                (step + 1) / warmup_steps, 
+                (1 + math.cos(math.pi * step / total_steps)) / 2
+            )
+            
+            sch = optim.lr_scheduler.LambdaLR(opt, lr_lambda=lr_lambda)
+        
+        # --- Cas SequentialLR (Ton code existant) ---
+        elif config.name == "SequentialLR":
+            schedulers_cfg = config.kwargs.schedulers 
             schedulers = [getattr(optim.lr_scheduler, s.name)(opt, **s.kwargs) for s in schedulers_cfg]
-            print("remaining kwargs", config.kwargs)
+            # print("remaining kwargs", config.kwargs) # Debug optionnel
             sch = optim.lr_scheduler.SequentialLR(opt, schedulers=schedulers, milestones=config.kwargs.milestones)
+        
+        # --- Cas Standard (PyTorch natif) ---
         else:
             sch = getattr(optim.lr_scheduler, config.name)(opt, **config.kwargs)
-        lib.LOGGER.info(sch)
+            
+        lib.LOGGER.info(f"Scheduler created: {config.name}")
         return sch
 
     def get_loss(self, config):

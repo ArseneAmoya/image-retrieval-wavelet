@@ -1,39 +1,56 @@
 import torch
 import torch.nn as nn
-from torchvision import models
-from torchvision.models import ResNet50_Weights, ResNet18_Weights
-from torchsummary import summary
 import torch.nn.functional as F
-import re
+from torchvision import models
+from torchvision.models import ResNet50_Weights
 
 class ResNetCE(nn.Module):
-    def __init__(self, embed_dim: int, num_classes: int, pretrained: bool = False, backbone_name: str = 'resnet50'):
+    def __init__(self, num_classes, dropout=0.5, pretrained=True, freeze_bn=True, **kwargs):
         super().__init__()
-        try:
-            self.backbone = getattr(models, backbone_name)(weights= f"ResNet{re.search(r'(\d+)', backbone_name).group(1)}_Weights.IMAGENET1K_V1" if pretrained else None)
-        except AttributeError:
-            raise ValueError(f"Backbone '{backbone_name}' is not available in torchvision.models")
-        self.backbone.fc = nn.Identity()  # Remove the final fully connected layer
-        self.fc = nn.Linear(2048, embed_dim)
+        
+        # 1. Charger ResNet50 pré-entraîné
+        weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = models.resnet50(weights=weights)
+        
+        # 2. Garder uniquement l'extracteur de features (jusqu'à avgpool inclus)
+        # ResNet50 structure: children()[:-1] retire la couche FC finale
+        self.features = nn.Sequential(*list(backbone.children())[:-1])
+        self.feature_dim = 2048  # Fixe pour ResNet50
+        
+        # 3. Tête de classification spécifique au papier
+        # Dropout (0.5) -> Linear (2048 -> num_classes)
+        # Pas de BN supplémentaire ici pour CUB !
+        self.dropout = nn.Dropout(p=dropout)
+        self.classifier = nn.Linear(self.feature_dim, num_classes)
+        
+        # 4. Initialisation à Zéro (Critique)
+        nn.init.constant_(self.classifier.weight, 0)
+        nn.init.constant_(self.classifier.bias, 0)
 
-        # self.classifier = nn.Sequential(nn.Dropout(0.5),
-        #                                 nn.Linear(embed_dim, num_classes))
-        # nn.init.constant_(self.classifier[1].bias, 0)
-        # nn.init.constant_(self.classifier[1].weight, 0)
+        # Flag pour gérer le mode des Batch Norm
+        self.freeze_bn = freeze_bn
 
-    def forward(self, x) -> torch.Tensor:
-        x = self.backbone(x)
-        #x = self.pooling(x)
-
-        x = torch.flatten(x, 1)
-        #x = self.layer_norm(x)
-        #embed = self.fc(x)
+    def forward(self, x):
+        # Feature extraction
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
 
         if self.training:
-            logits = self.fc(x) #self.classifier(x)
+            # TRAINING: Retourne les logits pour la CrossEntropy
+            x = self.dropout(x)
+            logits = self.classifier(x)
             return logits
         else:
-            x = F.normalize(x, dim=1, p=2)
+            # EVAL: Retourne les features normalisées L2 pour le calcul de distance (Recall)
+            return F.normalize(x, p=2, dim=1)
 
-            return x
-
+    def train(self, mode=True):
+        """
+        Surcharge critique : même en mode train=True, 
+        les couches BN doivent rester en mode eval si freeze_bn est activé.
+        """
+        super().train(mode)
+        if self.freeze_bn and mode:
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eval()

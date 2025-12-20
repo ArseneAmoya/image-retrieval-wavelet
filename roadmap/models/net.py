@@ -126,11 +126,26 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 2048
         backbone = WCNN(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
+    # Dans get_backbone(...)
     elif name == 'resnet_ce':
-        lib.LOGGER.info("using ResNet-CE")
-        backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet50",**kwargs)
+        lib.LOGGER.info("using ResNet-CE (Boudiaf et al. reproduction)")
+        # On récupère num_classes et dropout depuis kwargs
+        num_classes = kwargs.pop('num_classes', None)
+        dropout = kwargs.pop('dropout', 0.5)
+        
+        if num_classes is None:
+            raise ValueError("ResNet-CE requires 'num_classes' to be defined in kwargs")
+
+        # Instanciation propre
+        backbone = ResNetCE(
+            num_classes=num_classes, 
+            dropout=dropout, 
+            pretrained=pretrained,
+            freeze_bn=True, # Forcé à True selon le papier
+            **kwargs
+        )
         out_dim = 2048
-        pooling = nn.Identity()
+        pooling = nn.Identity() # Le pooling est déjà fait dans ResNetCE.features
     elif name == 'resnet18_ce':
         lib.LOGGER.info(f"using ResNet 18 for cross entropy, num classes : {kwargs.get('num_classes', "not specified")}")
         backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet18",**kwargs)
