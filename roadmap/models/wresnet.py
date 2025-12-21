@@ -10,6 +10,8 @@ import roadmap.utils as lib
 
 WEIGHTS_DICT = {
     'resnet18': models.ResNet18_Weights,
+    'resnet34': models.ResNet34_Weights,
+    'resnet50': models.ResNet50_Weights,
 }
 
 
