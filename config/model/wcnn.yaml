@@ -14,3 +14,5 @@ kwargs:
   feature_size: 2048
   attention_type: cbam
   num_classes: 200
+  pretrained: True
+  dropout: 0.5

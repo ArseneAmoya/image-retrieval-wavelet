@@ -404,7 +404,7 @@ class WCNN(nn.Module):
     '''
     Implementing a Multibranch CNN where each branch process one sub-band of the DWT, the subbands are extracted outside the network.
     '''
-    def __init__(self, backbone = "resnet50", num_classes=None, pretrained=True, *args, **kwargs) -> None:
+    def __init__(self, backbone = "resnet50", num_classes=None, pretrained=True, dropout=0.5, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WCNN, self).__init__()
 
@@ -419,10 +419,10 @@ class WCNN(nn.Module):
         self.hh_backbone = copy.deepcopy(self.backbone)
 
         if num_classes is not None:
-            self.ll_classifier = nn.Linear(self.OUT_SIZE, num_classes)
-            self.lh_classifier = nn.Linear(self.OUT_SIZE, num_classes)
-            self.hl_classifier = nn.Linear(self.OUT_SIZE, num_classes)
-            self.hh_classifier = nn.Linear(self.OUT_SIZE, num_classes)
+            self.ll_classifier = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.OUT_SIZE, num_classes))
+            self.lh_classifier = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.OUT_SIZE, num_classes))
+            self.hl_classifier = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.OUT_SIZE, num_classes))
+            self.hh_classifier = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.OUT_SIZE, num_classes))
         else:
             self.ll_classifier = nn.Identity()
             self.lh_classifier = nn.Identity()
