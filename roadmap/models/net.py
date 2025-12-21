@@ -177,6 +177,11 @@ def get_backbone(name, pretrained=True, **kwargs):
         backbone = FourBranchResNet50(pretrained=pretrained, **kwargs)
         out_dim = 2048 * 4
         pooling = nn.Identity()
+    elif name == "wcnn_ce":
+        lib.LOGGER.info(f"using WCNN with Cross Entropy, decom_level :, {kwargs.get('decom_level', 'not specified')}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 'unspecidied')} {kwargs.get('feature_size', 'unspecified')}, coarse_only : {kwargs.get('coarse_only', False)}   ")
+        out_dim = 2048 * 4
+        backbone = WCNN(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")

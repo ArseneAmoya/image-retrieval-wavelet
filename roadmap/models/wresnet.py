@@ -248,7 +248,7 @@ class Eca1D_layer(nn.Module):
 
         return y
 class WaveResNet(nn.Module):
-    def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
+    def __init__(self, decom_level = 3, wave="haar", *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WaveResNet, self).__init__()
         self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=decom_level, wave= wave, mode='zero')
@@ -273,10 +273,9 @@ class WaveResNet(nn.Module):
 #             #if ct < 7:
 #             for param in child.parameters():
 #                 param.requires_grad = False
-        if not ll_only :
-            self.lh_backbone = copy.deepcopy(self.backbone)
-            self.hl_backbone = copy.deepcopy(self.backbone)
-            self.hh_backbone = copy.deepcopy(self.backbone)
+        self.lh_backbone = copy.deepcopy(self.backbone)
+        self.hl_backbone = copy.deepcopy(self.backbone)
+        self.hh_backbone = copy.deepcopy(self.backbone)
         if self.att:
             if kwargs.get('attention_type', None) == "eca":
                 self.attention = Eca1D_layer(4)
@@ -405,34 +404,43 @@ class WCNN(nn.Module):
     '''
     Implementing a Multibranch CNN where each branch process one sub-band of the DWT, the subbands are extracted outside the network.
     '''
-    def __init__(self, backbone = "resnet18", pretrained=True, *args, **kwargs) -> None:
-        self.OUT_SIZE = kwargs.get("feature_size", 512)
+    def __init__(self, backbone = "resnet50", num_classes=None, pretrained=True, *args, **kwargs) -> None:
+        self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WCNN, self).__init__()
 
         self.backbone = getattr(models, backbone)(weights = WEIGHTS_DICT[backbone].DEFAULT if pretrained else None)
         lib.LOGGER.info(f"Instantiating WCNN with backbone {backbone} and pretrained={pretrained}")
-        self.backbone.fc = nn.Identity()#nn.Linear(2048, 1024) #=
-        #self.backbone.pre_logit = nn.Linear(2048, 1024)
+        self.backbone.fc = nn.Identity()
+        self.backbone.conv1 = nn.Conv2d(3, 64, (1,1))
+        self.backbone.maxpool = nn.Identity()
 
-        self.backbone.avgpool = nn.AdaptiveAvgPool3d((self.OUT_SIZE, 1, 1))
-        #ct = 0
-       
-#         for child in self.backbone.children():
-#             #ct += 1
-#             #if ct < 7:
-#             for param in child.parameters():
-#                 param.requires_grad = False
         self.lh_backbone = copy.deepcopy(self.backbone)
         self.hl_backbone = copy.deepcopy(self.backbone)
         self.hh_backbone = copy.deepcopy(self.backbone)
+
+        if num_classes is not None:
+            self.ll_classifier = nn.Linear(self.OUT_SIZE, num_classes)
+            self.lh_classifier = nn.Linear(self.OUT_SIZE, num_classes)
+            self.hl_classifier = nn.Linear(self.OUT_SIZE, num_classes)
+            self.hh_classifier = nn.Linear(self.OUT_SIZE, num_classes)
+        else:
+            self.ll_classifier = nn.Identity()
+            self.lh_classifier = nn.Identity()
+            self.hl_classifier = nn.Identity()
+            self.hh_classifier = nn.Identity()
     
 
         in_features = self.OUT_SIZE * 4
         self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
     def forward(self, x):
-        x = torch.cat([self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])], dim=1)
+        assert x.shape[2] ==4, f"Expected input with 4 subbands, got {x.shape[2]}"
+        assert len(x.shape) ==5, f"Expected input of shape B,S,C,H,W got {x.shape}"
+
+        x = [self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])]
             #print(y.shape, "all")
-        return x
+        if self.training:
+            return [self.ll_classifier(x[0]), self.lh_classifier(x[1]), self.hl_classifier(x[2]), self.hh_classifier(x[3])]
+        return F.normalize(torch.cat(x, dim=1), dim=1)
 
 class WCNN_ALL(nn.Module):
     '''

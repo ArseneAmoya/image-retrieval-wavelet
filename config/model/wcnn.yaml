@@ -1,0 +1,16 @@
+# @package _group_
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: wcnn_ce
+  embed_dim: 2048
+  norm_features: False
+  without_fc: True
+  with_autocast: True
+  attention: False
+  decom_level: 1
+  wave: haar
+  feature_size: 2048
+  attention_type: cbam
+  num_classes: 200
