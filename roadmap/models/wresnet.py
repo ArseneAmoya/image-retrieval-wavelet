@@ -413,8 +413,8 @@ class WCNN(nn.Module):
         self.backbone = getattr(models, backbone)(weights = WEIGHTS_DICT[backbone].DEFAULT if pretrained else None)
         lib.LOGGER.info(f"Instantiating WCNN with backbone {backbone} and pretrained={pretrained}")
         self.backbone.fc = nn.Identity()
-        self.backbone.conv1 = nn.Conv2d(3, 64, (1,1))
-        self.backbone.maxpool = nn.Identity()
+        self.backbone.conv1 = nn.Conv2d(3, 64, (1,1)) #=> J=1 ==> 112x112
+        self.backbone.maxpool = nn.MaxPool2d((2,2), stride=(2,2)) #=> J=1 ==> 56x56
 
         self.lh_backbone = copy.deepcopy(self.backbone)
         self.hl_backbone = copy.deepcopy(self.backbone)
