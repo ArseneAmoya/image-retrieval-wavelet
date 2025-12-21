@@ -43,7 +43,7 @@ class Getter:
         }
 
         for opt_cfg in config:
-            # 1. Sélection du module cible (Tout le réseau ou une sous-partie)
+            # --- 1. Definition of the target module (Global or Sub-part) ---
             if opt_cfg.params is None:
                 target_module = net
                 name_key = "net"
@@ -51,47 +51,90 @@ class Getter:
                 target_module = getattr(net, opt_cfg.params)
                 name_key = opt_cfg.params
 
-            # 2. Séparation des paramètres (Poids vs Biais/BN)
-            # Cette logique est universelle pour PyTorch
-            params_weight = []
-            params_bias = []
-
-            for name, param in target_module.named_parameters():
-                if not param.requires_grad:
-                    continue
-                
-                # Détection des biais et Batch Normalization
-                if 'bias' in name or len(param.shape) == 1: 
-                    params_bias.append(param)
-                else:
-                    params_weight.append(param)
-
-            # 3. Préparation des groupes de paramètres
-            # Groupe 1 : Les poids standards (utilisent opt_cfg.kwargs)
-            # Groupe 2 : Les biais (utilisent opt_cfg.kwargs + opt_cfg.bias_kwargs s'il existe)
+            # --- 2. Advanced Parameter Separation (Specific Modules vs Rest) ---
             
-            # On récupère les configs
+            # Helper function to separate weights/biases for a list of parameters
+            def split_weight_bias(params_iterator):
+                p_weight = []
+                p_bias = []
+                for name, param in params_iterator:
+                    if not param.requires_grad:
+                        continue
+                    if 'bias' in name or len(param.shape) == 1:
+                        p_bias.append(param)
+                    else:
+                        p_weight.append(param)
+                return p_weight, p_bias
+
+            # Lists to hold the final groups
+            final_param_groups = []
+
+            # A. Check if there are specific modules with their own LR (ex: conv1)
+            # We look for a 'modules' key in kwargs or directly in opt_cfg
+            specific_modules_cfg = getattr(opt_cfg, 'modules', [])
+            
+            # We keep track of processed parameters to avoid duplicates
+            processed_params = set()
+
+            if specific_modules_cfg:
+                for mod_cfg in specific_modules_cfg:
+                    # mod_cfg should contain: {'name': 'conv1', 'lr': 0.2, ...}
+                    target_name = mod_cfg.get('name')
+                    module_specific_kwargs = mod_cfg.get('kwargs', {}) # lr, etc.
+                    
+                    # We look for parameters matching this name/prefix
+                    specific_params_list = []
+                    for name, param in target_module.named_parameters():
+                        # Logic: if the parameter name starts with the target module name
+                        # Example: target='backbone.conv1' matches 'backbone.conv1.weight'
+                        if target_name in name: 
+                            specific_params_list.append((name, param))
+                            processed_params.add(param)
+                    
+                    if specific_params_list:
+                        # We separate weights/biases for this specific module
+                        sp_weight, sp_bias = split_weight_bias(specific_params_list)
+                        
+                        # We create the groups for this module
+                        if sp_weight:
+                            final_param_groups.append({'params': sp_weight, **module_specific_kwargs})
+                        if sp_bias:
+                            # For biases, we can inherit weight_decay=0 if needed, or take the general one
+                            # Here we apply the module's specific kwargs (ex: high LR)
+                            final_param_groups.append({'params': sp_bias, **module_specific_kwargs})
+                            
+                        lib.LOGGER.info(f"   -> Applied specific config to module '{target_name}' ({len(specific_params_list)} params)")
+
+            # B. Processing the REST of the parameters (Standard logic)
+            rest_params_list = []
+            for name, param in target_module.named_parameters():
+                if param not in processed_params:
+                    rest_params_list.append((name, param))
+
+            # Separating Weight/Bias for the rest
+            params_weight, params_bias = split_weight_bias(rest_params_list)
+
+            # Retrieving general configs (Your original logic)
             common_kwargs = opt_cfg.kwargs if opt_cfg.kwargs else {}
             bias_overrides = opt_cfg.bias_kwargs if hasattr(opt_cfg, 'bias_kwargs') and opt_cfg.bias_kwargs else {}
             
-            # Fusion intelligente pour les biais : common + override
             bias_kwargs = common_kwargs.copy()
             bias_kwargs.update(bias_overrides)
 
-            param_groups = [
-                {'params': params_weight, **common_kwargs},
-                {'params': params_bias, **bias_kwargs}
-            ]
+            # Adding general groups
+            if params_weight:
+                final_param_groups.append({'params': params_weight, **common_kwargs})
+            if params_bias:
+                final_param_groups.append({'params': params_bias, **bias_kwargs})
 
-            # 4. Instanciation de l'optimiseur
-            # On ne passe plus **kwargs au constructeur global car tout est dans les param_groups
+            # --- 4. Instantiating the Optimizer ---
             optimizer_cls = getattr(optim, opt_cfg.name)
-            optimizer = optimizer_cls(param_groups)
+            optimizer = optimizer_cls(final_param_groups)
             
             optimizers[name_key] = optimizer
             lib.LOGGER.info(f"Optimizer created for {name_key}: {optimizer}")
 
-            # 5. Gestion des Schedulers (Code inchangé, toujours valide)
+            # --- 5. Handling Schedulers (Unchanged) ---
             if opt_cfg.scheduler_on_epoch is not None:
                 schedulers["on_epoch"].append(self.get_scheduler(optimizer, opt_cfg.scheduler_on_epoch))
             if opt_cfg.scheduler_on_step is not None:
@@ -104,17 +147,14 @@ class Getter:
         return optimizers, schedulers
 
     def get_scheduler(self, opt, config):
-        # --- Cas Spécifique : Reproduction Boudiaf et al. (Warm Cosine) ---
+        # --- Specific Case: Boudiaf et al. Reproduction (Warm Cosine) ---
         if config.name == 'warmcos':
-            # On récupère le nombre total d'itérations (T_max) et le warmup
             total_steps = config.kwargs.get('total_steps')
-            warmup_steps = config.kwargs.get('warmup_steps', 100) # Défaut à 100 comme dans leur repo
+            warmup_steps = config.kwargs.get('warmup_steps', 100)
             
             if total_steps is None:
-                raise ValueError("Pour 'warmcos', vous devez spécifier 'total_steps' dans kwargs")
+                raise ValueError("For 'warmcos', you must specify 'total_steps' in kwargs")
 
-            # La formule exacte de leur repo :
-            # min((i + 1) / 100, (1 + math.cos(math.pi * i / total_steps)) / 2)
             lr_lambda = lambda step: min(
                 (step + 1) / warmup_steps, 
                 (1 + math.cos(math.pi * step / total_steps)) / 2
@@ -122,14 +162,13 @@ class Getter:
             
             sch = optim.lr_scheduler.LambdaLR(opt, lr_lambda=lr_lambda)
         
-        # --- Cas SequentialLR (Ton code existant) ---
+        # --- SequentialLR Case ---
         elif config.name == "SequentialLR":
             schedulers_cfg = config.kwargs.schedulers 
             schedulers = [getattr(optim.lr_scheduler, s.name)(opt, **s.kwargs) for s in schedulers_cfg]
-            # print("remaining kwargs", config.kwargs) # Debug optionnel
             sch = optim.lr_scheduler.SequentialLR(opt, schedulers=schedulers, milestones=config.kwargs.milestones)
         
-        # --- Cas Standard (PyTorch natif) ---
+        # --- Standard Case ---
         else:
             sch = getattr(optim.lr_scheduler, config.name)(opt, **config.kwargs)
             

@@ -56,8 +56,15 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     # FourBranchResNet expects input of shape [Batch, 3, 4, H, W]
     # Replicate the image 4 times for the 4 branches
     batch_size = 1
+    print("--- Vérification des couches sélectionnées ---")
+    i = 0
+    for name, param in model.named_parameters():
+        # Votre filtre actuel (qui marche grâce au substring)
+        if "backbone.conv1" in name: 
+            print(f"[{i}] Trouvé : {name}")
+            i += 1
     
-    model.train()
+    model.eval()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
