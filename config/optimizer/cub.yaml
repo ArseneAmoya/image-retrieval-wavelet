@@ -12,7 +12,12 @@
     weight_decay: 0.0
 
   # --- NEW: Specific Modules ---
-  modules: null
+  modules:
+    - name: "backbone.conv1"
+      kwargs:
+        lr: 0.2
+        momentum: 0.9
+        weight_decay: 0.0005
 
   # Schedulers (Unchanged)
   scheduler_on_step:
