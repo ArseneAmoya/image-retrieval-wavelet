@@ -5,11 +5,11 @@
   # Configuration for the REST of the network (Backbone ImageNet)
   kwargs:
     lr: 0.02
-    momentum: 0.9
-    weight_decay: 0.002
+    momentum: 0
+    weight_decay: 0.0005
     
   bias_kwargs:
-    weight_decay: 0.0
+    weight_decay: 0
 
   # --- NEW: Specific Modules ---
   modules:
