@@ -24,6 +24,6 @@
       name: warmcos
       kwargs:
           total_steps: 2820      # 60 époques * 47 batches
-          warmup_steps: 100
+          warmup_steps: 300
   scheduler_on_epoch: null
   scheduler_on_val: null
