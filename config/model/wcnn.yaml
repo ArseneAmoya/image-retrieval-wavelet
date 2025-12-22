@@ -1,6 +1,6 @@
 # @package _group_
 name: RetrievalNet
-freeze_batch_norm: False
+freeze_batch_norm: True
 freeze_pos_embedding: False
 kwargs:
   backbone_name: wcnn_ce

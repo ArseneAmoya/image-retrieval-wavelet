@@ -2,5 +2,5 @@
 - name:  MultiCrossEntropyLoss
   weight: 1.0
   kwargs:
-    weights: [1.0, 1.0, 1.0, 1.0]
+    weights: [2, 0.66, 0.66, 0.66]
     label_smoothing: 0.1

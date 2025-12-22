@@ -12,12 +12,7 @@
     weight_decay: 0.0
 
   # --- NEW: Specific Modules ---
-  modules:
-    - name: "backbone.conv1"       # Target: "backbone.conv1.", "lh_backbone.conv1.", etc.
-      kwargs:
-        lr: 0.2            # LR x10 for these layers
-        momentum: 0.9      # We repeat momentum (mandatory in group)
-        weight_decay: 0.0005
+  modules: null
 
   # Schedulers (Unchanged)
   scheduler_on_step:
