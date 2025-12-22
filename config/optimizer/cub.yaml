@@ -5,7 +5,7 @@
   # Configuration for the REST of the network (Backbone ImageNet)
   kwargs:
     lr: 0.02
-    momentum: 0.99
+    momentum: 0.9
     weight_decay: 0.0005
     nesterov: True
     
@@ -16,7 +16,7 @@
   modules:
     - name: "backbone.conv1"
       kwargs:
-        lr: 0.1
+        lr: 0.2
         momentum: 0.9
         weight_decay: 0.0005
 
@@ -25,6 +25,6 @@
       name: warmcos
       kwargs:
           total_steps: 2820      # 60 époques * 47 batches
-          warmup_steps: 300
+          warmup_steps: 100
   scheduler_on_epoch: null
   scheduler_on_val: null
