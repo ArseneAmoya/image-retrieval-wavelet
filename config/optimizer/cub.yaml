@@ -5,19 +5,20 @@
   # Configuration for the REST of the network (Backbone ImageNet)
   kwargs:
     lr: 0.02
-    momentum: 0
+    momentum: 0.99
     weight_decay: 0.0005
+    nesterov: True
     
   bias_kwargs:
-    weight_decay: 0
+    weight_decay: 0.0005
 
   # --- NEW: Specific Modules ---
   modules:
     - name: "backbone.conv1"
       kwargs:
-        lr: 0.2
+        lr: 0.1
         momentum: 0.9
-        weight_decay: 0.002
+        weight_decay: 0.0005
 
   # Schedulers (Unchanged)
   scheduler_on_step:
