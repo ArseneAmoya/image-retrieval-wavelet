@@ -6,7 +6,7 @@
   kwargs:
     lr: 0.02
     momentum: 0.9
-    weight_decay: 0.0005
+    weight_decay: 0.002
     
   bias_kwargs:
     weight_decay: 0.0
@@ -17,7 +17,7 @@
       kwargs:
         lr: 0.2
         momentum: 0.9
-        weight_decay: 0.0005
+        weight_decay: 0.002
 
   # Schedulers (Unchanged)
   scheduler_on_step:
