@@ -62,7 +62,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     i = 0
     for name, param in model.named_parameters():
         # Votre filtre actuel (qui marche grâce au substring)
-        if "backbone.branches.3.0" in name: 
+        if "att_block" in name: 
             print(f"[{i}] Trouvé : {name}")
             print(f"    Shape: {param.shape}")
             print(f"type: {type(param)}")

@@ -3,13 +3,13 @@
   params:
   kwargs:
     lr: 0.01
-    momentum: 0.0
+    momentum: 0.9
     weight_decay: 0.0005
-    nesterov: False
+    nesterov: True
   scheduler_on_epoch:
       name: MultiStepLR
       kwargs:
-          milestones: [30, 60, 90]
+          milestones: [45, 60, 90]
           gamma: 0.3
           last_epoch: -1
   scheduler_on_step:
