@@ -14,12 +14,26 @@
 
   # --- NEW: Specific Modules ---
   modules:
-    - name: "backbone.conv1"
+    - name: "backbone.branches.0.0"
       kwargs:
         lr: 0.2
         momentum: 0.9
         weight_decay: 0.0005
-
+    - name: "backbone.branches.1.0"
+      kwargs:
+        lr: 0.2
+        momentum: 0.9
+        weight_decay: 0.0005
+    - name: "backbone.branches.2.0"
+      kwargs:
+        lr: 0.2
+        momentum: 0.9
+        weight_decay: 0.0005
+    - name: "backbone.branches.3.0"
+      kwargs:
+        lr: 0.2
+        momentum: 0.9
+        weight_decay: 0.0005
   # Schedulers (Unchanged)
   scheduler_on_step:
       name: warmcos

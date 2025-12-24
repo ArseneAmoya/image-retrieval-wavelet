@@ -1,12 +1,13 @@
 train:
   RandomResizedCrop:
-    size: 512             # Haute résolution (Sub-bands = 256px)
-    scale: [0.4, 1.0]     # Scale corrigé (Oiseau visible)
-    ratio: [1.0, 1.0]     # Carré strict
+    size: 448             # Haute résolution (Sub-bands = 256px)
+    scale: [0.16, 1.0]     # Scale corrigé (Oiseau visible)
+    ratio: [0.75, 1.33]     # Carré strict
   ColorJitter:
-    brightness: 0.4
-    contrast: 0.4
-    saturation: 0.4
+    brightness: 0.25
+    contrast: 0.25
+    saturation: 0.25
+    hue: 0.
   RandomHorizontalFlip:
     p: 0.5
   ToTensor: {}
@@ -21,9 +22,9 @@ train:
 
 test:
   Resize:
-    size: 576
-  CenterCrop:             # CenterCrop pour une évaluation stable
     size: 512
+  CenterCrop:             # CenterCrop pour une évaluation stable
+    size: 448
   ToTensor: {}
   Normalize:
     mean: [0.485, 0.456, 0.406]

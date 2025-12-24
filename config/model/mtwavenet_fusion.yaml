@@ -13,8 +13,8 @@ kwargs:
   feature_size: 2048
   attention_type: cbam
   coarse_only: True
-  num_classes: ${dataset.num_classes}
+  num_classes: 200
   pretrained: True
-  freeze_batch_norm: True
-  pooling_mode: max
+  freeze_batch_norm: False
+  pooling_mode: avg
   classification_dropout: 0.5

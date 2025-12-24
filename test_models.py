@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/wcnn.yaml')
+    model_configs = OmegaConf.load('config/model/mtwavenet_fusion.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)
@@ -49,9 +49,11 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
         freeze_batch_norm(model)
         print("BatchNorm layers have been frozen.")
     
-    for modules in model.modules():
-            if isinstance(modules, nn.BatchNorm2d) or isinstance(modules, nn.SyncBatchNorm):
-                print("BatchNorm layer found:", modules)
+    # for modules in model.modules():
+    #         if isinstance(modules, nn.BatchNorm2d) or isinstance(modules, nn.SyncBatchNorm):
+    #             print("BatchNorm layer found:", modules)
+
+    print(model)
 
     # FourBranchResNet expects input of shape [Batch, 3, 4, H, W]
     # Replicate the image 4 times for the 4 branches
@@ -60,8 +62,10 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     i = 0
     for name, param in model.named_parameters():
         # Votre filtre actuel (qui marche grâce au substring)
-        if "backbone.conv1" in name: 
+        if "backbone.branches.3.0" in name: 
             print(f"[{i}] Trouvé : {name}")
+            print(f"    Shape: {param.shape}")
+            print(f"type: {type(param)}")
             i += 1
     
     model.eval()
