@@ -9,7 +9,7 @@ import roadmap.utils as lib
 from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
-from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion
+from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -181,6 +181,13 @@ def get_backbone(name, pretrained=True, **kwargs):
         lib.LOGGER.info(f"using WCNN with Cross Entropy, decom_level :, {kwargs.get('decom_level', 'not specified')}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 'unspecified')}, coarse_only : {kwargs.get('coarse_only', False)}  dropout : {kwargs.get('dropout', 0.0)}   ")
         out_dim = 2048 * 4
         backbone = WCNN(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
+        pooling = nn.Identity()
+    elif name == 'hybrid_mtwavenet_ce':
+        lib.LOGGER.info(f"using Hybrid Multi-Branch TWaveNet with Cross Entropy, num classes : {kwargs.get('num_classes', 'not specified')}")
+        # Avoid passing `num_classes` twice if it is already present in kwargs
+    
+        backbone = HybridMultiBranch(pretrained=pretrained, **kwargs)
+        out_dim = 2048 + 1024* 3
         pooling = nn.Identity()
        
     else:

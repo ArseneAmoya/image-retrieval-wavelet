@@ -497,3 +497,92 @@ class FourBranchResNet50Fusion(FourBranchResNet50):
         else:
             # En Test : On renvoie le vecteur fusionné normalisé
             return F.normalize(fused_embedding, dim=1, p=2)
+
+
+class HybridMultiBranch(nn.Module):
+    def __init__(self, num_classes=200, pretrained=True, dropout=0.5, freeze_resnet_bn=True, *args, **kwargs):
+        super(HybridMultiBranch, self).__init__()
+        
+        lib.LOGGER.info("Initializing Hybrid Multi-Branch Network")
+
+        # --- BRANCHE 1 : ResNet50 pour l'Approximation (LL) ---
+        resnet = models.resnet50(pretrained=models.ResNet50_Weights.IMAGENET1K_V1 if pretrained else None)
+        self.resnet_branch = nn.Sequential(*list(resnet.children())[:-2]) # Output: 2048 channels
+        self.resnet_dim = 2048
+        
+        # Gestion du gel des Batch Norms pour ResNet uniquement
+        if freeze_resnet_bn:
+            for m in self.resnet_branch.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eval() # Passe en mode évaluation (utilise running stats)
+                    m.weight.requires_grad = False
+                    m.bias.requires_grad = False
+                    m.train = lambda mode: None  # Désactive complètement le mode train
+            lib.LOGGER.info("BatchNorm layers in ResNet branch have been frozen.")
+
+        # --- BRANCHES 2, 3, 4 : DenseNet121 pour les Détails (LH, HL, HH) ---
+        # On crée 3 instances indépendantes
+        self.dense_branches = nn.ModuleList()
+        self.dense_dim = 1024
+        
+        for _ in range(3): # Pour LH, HL, HH
+            dense = models.densenet121(pretrained=pretrained)
+            features = dense.features
+            self.dense_branches.append(features)
+
+        # --- CLASSIFIERS (Têtes) ---
+        # On a 4 sorties indépendantes pour la Multi-CE Loss
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.dropout = nn.Dropout(p=dropout)
+
+        # Classifier pour ResNet (LL)
+        self.fc_resnet = nn.Linear(self.resnet_dim, num_classes)
+        
+        # Classifiers pour DenseNets (LH, HL, HH)
+        self.fc_dense_lh = nn.Linear(self.dense_dim, num_classes)
+        self.fc_dense_hl = nn.Linear(self.dense_dim, num_classes)
+        self.fc_dense_hh = nn.Linear(self.dense_dim, num_classes)
+
+        # Initialisation des classifiers
+        for fc in [self.fc_resnet, self.fc_dense_lh, self.fc_dense_hl, self.fc_dense_hh]:
+            nn.init.xavier_normal_(fc.weight)
+            nn.init.constant_(fc.bias, 0)
+
+    def forward(self, x):
+        # 1. Décomposition DWT
+        # x: [B, 3, 448, 448] -> LL, LH, HL, HH: [B, 3, 224, 224]
+        assert x.size(-3) == 4, "Input must have 4 subbands."
+
+        # --- Branche 1: Approximation (ResNet) ---
+        # Note: Si BN est figé, resnet_branch est en mode eval() pour les BN
+        f_ll = self.resnet_branch(x[:, :, 0])
+        f_ll = self.gap(f_ll).flatten(1)
+
+        # --- Branches Détails (DenseNet) ---
+        # DenseNet nécessite une activation finale (ReLU) + GAP
+        
+        # LH
+        f_lh = self.dense_branches[0](x[:, :, 1])
+        f_lh = F.relu(f_lh, inplace=True)
+        f_lh = self.gap(f_lh).flatten(1)
+
+        # HL
+        f_hl = self.dense_branches[1](x[:, :, 2])
+        f_hl = F.relu(f_hl, inplace=True)
+        f_hl = self.gap(f_hl).flatten(1)
+
+        # HH
+        f_hh = self.dense_branches[2](x[:, :, 3])
+        f_hh = F.relu(f_hh, inplace=True)
+        f_hh = self.gap(f_hh).flatten(1)
+
+        if self.training:
+            out_ll = self.fc_resnet(self.dropout(f_ll))
+            out_lh = self.fc_dense_lh(self.dropout(f_lh))
+            out_hl = self.fc_dense_hl(self.dropout(f_hl))
+            out_hh = self.fc_dense_hh(self.dropout(f_hh))
+            return [out_ll, out_lh, out_hl, out_hh]
+        
+        else:
+            return F.normalize(torch.cat([f_ll, f_lh, f_hl, f_hh], dim=1), p=2, dim=1)
+       
