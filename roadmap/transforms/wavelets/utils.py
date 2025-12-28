@@ -12,7 +12,7 @@ to_NHWC_axis = [0, 2, 3, 1] # NCHW -> NHWC
 to_NCHW_axis = [0, 3, 1, 2] # NHWC -> NCHW
 
 # DEFAULT_DATA_FORMAT = NCHW_FORMAT
-DEFAULT_DATA_FORMAT = NHWC_FORMAT # should now work faster
+DEFAULT_DATA_FORMAT = NCHW_FORMAT # should now work faster
 
 PAD_MODE = 'constant'
 
@@ -402,24 +402,30 @@ def pos_shift_4d(x, n_shifts, across_cols=False, across_rows=False, data_format=
     # x shape: [N, C, H, W] or [N, H, W, C]
     # x[i] -> x[i + n], so remove the first n elements and pad on the right side
     assert not (across_cols and across_rows) and (across_cols or across_rows)
+    squeeze = False
+    if x.dim() ==3:
+        x = x.unsqueeze(0)
+        squeeze = True
     if data_format == NCHW_FORMAT:
         if across_cols:
             # Inputs have shape NCHW and operation is applied across W axis (cols)
             paddings = convert_paddings([[0, 0], [0, 0], [0, 0], [0, n_shifts]])
-            padded_x = F.pad(x[:, :, :, n_shifts:], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., n_shifts:], paddings, mode=PAD_MODE)
         else: # across_rows:
             # Inputs have shape NCHW and operation is applied across H axis (rows)
             paddings = convert_paddings([[0,0], [0, 0], [0, n_shifts], [0, 0]])
-            padded_x = F.pad(x[:, :, n_shifts:, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., n_shifts:, :], paddings, mode=PAD_MODE)
     else:  # data_format == NHWC_FORMAT:
         if across_cols:
             # Inputs have shape NHWC and operation is applied across W axis (cols)
             paddings = convert_paddings([[0, 0], [0, 0], [0, n_shifts], [0, 0]])
-            padded_x = F.pad(x[:, :, n_shifts:, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., n_shifts:, :], paddings, mode=PAD_MODE)
         else: # across_rows:
             # Inputs have shape NHWC and operation is applied across H axis (rows)
             paddings = convert_paddings([[0, 0], [0, n_shifts], [0, 0], [0, 0]])
-            padded_x = F.pad(x[:, n_shifts:, :, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., n_shifts:, :, :], paddings, mode=PAD_MODE)
+    if squeeze:
+        padded_x = padded_x.squeeze(0)
     return padded_x
 
 
@@ -427,22 +433,28 @@ def neg_shift_4d(x, n_shifts, across_cols=False, across_rows=False, data_format=
     # x shape: [N, C, H, W] or [N, H, W, C]
     # x[i] -> x[i - n], so remove the last n elements and pad on the left side
     assert not(across_cols and across_rows) and (across_cols or across_rows)
+    squeeze = False
+    if x.dim() == 3:
+        x = x.unsqueeze(0)
+        squeeze = True
     if data_format == NCHW_FORMAT:
         if across_cols:
             # Inputs have shape NCHW and operation is applied across W axis (cols)
             paddings = convert_paddings([[0, 0], [0, 0], [0, 0], [n_shifts, 0]])
-            padded_x = F.pad(x[:, :, :, :-n_shifts], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., :-n_shifts], paddings, mode=PAD_MODE)
         else: # across_rows:
             # Inputs have shape NCHW and operation is applied across H axis (rows)
             paddings = convert_paddings([[0, 0], [0, 0], [n_shifts, 0], [0, 0]])
-            padded_x = F.pad(x[:, :, :-n_shifts, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., :-n_shifts, :], paddings, mode=PAD_MODE)
     else:  # data_format == NHWC_FORMAT:
         if across_cols:
             # Inputs have shape NHWC and operation is applied across W axis (cols)
             paddings = convert_paddings([[0, 0], [0, 0], [n_shifts, 0], [0, 0]])
-            padded_x = F.pad(x[:, :, :-n_shifts, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., :-n_shifts, :], paddings, mode=PAD_MODE)
         else: # across_rows:
             # Inputs have shape NHWC and operation is applied across H axis (rows)
             paddings = convert_paddings([[0, 0], [n_shifts, 0], [0, 0], [0, 0]])
-            padded_x = F.pad(x[:, :-n_shifts, :, :], paddings, mode=PAD_MODE)
+            padded_x = F.pad(x[..., :-n_shifts, :, :], paddings, mode=PAD_MODE)
+    if squeeze:
+        padded_x = padded_x.squeeze(0)
     return padded_x
