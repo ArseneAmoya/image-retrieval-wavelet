@@ -92,7 +92,6 @@ class CustomTransform:
     def __call__(self, img):
         # Keep data on CPU during transforms
         l, h = self.dwt(img)  # Let model move data to GPU
-        #print(f"Decomposed into {len(l)} approximation levels and {len(h)} detail levels.")
         if self.coarse_only:
             return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
         else:
