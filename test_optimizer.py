@@ -184,7 +184,7 @@ config_objects = OmegaConf.load("config/optimizer/cub.yaml")  # Dummy load to ge
 
 # 3. Lancement de la Factory
 print("\n🚀 Lancement de la Factory...")
-model_configs = OmegaConf.load('config/model/wcnn.yaml')
+model_configs = OmegaConf.load('config/model/hybrid_wavenet_v2.yaml')
 model = getter.get_model(model_configs)
 factory = OptimizerFactory()
 optimizers, _ = getter.get_optimizer(model, config_objects)

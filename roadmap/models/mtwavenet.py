@@ -630,8 +630,9 @@ class HybridMultiBranchV2(nn.Module):
 
         # Initialisation des classifiers
         for fc in [self.fc_resnet, self.fc_dense_lh, self.fc_dense_hl]:
-            nn.init.xavier_normal_(fc.weight)
-            nn.init.constant_(fc.bias, 0)
+
+            nn.init.xavier_normal_(fc[1].weight)
+            nn.init.constant_(fc[1].bias, 0)
 
     def forward(self, x):
         # 1. Décomposition DWT

@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/hybrid_wavenet.yaml')
+    model_configs = OmegaConf.load('config/model/hybrid_wavenet_v2.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)

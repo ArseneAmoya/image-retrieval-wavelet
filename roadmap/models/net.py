@@ -9,8 +9,7 @@ import roadmap.utils as lib
 from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
-from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch
-
+from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
 
 def get_backbone(name, pretrained=True, **kwargs):
     if name == 'resnet18':
@@ -188,6 +187,13 @@ def get_backbone(name, pretrained=True, **kwargs):
     
         backbone = HybridMultiBranch(pretrained=pretrained, **kwargs)
         out_dim = 2048 + 1024* 3
+        pooling = nn.Identity()
+    elif name == 'hybrid_mtwavenet_v2_ce':
+        lib.LOGGER.info(f"using Hybrid Multi-Branch V2 TWaveNet with Cross Entropy, num classes : {kwargs.get('num_classes', 'not specified')}")
+        # Avoid passing `num_classes` twice if it is already present in kwargs
+    
+        backbone = HybridMultiBranchV2(pretrained=pretrained, **kwargs)
+        out_dim = 2048 + 1024* 2
         pooling = nn.Identity()
        
     else:
