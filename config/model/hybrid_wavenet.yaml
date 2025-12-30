@@ -3,7 +3,7 @@ name: RetrievalNet
 freeze_batch_norm: False
 freeze_pos_embedding: False
 kwargs:
-  backbone_name: hybrid_mtwavenet_v2_ce
+  backbone_name: hybrid_mtwavenet_ce
   embed_dim: 2048
   norm_features: False
   without_fc: True

@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/hybrid_wavenet_v2.yaml')
+    model_configs = OmegaConf.load('config/model/hybrid_wavenet.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)
@@ -68,7 +68,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
     
-    model.eval()
+    model.train()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
