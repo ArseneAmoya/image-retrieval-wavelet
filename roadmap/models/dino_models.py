@@ -25,5 +25,5 @@ class DinoModel_ce(nn.Module):
             # Pass the features through the classification head
             logits = self.classification_head(features['x_norm_clstoken'])
             return logits
-        
-        return F.normalize(logits, dim=-1)
+
+        return F.normalize(features['x_norm_clstoken'], dim=-1)
