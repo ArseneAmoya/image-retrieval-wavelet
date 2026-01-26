@@ -10,6 +10,8 @@ from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
 from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
+from .dino_models import DinoModel_ce
+
 
 def get_backbone(name, pretrained=True, **kwargs):
     if name == 'resnet18':
@@ -195,9 +197,35 @@ def get_backbone(name, pretrained=True, **kwargs):
         backbone = HybridMultiBranchV2(pretrained=pretrained, **kwargs)
         out_dim = 2048 + 1024* 2
         pooling = nn.Identity()
+
+    elif name == 'dino_ce':
+        lib.LOGGER.info(f"using DINO ViT model with Cross Entropy, num classes : {kwargs.get('num_classes', 'not specified')}, feature_dim : {kwargs.get('feature_dim', 768)}, dropout_rate : {kwargs.get('dropout_rate', 0.5)}")
+        num_classes = kwargs.pop('num_classes', None)
+        feature_dim = kwargs.pop('embed_dim', 768)
+        dropout = kwargs.pop('dropout', 0.5)
+
+        if num_classes is None:
+            raise ValueError("DinoModel_ce requires 'num_classes' to be defined in kwargs")
+
+        base_model = None
+        dino_backbone = kwargs.pop('dino_backbone', None)
+        try:
+            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+        except RuntimeError:
+            raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
+
+        backbone = DinoModel_ce(
+            base_model=base_model,
+            feature_dim=feature_dim,
+            num_classes=num_classes,
+            dropout=dropout
+        )
+        out_dim = feature_dim
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")
+    
 
     return (backbone, pooling, out_dim)
 
