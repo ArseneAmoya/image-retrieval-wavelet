@@ -222,6 +222,18 @@ def get_backbone(name, pretrained=True, **kwargs):
         )
         out_dim = feature_dim
         pooling = nn.Identity()
+    elif name == 'dino':
+        lib.LOGGER.info(f"using DINO ViT model, feature_dim : {kwargs.get('embed_dim', 768)}")
+        feature_dim = kwargs.pop('embed_dim', 768)
+        dino_backbone = kwargs.pop('dino_backbone', None)
+        try:
+            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+        except RuntimeError:
+            raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
+
+        backbone = base_model
+        out_dim = feature_dim
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")

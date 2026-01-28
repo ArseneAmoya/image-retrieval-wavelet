@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/dino_default.yaml')
+    model_configs = OmegaConf.load('config/model/dino.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)
@@ -68,7 +68,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
     
-    model.train()
+    model.eval()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
