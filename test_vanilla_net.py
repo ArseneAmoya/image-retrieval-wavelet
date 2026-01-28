@@ -83,8 +83,18 @@ def test_dino_zeroshot():
     
     for split_name, metrics in results.items():
         print(f"\n--- Split: {split_name.upper()} ---")
+        # On filtre pour afficher les métriques les plus parlantes
+        keys_to_show = ["precision_at_1", "map_at_r", "r_precision", "mean_average_precision", "recall_at_1", "recall_at_5", "recall_at_10", "recall_at_50", "recall_at_100", "recall_at_2", "recall_at_4", "recall_at_8"]
+        
+        found = False
         for k, v in metrics.items():
-                 print(f"  {k} : {v:.4f}")
+            if any(x in k for x in keys_to_show):
+                print(f"  {k:<30} : {v:.4f}")
+                found = True
+        
+        if not found: # Si les noms sont différents, on affiche tout
+             for k, v in metrics.items():
+                 print(f"  {k:<30} : {v:.4f}")
 
 if __name__ == "__main__":
     # Fixer l'aléatoire via votre utilitaire pour reproductibilité
