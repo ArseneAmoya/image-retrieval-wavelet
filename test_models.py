@@ -6,7 +6,7 @@ import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/cub.yaml'):
+def test_transforms(transform_cfg_path='config/transform/cub_dwt.yaml'):
     # Charge la config
     transform_cfg = OmegaConf.load(transform_cfg_path)
     print(transform_cfg)

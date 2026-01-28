@@ -83,21 +83,29 @@ WAVELET_DICT = {
     "cdf97": Cdf97Lifting
 }
 class CustomTransform:
-    def __init__(self, decompose_levels=3, basis="haar", coarse_only=True, device='cuda'):
+    def __init__(self, decompose_levels=3, basis="haar", coarse_only=True, ll_only=False, device='cuda'):
         self.dwt = WAVELET_DICT[basis](n_levels=decompose_levels)
         self.coarse_only = coarse_only
+        self.ll_only = ll_only
         self.decompose_levels = decompose_levels
         # Don't store device in transform - let DataLoader handle device placement
     
     def __call__(self, img):
         # Keep data on CPU during transforms
         l, h = self.dwt(img)  # Let model move data to GPU
-        if self.coarse_only:
-            return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
+        if not self.ll_only:
+            if self.coarse_only:
+
+                return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
+            else:
+                subbands = [li.unsqueeze(-3) for li in l] + [hi for hi in h]
+                return torch.cat(subbands, dim=-3)
         else:
-            subbands = [li.unsqueeze(-3) for li in l] + [hi for hi in h]
-            return torch.cat(subbands, dim=-3)
-    
+            if self.coarse_only:
+                return l[self.decompose_levels-1]
+            else:
+                return torch.cat(l, dim=-3)
+        
 # img = torch.randn(2,3, 64, 64)
 # transform = CustomTransform(decompose_levels=3, basis="haar", coarse_only=True)
 # transformed_img = transform(img)

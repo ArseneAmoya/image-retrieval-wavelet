@@ -21,7 +21,7 @@ train:
     decompose_levels: 1
     basis: haar
     coarse_only: True
-    ll_only: False
+    ll_only: True
 
 test:
   Resize:
@@ -36,4 +36,4 @@ test:
     decompose_levels: 1
     basis: haar
     coarse_only: True
-    ll_only: False
+    ll_only: True

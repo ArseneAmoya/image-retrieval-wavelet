@@ -8,7 +8,7 @@ os.path
 
 def test_transforms():
     # Charge la config
-    transform_cfg = OmegaConf.load('config/transform/cub_dwt_cdf97.yaml')
+    transform_cfg = OmegaConf.load('config/transform/cub_dwt.yaml')
     print(transform_cfg)
     # Crée les transformations via le getter
     getter = Getter()
@@ -47,33 +47,33 @@ def test_transforms():
     plt.title('Train Transform approx')
     plt.imshow(normalize_for_display(img_train[:, 0]))
 
-    plt.subplot(253)
-    plt.title('Train Transform details lh')
-    plt.imshow(normalize_for_display(img_train[:, 1]))
+    # plt.subplot(253)
+    # plt.title('Train Transform details lh')
+    # plt.imshow(normalize_for_display(img_train[:, 1]))
 
-    plt.subplot(254)
-    plt.title('Train Transform details hl')
-    plt.imshow(normalize_for_display(img_train[:, 2]))
+    # plt.subplot(254)
+    # plt.title('Train Transform details hl')
+    # plt.imshow(normalize_for_display(img_train[:, 2]))
 
-    plt.subplot(255)
-    plt.title('Train Transform details hh')
-    plt.imshow(normalize_for_display(img_train[:, 3]))
+    # plt.subplot(255)
+    # plt.title('Train Transform details hh')
+    # plt.imshow(normalize_for_display(img_train[:, 3]))
 
     plt.subplot(257)
     plt.title('Test Transform approx')
     plt.imshow(normalize_for_display(img_test[:, 0]))
 
-    plt.subplot(258)
-    plt.title('Test Transform details lh')
-    plt.imshow(normalize_for_display(img_test[:, 1]))
+    # plt.subplot(258)
+    # plt.title('Test Transform details lh')
+    # plt.imshow(normalize_for_display(img_test[:, 1]))
 
-    plt.subplot(259)
-    plt.title('Test Transform details hl')
-    plt.imshow(normalize_for_display(img_test[:, 2]))
+    # plt.subplot(259)
+    # plt.title('Test Transform details hl')
+    # plt.imshow(normalize_for_display(img_test[:, 2]))
 
-    plt.subplot(2,5,10)
-    plt.title('Test Transform details hh')  
-    plt.imshow(normalize_for_display(img_test[:, 3])) 
+    # plt.subplot(2,5,10)
+    # plt.title('Test Transform details hh')  
+    # plt.imshow(normalize_for_display(img_test[:, 3])) 
     
     plt.show()
 
