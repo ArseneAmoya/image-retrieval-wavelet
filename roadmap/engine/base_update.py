@@ -127,6 +127,12 @@ def base_update(
                 opt.step()
             else:
                 scaler.step(opt)
+        for crit, _ in criterion:
+            if hasattr(crit, 'step'):
+                if scaler is None:
+                    crit.step()
+                else:
+                    scaler.step(crit.loss_optimizer)
 
         net.zero_grad()
         _ = [crit.zero_grad() for crit, w in criterion]
@@ -146,8 +152,6 @@ def base_update(
                 for k, v in logs.items():
                     lib.LOGGER.info(f'Loss: {k}: {v} ')
 
-    for crit, _ in criterion:
-        if hasattr(crit, 'step'):
-            crit.step()
+    
 
     return meter.avg

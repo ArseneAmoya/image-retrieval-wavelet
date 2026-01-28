@@ -1,0 +1,12 @@
+# @package _group_
+- name: ArcFaceLoss
+  weight: 1.0
+  kwargs:
+    num_classes: ${dataset.num_classes}
+    embedding_size: ${model.kwargs.embed_dim}
+    margin: 28.6
+    scale: 64
+    optimizer:
+      name: AdamW
+      lr: 0.000001
+      weight_decay: 0.0005

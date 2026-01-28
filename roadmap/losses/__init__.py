@@ -7,6 +7,7 @@ from .cross_entropy_loss import CrossEntropy
 from torch.nn import CrossEntropyLoss
 from .multi_ce_loss import MultiCrossEntropyLoss
 from .multi_embedding_loss import MultiEmbeddingLoss
+from .arcface_loss import ArcFaceLoss
 from .smooth_rank_ap import (
     HeavisideAP,
     SmoothAP,
@@ -26,5 +27,6 @@ __all__ = [
     'SoftmaxCrossEntropy'
     'CrossEntropy',
     'MultiCrossEntropyLoss',
-    'MultiEmbeddingLoss'
+    'MultiEmbeddingLoss',
+    'ArcFaceLoss'
 ]
