@@ -66,17 +66,17 @@ class ResizeSubBands(nn.Module):
     def forward(self, img):
         """
         Args:
-            img (Tuple of tensors): Subbands to be scaled.
+            imgs tensor: Subbands to be scaled.
 
         Returns:
             Tensor: Rescaled subbands.
         """
-        l, h = img
+        size = img.shape
 
-        l = (F2.resize(li, self.size, self.interpolation, self.max_size, self.antialias).unsqueeze(-3) for li in l)
-        subbands = [*l, *(F2.resize(im, self.size, self.interpolation, self.max_size, self.antialias) for im in h)]
-        resized_and_stacked = torch.cat(subbands, dim=-3)
-        return resized_and_stacked
+        # l = (F2.resize(li, self.size, self.interpolation, self.max_size, self.antialias).unsqueeze(-3) for li in l)
+        # subbands = [*l, *(F2.resize(im, self.size, self.interpolation, self.max_size, self.antialias) for im in h)]
+        # resized_and_stacked = torch.cat(subbands, dim=-3)
+        return F2.resize(img, self.size, self.interpolation, self.max_size, self.antialias)
 
 WAVELET_DICT = {
     "haar": HaarLifting,
@@ -89,7 +89,7 @@ class CustomTransform:
         self.ll_only = ll_only
         self.decompose_levels = decompose_levels
         # Don't store device in transform - let DataLoader handle device placement
-    
+        print(f'll_only: {ll_only}, coarse_only: {coarse_only}, decompose_levels: {decompose_levels}, basis: {basis}')
     def __call__(self, img):
         # Keep data on CPU during transforms
         l, h = self.dwt(img)  # Let model move data to GPU
@@ -98,13 +98,18 @@ class CustomTransform:
 
                 return torch.cat([l[self.decompose_levels-1].unsqueeze(-3), h[self.decompose_levels-1]], dim=-3)
             else:
-                subbands = [li.unsqueeze(-3) for li in l] + [hi for hi in h]
+                if self.decompose_levels >1:
+                    raise NotImplementedError("Full subbands not implemented yet for decompose_levels > 1 ")
+                subbands = [li.unsqueeze(-3) for li in l] + [hi for hi in h] # relèvera une erreur car les li n'ont pas la même taille pareil avec les hi
                 return torch.cat(subbands, dim=-3)
         else:
+
             if self.coarse_only:
                 return l[self.decompose_levels-1]
             else:
-                return torch.cat(l, dim=-3)
+                if self.decompose_levels >1:
+                    raise NotImplementedError("Full approx not implemented yet for decompose_levels > 1 ")
+                return torch.cat(l, dim=-3) #retournera une erreur car les l n'ont pas la même taille
         
 # img = torch.randn(2,3, 64, 64)
 # transform = CustomTransform(decompose_levels=3, basis="haar", coarse_only=True)

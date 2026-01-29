@@ -1,0 +1,34 @@
+# @package _group_
+train:
+  ToTensor: {}
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  CustomTransform:
+    decompose_levels: 1
+    basis: haar
+    coarse_only: True
+    ll_only: True
+  Resize:
+    size: 256
+  RandomResizedCrop:
+    scale: [0.16, 1]
+    ratio: [0.75, 1.33]
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  
+test:
+  ToTensor: {}
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  CustomTransform:
+    decompose_levels: 1
+    basis: haar
+    coarse_only: True
+    ll_only: True
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
