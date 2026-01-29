@@ -8,7 +8,7 @@ train:
     decompose_levels: 1
     basis: haar
     coarse_only: True
-    ll_only: True
+    ll_only: False
   Resize:
     size: 256
   RandomResizedCrop:
@@ -27,7 +27,7 @@ test:
     decompose_levels: 1
     basis: haar
     coarse_only: True
-    ll_only: True
+    ll_only: False
   Resize:
     size: 256
   CenterCrop:

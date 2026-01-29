@@ -10,7 +10,7 @@ from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
 from .resnet_ce import ResNetCE
 from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
-from .dino_models import DinoModel_ce
+from .dino_models import DinoModel_ce, Multi_DinoModel
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -234,6 +234,22 @@ def get_backbone(name, pretrained=True, **kwargs):
         backbone = base_model
         out_dim = feature_dim
         pooling = nn.Identity()
+    elif name == 'multi_dino':
+        lib.LOGGER.info(f"using Multi-Branch DINO ViT model, n_branches : {kwargs.get('n_branches', 4)}, feature_dim : {kwargs.get('embed_dim', 768)}")
+        n_branches = kwargs.pop('n_branches', 4)
+        feature_dim = kwargs.pop('embed_dim', 768)
+        dino_backbone = kwargs.pop('dino_backbone', None)
+        try:
+            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+        except RuntimeError:
+            raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
+
+        backbone = Multi_DinoModel(
+            base_model=base_model,
+            n_branches=n_branches
+        )
+        out_dim = feature_dim * n_branches
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")
@@ -301,7 +317,7 @@ class RetrievalNet(nn.Module):
     def forward(self, X):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
-            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50']:
+            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50', 'multi_dino']:
                 return X
             if self.backbone_name in ['mtwavenet50_fusion'] and self.training:
                 X[-1] = self.fc(X[-1])

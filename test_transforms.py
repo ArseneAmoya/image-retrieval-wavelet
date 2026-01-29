@@ -44,41 +44,40 @@ def test_transforms():
         return img
     print(f"Train transform output shape: {img_train.shape}")
     print(f"Test transform output shape: {img_test.shape}")
-#     plt.subplot(252)
-#     plt.title('Train Transform approx')
-#     plt.imshow(normalize_for_display(img_train[:, 0]))
+    plt.subplot(252)
+    plt.title('Train Transform approx')
+    plt.imshow(normalize_for_display(img_train[:, 0]))
 
-#     # plt.subplot(253)
-#     # plt.title('Train Transform details lh')
-#     # plt.imshow(normalize_for_display(img_train[:, 1]))
+    plt.subplot(253)
+    plt.title('Train Transform details lh')
+    plt.imshow(normalize_for_display(img_train[:, 1]))
 
-#     # plt.subplot(254)
-#     # plt.title('Train Transform details hl')
-#     # plt.imshow(normalize_for_display(img_train[:, 2]))
+    plt.subplot(254)
+    plt.title('Train Transform details hl')
+    plt.imshow(normalize_for_display(img_train[:, 2]))
 
-#     # plt.subplot(255)
-#     # plt.title('Train Transform details hh')
-#     # plt.imshow(normalize_for_display(img_train[:, 3]))
+    plt.subplot(255)
+    plt.title('Train Transform details hh')
+    plt.imshow(normalize_for_display(img_train[:, 3]))
 
-#     plt.subplot(257)
-#     plt.title('Test Transform approx')
-#     plt.imshow(normalize_for_display(img_test[:, 0]))
+    plt.subplot(257)
+    plt.title('Test Transform approx')
+    plt.imshow(normalize_for_display(img_test[:, 0]))
 
-#     # plt.subplot(258)
-#     # plt.title('Test Transform details lh')
-#     # plt.imshow(normalize_for_display(img_test[:, 1]))
+    plt.subplot(258)
+    plt.title('Test Transform details lh')
+    plt.imshow(normalize_for_display(img_test[:, 1]))
 
-#     # plt.subplot(259)
-#     # plt.title('Test Transform details hl')
-#     # plt.imshow(normalize_for_display(img_test[:, 2]))
+    plt.subplot(259)
+    plt.title('Test Transform details hl')
+    plt.imshow(normalize_for_display(img_test[:, 2]))
 
-#     # plt.subplot(2,5,10)
-#     # plt.title('Test Transform details hh')  
-#     # plt.imshow(normalize_for_display(img_test[:, 3])) 
+    plt.subplot(2,5,10)
+    plt.title('Test Transform details hh')  
+    plt.imshow(normalize_for_display(img_test[:, 3])) 
     
-#     plt.show()
+    plt.show()
 
-#     # Affiche les shapes
 
 
 if __name__ == "__main__":
