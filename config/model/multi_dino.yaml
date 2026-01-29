@@ -10,4 +10,4 @@ kwargs:
   without_fc: True
   with_autocast: True
   pretrained: True
-  num_branches: 4
+  branches: [ 1, 2, 3]

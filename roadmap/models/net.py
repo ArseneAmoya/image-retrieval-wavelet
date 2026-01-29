@@ -236,7 +236,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'multi_dino':
         lib.LOGGER.info(f"using Multi-Branch DINO ViT model, n_branches : {kwargs.get('n_branches', 4)}, feature_dim : {kwargs.get('embed_dim', 768)}")
-        n_branches = kwargs.pop('n_branches', 4)
+        branches = kwargs.pop('branches', [0, 1, 2, 3])
         feature_dim = kwargs.pop('embed_dim', 768)
         dino_backbone = kwargs.pop('dino_backbone', None)
         try:
@@ -246,9 +246,9 @@ def get_backbone(name, pretrained=True, **kwargs):
 
         backbone = Multi_DinoModel(
             base_model=base_model,
-            n_branches=n_branches
+            branches=branches
         )
-        out_dim = feature_dim * n_branches
+        out_dim = feature_dim * len(branches)
         pooling = nn.Identity()
        
     else:

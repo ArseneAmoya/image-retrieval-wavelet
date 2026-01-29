@@ -30,19 +30,20 @@ class DinoModel_ce(nn.Module):
         return F.normalize(features['x_norm_clstoken'], dim=-1)
     
 class Multi_DinoModel(nn.Module):
-    def __init__(self, base_model, n_branches= 4):
+    def __init__(self, base_model, branches= [0,1,2,3]):
         super(Multi_DinoModel, self).__init__()
         self.base_model = base_model
-        self.n_branches = n_branches
-        self.branches = nn.ModuleList([copy.deepcopy(self.base_model) for _ in range(n_branches)])        
+        self.branche_selected = branches # one can choose to discard some branches by specifying indices to keep
+        self.n_branches = len(branches)
+        self.branches = nn.ModuleList([copy.deepcopy(self.base_model) for _ in range(self.n_branches)])        
         
     def forward(self, x):
         # Extract features using the base model
         b, c, s, h, w = x.shape  # x shape: [B, 3, 4, H, W]
-        assert s == self.n_branches, f"Expected {self.n_branches} branches, but got {s}"
+        assert s >= self.n_branches, f"Expected at least {self.n_branches} branches, but got {s}"
         outputs = []
-        for i in range(self.n_branches):
-            xi = x[:, :, i, :, :]  # Shape: [B, 3, H, W]
+        for i, b in enumerate(self.branche_selected):
+            xi = x[:, :, b, :, :]  # Shape: [B, 3, H, W]
             features = self.branches[i].forward_features(xi)
             outputs.append(F.normalize(features['x_norm_clstoken'], dim=-1))
         return outputs
