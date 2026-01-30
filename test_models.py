@@ -68,7 +68,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
     
-    model.eval()
+    model.train()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
@@ -76,8 +76,10 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
         print("Output is a list of embeddings from each branch.")
         for i, out in enumerate(output):
             print(f"Branch {i} output shape:", out.shape)  # Doit être [batch_size, embed_dim]
+            print(f"Norm of features from branch {i}:", out.norm(dim=-1))
     else:
         print("Output shape:", output.shape)  # Doit être [batch_size, embed_dim]
+        print("Norm of features:", output.norm(dim=-1))
     
 
 if __name__ == "__main__":

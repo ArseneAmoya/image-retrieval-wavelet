@@ -44,6 +44,11 @@ class Multi_DinoModel(nn.Module):
         outputs = []
         for i, b in enumerate(self.branche_selected):
             xi = x[:, :, b, :, :]  # Shape: [B, 3, H, W]
-            features = self.branches[i].forward_features(xi)
-            outputs.append(F.normalize(features['x_norm_clstoken'], dim=-1))
+            features = self.branches[i].forward_features(xi)['x_norm_clstoken']
+            if self.training:
+                features = F.normalize(features, dim=-1)
+            outputs.append(features)
+        if not self.training:
+            out = F.normalize(torch.cat(outputs, dim=-1), dim=-1)
+            return out
         return outputs
