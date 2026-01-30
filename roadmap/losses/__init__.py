@@ -13,6 +13,7 @@ from .smooth_rank_ap import (
     SmoothAP,
     SupAP,
 )
+from .multi_loss import MultiLoss
 
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     'CrossEntropy',
     'MultiCrossEntropyLoss',
     'MultiEmbeddingLoss',
-    'ArcFaceLoss'
+    'ArcFaceLoss',
+    'MultiLoss',
 ]
