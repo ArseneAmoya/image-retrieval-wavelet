@@ -85,7 +85,11 @@ class MultiLoss(nn.Module):
                 crit_weight = self.per_loss_weights[i][j]
                 
                 # Calcul de la Loss individuelle
-                if hasattr(criterion, 'takes_embeddings') and criterion.takes_embeddings:
+                # Some losses (e.g. FeatureDistillationLoss) require access to all branch embeddings.
+                if hasattr(criterion, 'requires_all_branches') and getattr(criterion, 'requires_all_branches'):
+                    # Provide the full list of embeddings so the loss can access teacher/student branches
+                    loss = criterion(embeddings, labels.view(-1))
+                elif hasattr(criterion, 'takes_embeddings') and criterion.takes_embeddings:
                     loss = criterion(branch_emb, labels.view(-1))
                 else:
                     # Cas métrique basée sur matrice de similarité (ex: FastAP parfois)

@@ -14,7 +14,7 @@ except ImportError:
 def test_config_loading():
     # --- 1. CONFIGURATION ---
     # Le fichier que vous voulez tester
-    yaml_rel_path = "config/loss/multi_roadmap.yaml" 
+    yaml_rel_path = "config/loss/multi_roadmap_distillated.yaml" 
     
     print(f"\n{'='*20} TEST CONFIG: {yaml_rel_path} {'='*20}")
     

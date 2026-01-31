@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class FeatureDistillationLoss(nn.Module):
+    # This loss needs access to the full list of branch embeddings (teacher + student branches)
+    requires_all_branches = True
+
     def __init__(self, teacher_idx=0, student_idx=1, **kwargs):
         super().__init__()
         self.teacher_idx = teacher_idx
