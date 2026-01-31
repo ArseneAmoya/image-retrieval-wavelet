@@ -4,7 +4,8 @@ kwargs:
   data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\Stanford_Online_Products\Stanford_Online_Products
 
 sampler:
-  name: RandomSampler
+  name: MPerClassSampler
   kwargs:
     batch_size: 128
+    samples_per_class: 4
 num_classes: 11318
