@@ -1,56 +1,57 @@
-name: MultiLoss
-# On garde des poids globaux équilibrés ou on favorise un peu LL
-weights: [1.0, 1.0, 1.0, 1.0] 
+# @package _group_
+- name: MultiLoss
+  # On garde des poids globaux équilibrés ou on favorise un peu LL
+  weights: [1.0, 1.0, 1.0, 1.0] 
 
-criterion:
-  # --- BRANCHE 0 (LL / Approximation) : Le TEACHER ---
-  - 
-    - name: SupAP
-      weight: 1.0
-      kwargs:
-        tau: 0.01
-        rho: 100
-    - name: CalibrationLoss
-      weight: 0.5
-      kwargs:
-        pos_margin: 0.9
-        neg_margin: 0.6
+  criterion:
+    # --- BRANCHE 0 (LL / Approximation) : Le TEACHER ---
+    - 
+      - name: SupAP
+        weight: 1.0
+        kwargs:
+          tau: 0.01
+          rho: 100
+      - name: CalibrationLoss
+        weight: 0.5
+        kwargs:
+          pos_margin: 0.9
+          neg_margin: 0.6
 
-  # --- BRANCHE 1 (HF1 / Détails) : STUDENT ---
-  - 
-    - name: SupAP
-      weight: 0.1  # Faible : Apprend un peu tout seul
-      kwargs:
-        tau: 0.01
-        rho: 100
-    - name: FeatureDistillationLoss
-      weight: 2.0  # Fort : Doit surtout écouter le Teacher (LL) !
-      kwargs:
-        teacher_idx: 0  # Regarde la branche 0 (LL)
-        student_idx: 1  # Je suis la branche 1
+    # --- BRANCHE 1 (HF1 / Détails) : STUDENT ---
+    - 
+      - name: SupAP
+        weight: 0.1  # Faible : Apprend un peu tout seul
+        kwargs:
+          tau: 0.01
+          rho: 100
+      - name: FeatureDistillationLoss
+        weight: 2.0  # Fort : Doit surtout écouter le Teacher (LL) !
+        kwargs:
+          teacher_idx: 0  # Regarde la branche 0 (LL)
+          student_idx: 1  # Je suis la branche 1
 
-  # --- BRANCHE 2 (HF2) : STUDENT ---
-  - 
-    - name: SupAP
-      weight: 0.1
-      kwargs:
-        tau: 0.01
-        rho: 100
-    - name: FeatureDistillationLoss
-      weight: 2.0
-      kwargs:
-        teacher_idx: 0
-        student_idx: 2
+    # --- BRANCHE 2 (HF2) : STUDENT ---
+    - 
+      - name: SupAP
+        weight: 0.1
+        kwargs:
+          tau: 0.01
+          rho: 100
+      - name: FeatureDistillationLoss
+        weight: 2.0
+        kwargs:
+          teacher_idx: 0
+          student_idx: 2
 
-  # --- BRANCHE 3 (HF3) : STUDENT ---
-  - 
-    - name: SupAP
-      weight: 0.1
-      kwargs:
-        tau: 0.01
-        rho: 100
-    - name: FeatureDistillationLoss
-      weight: 2.0
-      kwargs:
-        teacher_idx: 0
-        student_idx: 3
+    # --- BRANCHE 3 (HF3) : STUDENT ---
+    - 
+      - name: SupAP
+        weight: 0.1
+        kwargs:
+          tau: 0.01
+          rho: 100
+      - name: FeatureDistillationLoss
+        weight: 2.0
+        kwargs:
+          teacher_idx: 0
+          student_idx: 3
