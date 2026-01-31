@@ -19,7 +19,7 @@ from .smooth_rank_ap import (
     SmoothAP,
     SupAP,
 )
-
+from .distillation_loss import FeatureDistillationLoss
 class MultiLoss(nn.Module):
     takes_embeddings = True
 
