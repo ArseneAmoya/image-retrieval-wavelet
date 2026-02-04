@@ -1,0 +1,17 @@
+# @package _group_
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: wcnn_attention
+  embed_dim: 512
+  norm_features: False
+  without_fc: False
+  with_autocast: True
+  attention: True
+  decom_level: ${transform.train.CustomTransform.decompose_levels}
+  wave: haar
+  feature_size: 512
+  attention_type: cbam
+  coarse_only: False
+  num_classes: 120

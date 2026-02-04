@@ -1,0 +1,22 @@
+# @package _group_
+train:
+  RandomResizedCrop:
+    scale: [0.16, 1]
+    ratio: [0.75, 1.33]
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+  Normalize:
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  ToTensor: {}
+  Normalize:
+    mean: [0.4914, 0.4822, 0.4465]
+    std: [0.2023, 0.1994, 0.2010]

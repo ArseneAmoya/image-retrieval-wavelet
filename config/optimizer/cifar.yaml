@@ -1,0 +1,35 @@
+- name: AdamW
+  params: backbone
+  kwargs:
+    lr: 0.0001
+    weight_decay: 0.00005
+    betas: [0.9, 0.95]
+  scheduler_on_step:
+    name: OneCycleLR
+    kwargs:
+      max_lr: 0.001
+      pct_start: 0.3
+      div_factor: 10
+      final_div_factor: 1000
+      epochs: 100
+      steps_per_epoch: ${training.steps_per_epoch}
+  scheduler_on_epoch:
+  scheduler_on_val:
+
+- name: AdamW
+  params: fc
+  kwargs:
+    lr: 0.0003
+    weight_decay: 0.0001
+    betas: [0.9, 0.95]
+  scheduler_on_step:
+    name: OneCycleLR
+    kwargs:
+      max_lr: 0.003
+      pct_start: 0.3
+      div_factor: 10
+      final_div_factor: 1000
+      epochs: 100
+      steps_per_epoch: ${training.steps_per_epoch}
+  scheduler_on_epoch:
+  scheduler_on_val:
