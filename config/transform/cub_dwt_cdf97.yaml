@@ -1,0 +1,36 @@
+train:
+  RandomResizedCrop:
+    size: 448             # Haute résolution (Sub-bands = 256px)
+    scale: [0.16, 1.0]     # Scale corrigé (Oiseau visible)
+    ratio: [0.75, 1.33]     # Carré strict
+  ColorJitter:
+    brightness: 0.25
+    contrast: 0.25
+    saturation: 0.25
+    hue: 0.
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  # LE MANQUANT : Découpe l'image en 4 pour le réseau
+  CustomTransform:
+    decompose_levels: 1
+    basis: cdf97
+    coarse_only: False
+
+test:
+  Resize:
+    size: 512
+  CenterCrop:             # CenterCrop pour une évaluation stable
+    size: 448
+  ToTensor: {}
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  # LE MANQUANT EN TEST AUSSI
+  CustomTransform:
+    decompose_levels: 1
+    basis: cdf97
+    coarse_only: False

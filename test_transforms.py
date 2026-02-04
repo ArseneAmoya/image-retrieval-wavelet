@@ -5,9 +5,10 @@ from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 import os
 os.path
+
 def test_transforms():
     # Charge la config
-    transform_cfg = OmegaConf.load('config/transform/textured_dwt.yaml')
+    transform_cfg = OmegaConf.load('config/transform/cub_dwt_dec_resize.yaml')
     print(transform_cfg)
     # Crée les transformations via le getter
     getter = Getter()
@@ -15,12 +16,14 @@ def test_transforms():
     test_transform = getter.get_transform(transform_cfg.test)
 
     # Charge une image test
-    img_path = "../../data/car.jpg"#"../../data/stanforddogs/Images/n02086646-Blenheim_spaniel/n02086646_45.jpg"  # Remplace avec ton chemin
+    img_path = r"C:\These\Incremental Learning\Code Icarl\icarl-pytorch\data\CUB_200_2011\images\001.Black_footed_Albatross\Black_Footed_Albatross_0001_796111.jpg"#"../../data/car.jpg"#"../../data/stanforddogs/Images/n02086646-Blenheim_spaniel/n02086646_45.jpg"  # Remplace avec ton chemin
     img = Image.open(img_path).convert('RGB')
     
     # Applique les transformations
     img_train = train_transform(img)
     img_test = test_transform(img)
+
+    print(img_train[0])  # Affiche le type et la shape du tenseur transformé
 
     # Affiche les résultats
     plt.figure(figsize=(12, 4))
@@ -39,7 +42,8 @@ def test_transforms():
             max_abs = max(abs(img.min()), abs(img.max()))
             img = (img + max_abs) / (2 * max_abs + 1e-8)
         return img
-
+    print(f"Train transform output shape: {img_train.shape}")
+    print(f"Test transform output shape: {img_test.shape}")
     plt.subplot(252)
     plt.title('Train Transform approx')
     plt.imshow(normalize_for_display(img_train[:, 0]))
@@ -74,9 +78,7 @@ def test_transforms():
     
     plt.show()
 
-    # Affiche les shapes
-    print(f"Train transform output shape: {img_train.shape}")
-    print(f"Test transform output shape: {img_test.shape}")
+
 
 if __name__ == "__main__":
     test_transforms()

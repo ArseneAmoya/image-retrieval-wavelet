@@ -2,4 +2,8 @@
 - name:  CrossEntropy
   weight: 1.0
   kwargs:
+<<<<<<< HEAD
     label_smoothing: 0.0
+=======
+    label_smoothing: 0.1
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8

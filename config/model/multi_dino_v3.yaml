@@ -1,0 +1,15 @@
+# @package _group_
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: multi_dino_v3
+  dino_backbone: 'dinov3_convnext_tiny'
+  weights: 'c:\These\data\models\dinov3_convnext_tiny_pretrain_lvd1689m-21b726bb.pth'
+  dino_version: 'dinov3'
+  embed_dim: 384
+  norm_features: False
+  without_fc: True
+  with_autocast: True
+  pretrained: True
+  branches: [1, 2]

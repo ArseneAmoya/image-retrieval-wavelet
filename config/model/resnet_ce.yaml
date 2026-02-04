@@ -1,6 +1,10 @@
 # @package _group_
 name: RetrievalNet
+<<<<<<< HEAD
 freeze_batch_norm: False
+=======
+freeze_batch_norm: True
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8
 freeze_pos_embedding: False
 kwargs:
   backbone_name: resnet18_ce
@@ -9,4 +13,8 @@ kwargs:
   without_fc: True
   with_autocast: True
   num_classes: ${dataset.num_classes}
+<<<<<<< HEAD
   pretrained: False
+=======
+  pretrained: True
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8

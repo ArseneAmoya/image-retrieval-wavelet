@@ -2,12 +2,20 @@
 - name: Adam
   params:
   kwargs:
+<<<<<<< HEAD
     lr: 0.0001
+=======
+    lr: 0.0005
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8
     weight_decay: 0.0004
   scheduler_on_epoch:
      name: MultiStepLR
      kwargs:
+<<<<<<< HEAD
         milestones: [10, 30, 70]
+=======
+        milestones: [10, 30, 70, 110, 160]
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8
         gamma: 0.3
         last_epoch: -1
   scheduler_on_step:

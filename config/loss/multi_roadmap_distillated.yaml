@@ -1,0 +1,70 @@
+# @package _group_
+- name: MultiLoss
+  weight: 1.0
+  kwargs:
+    # Poids globaux des branches [LL, LH, HL, HH]
+    # On met 1.0 partout car on gère l'importance via les poids internes des losses
+    weights: [1.0, 1.0, 1.0, 1.0]
+    
+    criterion:
+      # --- BRANCHE 0 (LL / Approximation) : LE TEACHER ---
+      # Structure : Liste contenant la liste des losses pour la branche 0
+      - - name: CalibrationLoss
+          weight: 1
+          kwargs:
+            pos_margin: 0.9
+            neg_margin: 0.6
+          
+        - name: SupAP
+          weight: 1.0
+          kwargs:
+            tau: 0.01
+            rho: 100.0
+            offset: 1.44
+            delta: 0.05
+
+      # --- BRANCHE 1 (LH / Détails) : STUDENT ---
+      # Elle apprend un peu par elle-même (SupAP 0.1) et imite le prof (Distillation 2.0)
+      - - name: SupAP
+          weight: 1
+          kwargs:
+            tau: 0.01
+            rho: 100.0
+            offset: 1.44
+            delta: 0.05
+
+        - name: FeatureDistillationLoss
+          weight: 2.0
+          kwargs:
+            teacher_idx: 0  # L'indice de la branche LL
+            student_idx: 1  # Mon indice à moi
+
+      # --- BRANCHE 2 (HL / Détails) : STUDENT ---
+      - - name: SupAP
+          weight: 1
+          kwargs:
+            tau: 0.01
+            rho: 100.0
+            offset: 1.44
+            delta: 0.05
+
+        - name: FeatureDistillationLoss
+          weight: 2.0
+          kwargs:
+            teacher_idx: 0
+            student_idx: 2
+
+      # --- BRANCHE 3 (HH / Détails) : STUDENT ---
+      - - name: SupAP
+          weight: 1
+          kwargs:
+            tau: 0.01
+            rho: 100.0
+            offset: 1.44
+            delta: 0.05
+
+        - name: FeatureDistillationLoss
+          weight: 2.0
+          kwargs:
+            teacher_idx: 0
+            student_idx: 3

@@ -14,5 +14,10 @@ kwargs:
   feature_size: 512
   attention_type: cbam
   coarse_only: True
+<<<<<<< HEAD
   num_classes: 64
   pretrained: False
+=======
+  num_classes: ${dataset.num_classes}
+  pretrained: True
+>>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8
