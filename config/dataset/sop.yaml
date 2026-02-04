@@ -1,7 +1,7 @@
 # @package _group_
 name: SOPDataset
 kwargs:
-  data_dir: c:\Users\amoya\OneDrive - SUPCOM\Documents\These\data\Stanford_Online_Products\Stanford_Online_Products
+  data_dir: c:\These\data\Stanford_Online_Products\Stanford_Online_Products
 
 sampler:
   name: MPerClassSampler

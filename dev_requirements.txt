@@ -10,3 +10,4 @@ flake8
 pylint
 isort
 jedi==0.17.1
+termcolor==1.1.0

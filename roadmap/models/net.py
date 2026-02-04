@@ -240,7 +240,34 @@ def get_backbone(name, pretrained=True, **kwargs):
         feature_dim = kwargs.pop('embed_dim', 768)
         dino_backbone = kwargs.pop('dino_backbone', None)
         try:
-            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone,             base_model = torch.hub.load('../dinov3', dino_backbone, source='local', weights='c:\These\data\models\dinov3_vits16_pretrain_lvd1689m-08c60483.pth')
+)
+        except RuntimeError:
+            raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
+
+        backbone = Multi_DinoModel(
+            base_model=base_model,
+            branches=branches
+        )
+        out_dim = feature_dim * len(branches)
+        pooling = nn.Identity()
+    
+    elif name == "multi_dino_v3":
+        lib.LOGGER.info(f"using DINOv3 ViT model, feature_dim : {kwargs.get('embed_dim', 768)}")
+        feature_dim = kwargs.pop('embed_dim', 768)
+        dino_backbone = kwargs.pop('dino_backbone', None)
+        branches = kwargs.pop('branches', [0, 1, 2, 3])
+        weights_path = kwargs.pop('weights', None)
+        try:
+            base_model = torch.hub.load('../dinov3', dino_backbone, source='local', weights=weights_path)
+
+        except ModuleNotFoundError as e:
+            missing = e.name if hasattr(e, 'name') else str(e)
+            raise ModuleNotFoundError(
+                f"Missing dependency when importing DINOv3 hub: {missing}. "
+                "Install it in your environment (e.g. `pip install termcolor`) and restart the Python session, "
+                "or add 'termcolor' to your project's requirements.txt."
+            ) from e
         except RuntimeError:
             raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
 
@@ -317,7 +344,7 @@ class RetrievalNet(nn.Module):
     def forward(self, X):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
-            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50', 'multi_dino']:
+            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50', 'multi_dino', "multi_dino_v3"]:
                 return X
             if self.backbone_name in ['mtwavenet50_fusion'] and self.training:
                 X[-1] = self.fc(X[-1])

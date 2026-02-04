@@ -11,3 +11,4 @@ pytorch-metric-learning==0.9.99
 timm==0.4.12
 hydra-core==1.0.6
 hydra_colorlog==1.0.1
+termcolor==1.1.0
