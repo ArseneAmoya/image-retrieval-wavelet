@@ -8,7 +8,7 @@ os.path
 
 def test_transforms():
     # Charge la config
-    transform_cfg = OmegaConf.load('config/transform/cub_dwt_dec_resize.yaml')
+    transform_cfg = OmegaConf.load('config/transform/cifar_swt.yaml')
     print(transform_cfg)
     # Crée les transformations via le getter
     getter = Getter()
@@ -16,7 +16,7 @@ def test_transforms():
     test_transform = getter.get_transform(transform_cfg.test)
 
     # Charge une image test
-    img_path = r"C:\These\Incremental Learning\Code Icarl\icarl-pytorch\data\CUB_200_2011\images\001.Black_footed_Albatross\Black_Footed_Albatross_0001_796111.jpg"#"../../data/car.jpg"#"../../data/stanforddogs/Images/n02086646-Blenheim_spaniel/n02086646_45.jpg"  # Remplace avec ton chemin
+    img_path = r"c:\These\data\stanforddogs\Images\n02085620-Chihuahua\n02085620_1271.jpg"#"../../data/car.jpg"#"../../data/stanforddogs/Images/n02086646-Blenheim_spaniel/n02086646_45.jpg"  # Remplace avec ton chemin
     img = Image.open(img_path).convert('RGB')
     
     # Applique les transformations

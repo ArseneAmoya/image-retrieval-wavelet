@@ -8,12 +8,12 @@ from roadmap.utils import get_set_random_state
 # --- CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Chemins relatifs basés sur votre structure de fichiers
-MODEL_CONFIG_PATH = 'config/model/dino.yaml' 
-DATASET_CONFIG_PATH = 'config/dataset/cub.yaml'
-TRANSFORM_CONFIG_PATH = 'config/transform/cub.yaml'
+MODEL_CONFIG_PATH = 'config/model/multi_dino_v3.yaml' 
+DATASET_CONFIG_PATH = 'config/dataset/cifar100.yaml'
+TRANSFORM_CONFIG_PATH = 'config/transform/cifar_swt.yaml'
 
 def test_dino_zeroshot():
-    print(f"\n=== Lancement de l'évaluation Zero-Shot DINOv3 sur CUB ===")
+    print(f"\n=== Lancement de l'évaluation Zero-Shot DINOv3 sur CIFAR100 ===")
     print(f"Device: {DEVICE}")
     
     # 1. Initialisation du Getter

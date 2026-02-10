@@ -197,6 +197,15 @@ class Getter:
             }
             lib.LOGGER.info(dataset)
             return dataset
+        elif (config.name == "Cifar100RetrievalDataset") and (mode == "test"):
+            dataset = {
+                # La clé 'test' contient le query set (images requêtes)
+                "test": getattr(datasets, config.name)(transform=transform, mode="query", **config.kwargs),
+                # La clé 'gallery' contient le gallery set (images base de recherche)
+                "gallery": getattr(datasets, config.name)(transform=transform, mode="gallery", **config.kwargs),
+            }
+            lib.LOGGER.info(dataset)
+            return dataset
         elif (config.name == "DyMLDataset") and mode.startswith("test"):
             dataset = {
                 "test": getattr(datasets, config.name)(transform=transform, mode="test_query_fine", **config.kwargs),

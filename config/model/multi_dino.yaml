@@ -5,10 +5,10 @@ freeze_pos_embedding: False
 kwargs:
   backbone_name: multi_dino
   dino_backbone: 'dinov2_vits14'
-  dino_version: 'dinov2"
+  dino_version: 'dinov2'
   embed_dim: 384
   norm_features: False
   without_fc: True
   with_autocast: True
   pretrained: True
-  branches: [ 1, 2, 3]
+  branches: [1, 2, 3]

@@ -1,1 +1,1 @@
-from .custom_transforms import CustomTransform, ResizeSubBands
+from .custom_transforms import CustomTransform, ResizeSubBands, SWTTransform

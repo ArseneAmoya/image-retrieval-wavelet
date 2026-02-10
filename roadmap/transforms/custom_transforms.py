@@ -5,6 +5,11 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as F2
 from collections.abc import Sequence
 
+import numpy as np
+import pywt
+import torch
+from PIL import Image
+
 from .wavelets import fast_haar_2d_op, fast_cdf97_2d_op
 
 class Cdf97Lifting(nn.Module):
@@ -83,7 +88,7 @@ WAVELET_DICT = {
     "cdf97": Cdf97Lifting
 }
 class CustomTransform:
-    def __init__(self, decompose_levels=3, basis="haar", coarse_only=True, ll_only=False, device='cuda'):
+    def __init__(self, decompose_levels=3, basis="haar", coarse_only=True, ll_only=False, device='cuda', dwt_mode='dwt'):
         self.dwt = WAVELET_DICT[basis](n_levels=decompose_levels)
         self.coarse_only = coarse_only
         self.ll_only = ll_only
@@ -115,3 +120,53 @@ class CustomTransform:
 # transform = CustomTransform(decompose_levels=3, basis="haar", coarse_only=True)
 # transformed_img = transform(img)
 # print(transformed_img.shape)  # Should print the shape of the transformed image
+
+
+class SWTTransform(object):
+    """
+    Applique une SWT et retourne un tenseur structuré (C, S, H, W).
+    Le DataLoader ajoutera la dimension B -> (B, C, S, H, W).
+    """
+    def __init__(self, level=1, wavelet='bior1.3'):
+        self.level = level
+        self.wavelet = wavelet
+
+    def fix_size(self, image):
+        """Redimensionne l'image pour être un multiple de 2^level."""
+        w, h = image.size
+        factor = 2 ** self.level
+        new_w = int(np.ceil(w / factor) * factor)
+        new_h = int(np.ceil(h / factor) * factor)
+        if new_w != w or new_h != h:
+            image = image.resize((new_w, new_h), resample=Image.BICUBIC)
+        return image
+
+    def __call__(self, img):
+        # 1. Ajustement taille & Conversion
+        img = self.fix_size(img)
+        img_np = np.array(img).astype(np.float32) / 255.0
+        
+        channels_output = []
+        
+        # 2. Boucle sur les canaux (R, G, B)
+        for c in range(3):
+            channel_pixels = img_np[:, :, c]
+            
+            # Application SWT
+            # coeffs = [(cA, (cH, cV, cD))] pour level=1
+            coeffs = pywt.swt2(channel_pixels, self.wavelet, level=self.level)
+            cA, (cH, cV, cD) = coeffs[0] # On prend le niveau 1
+            
+            # Empilement des 4 sous-bandes pour ce canal -> Shape (4, H, W)
+            # Ordre: Approximation, Horizontal, Vertical, Diagonal
+            subbands = np.stack([cA, cH, cV, cD])
+            channels_output.append(subbands)
+
+        # 3. Empilement des 3 canaux -> Shape (3, 4, H, W)
+        output = np.stack(channels_output)
+        
+        # Conversion finale en Tensor
+        return torch.from_numpy(output).float()
+
+    def __repr__(self):
+        return f"SWTTransform(shape='C,S,H,W', wavelet={self.wavelet}, level={self.level})"

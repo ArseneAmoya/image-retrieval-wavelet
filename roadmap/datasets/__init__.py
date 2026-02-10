@@ -7,7 +7,7 @@ from .sop import SOPDataset
 from .cifar import CifarDataset
 from .stanforddog12 import StanfordDog12Dataset
 from .textured_data import TexturedDataset
-
+from .cifar100_v2 import Cifar100RetrievalDataset
 
 __all__ = [
     'Cub200Dataset',
@@ -19,4 +19,5 @@ __all__ = [
     'CifarDataset',
     'StanfordDog12Dataset',
     'TexturedDataset',
+    'Cifar100RetrievalDataset'
 ]
