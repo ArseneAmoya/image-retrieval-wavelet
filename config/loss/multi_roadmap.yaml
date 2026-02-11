@@ -2,7 +2,7 @@
 - name: MultiLoss
   weight: 1.0
   kwargs:
-    weights: [1.0, 0.1, 0.1, 0.1]
+    weights: [1.0, 1.0, 1.0, 1.0]
     criterion:
       - - name: CalibrationLoss
           weight: 1.0
