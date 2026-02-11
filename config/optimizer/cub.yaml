@@ -1,5 +1,4 @@
 # @package _group_
-<<<<<<< HEAD
 - name: Adam
   params:
   kwargs:
@@ -13,48 +12,3 @@
         last_epoch: -1
   scheduler_on_step:
   scheduler_on_val:
-=======
-- name: SGD
-  params: null
-  
-  # Configuration for the REST of the network (Backbone ImageNet)
-  kwargs:
-    lr: 0.02
-    momentum: 0.9
-    weight_decay: 0.0005
-    nesterov: False
-    
-  bias_kwargs:
-    weight_decay: 0.0005
-
-  # --- NEW: Specific Modules ---
-  modules:
-    - name: "backbone.branches.0.0"
-      kwargs:
-        lr: 0.2
-        momentum: 0.9
-        weight_decay: 0.0005
-    - name: "backbone.branches.1.0"
-      kwargs:
-        lr: 0.2
-        momentum: 0.9
-        weight_decay: 0.0005
-    - name: "backbone.branches.2.0"
-      kwargs:
-        lr: 0.2
-        momentum: 0.9
-        weight_decay: 0.0005
-    - name: "backbone.branches.3.0"
-      kwargs:
-        lr: 0.2
-        momentum: 0.9
-        weight_decay: 0.0005
-  # Schedulers (Unchanged)
-  scheduler_on_step:
-      name: warmcos
-      kwargs:
-          total_steps: 2820      # 60 époques * 47 batches
-          warmup_steps: 100
-  scheduler_on_epoch: null
-  scheduler_on_val: null
->>>>>>> e27955aa3f83cca34ab99b45ce2239a3e8786fd8

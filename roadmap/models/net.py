@@ -251,6 +251,28 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = feature_dim * len(branches)
         pooling = nn.Identity()
     
+    elif name == 'dino_v3':
+        lib.LOGGER.info(f"using DINOv3 ViT model, feature_dim : {kwargs.get('embed_dim', 768)}")
+        feature_dim = kwargs.pop('embed_dim', 768)
+        dino_backbone = kwargs.pop('dino_backbone', None)
+        weights_path = kwargs.pop('weights', None)
+        try:
+            base_model = torch.hub.load('facebookresearch/dinov3', dino_backbone, source='github', weights=weights_path)
+
+        except ModuleNotFoundError as e:
+            missing = e.name if hasattr(e, 'name') else str(e)
+            raise ModuleNotFoundError(
+                f"Missing dependency when importing DINOv3 hub: {missing}. "
+                "Install it in your environment (e.g. `pip install termcolor`) and restart the Python session, "
+                "or add 'termcolor' to your project's requirements.txt."
+            ) from e
+        except RuntimeError:
+            raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
+
+        backbone = base_model
+        out_dim = feature_dim
+        pooling = nn.Identity()
+    
     elif name == "multi_dino_v3":
         lib.LOGGER.info(f"using DINOv3 ViT model, feature_dim : {kwargs.get('embed_dim', 768)}")
         feature_dim = kwargs.pop('embed_dim', 768)
