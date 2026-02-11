@@ -1,16 +1,16 @@
 # @package _group_
 train:
   Resize:
-    size: 32
+    size: 224
   RandomHorizontalFlip:
     p: 0.5
   SWTTransform:
-    level: 3
+    level: 1
     wavelet: 'haar'
 
 test:
   Resize:
-    size: 32
+    size: 224
   SWTTransform:
-    level: 3
+    level: 1
     wavelet: 'haar'

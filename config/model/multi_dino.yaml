@@ -11,4 +11,4 @@ kwargs:
   without_fc: True
   with_autocast: True
   pretrained: True
-  branches: [1, 2, 3]
+  branches: [0, 1, 2, 3]

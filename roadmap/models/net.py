@@ -280,7 +280,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         branches = kwargs.pop('branches', [0, 1, 2, 3])
         weights_path = kwargs.pop('weights', None)
         try:
-            base_model = torch.hub.load('../dinov3', dino_backbone, source='local', weights=weights_path)
+            base_model = torch.hub.load('facebookresearch/dinov3', dino_backbone, source='github', weights=weights_path)
 
         except ModuleNotFoundError as e:
             missing = e.name if hasattr(e, 'name') else str(e)
