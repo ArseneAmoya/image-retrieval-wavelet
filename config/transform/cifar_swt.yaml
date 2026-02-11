@@ -5,12 +5,12 @@ train:
   RandomHorizontalFlip:
     p: 0.5
   SWTTransform:
-    level: 1
+    level: 4
     wavelet: 'haar'
 
 test:
   Resize:
     size: 224
   SWTTransform:
-    level: 1
+    level: 4
     wavelet: 'haar'
