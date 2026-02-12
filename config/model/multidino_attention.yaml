@@ -1,0 +1,21 @@
+name: MultiDinoAttention
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  # Liste de vos 4 branches
+  backbones_config:
+    - name: 'dinov2_vits14' # Branche 1 (RGB Shape)
+      frozen: true
+    - name: 'dinov2_vits14' # Branche 2 (Texture/Wavelet ?)
+      frozen: true
+    - name: 'dinov2_vits14' # Branche 3
+      frozen: true
+    - name: 'dinov2_vits14' # Branche 4
+      frozen: true
+
+  # Configuration de la Tête d'Attention
+  fusion_config:
+    output_dim: 384   # Taille du vecteur final (compact = recherche rapide)
+    num_heads: 8       # 8 têtes permet de capturer des relations complexes
+    dropout: 0.1
+  with_autocast: True
