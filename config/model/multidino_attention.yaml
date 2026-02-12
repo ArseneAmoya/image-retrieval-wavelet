@@ -5,13 +5,13 @@ kwargs:
   # Liste de vos 4 branches
   backbones_config:
     - name: 'dinov2_vits14' # Branche 1 (RGB Shape)
-      frozen: true
+      frozen: False
     - name: 'dinov2_vits14' # Branche 2 (Texture/Wavelet ?)
-      frozen: true
+      frozen: False
     - name: 'dinov2_vits14' # Branche 3
-      frozen: true
+      frozen: False
     - name: 'dinov2_vits14' # Branche 4
-      frozen: true
+      frozen: False
 
   # Configuration de la Tête d'Attention
   fusion_config:
