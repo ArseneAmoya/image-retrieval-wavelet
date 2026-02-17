@@ -1,4 +1,4 @@
-name: MultiDinoAttention
+name: MultiDinoHashing
 freeze_batch_norm: False
 freeze_pos_embedding: False
 kwargs:
@@ -14,6 +14,9 @@ kwargs:
       frozen: False
 
   # Configuration de la Tête d'Attention
+  binary_config:
+    nbits: 64
+    
   fusion_config:
     output_dim: 384   # Taille du vecteur final (compact = recherche rapide)
     num_heads: 8       # 8 têtes permet de capturer des relations complexes

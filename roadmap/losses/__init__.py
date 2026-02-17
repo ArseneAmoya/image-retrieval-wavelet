@@ -13,6 +13,7 @@ from .smooth_rank_ap import (
     SmoothAP,
     SupAP,
 )
+from .quantization_loss import QuantizationLoss
 from .multi_loss import MultiLoss
 
 
@@ -31,4 +32,5 @@ __all__ = [
     'MultiEmbeddingLoss',
     'ArcFaceLoss',
     'MultiLoss',
+    'QuantizationLoss'
 ]

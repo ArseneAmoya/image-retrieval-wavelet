@@ -1,0 +1,16 @@
+# @package _group_
+name: Cifar10Retrieval
+kwargs:
+  # Chemin vers le dossier racine où 'cifar-100-python' sera téléchargé/trouvé
+  data_dir: ../../data/cifar10
+  seed: 42 # Pour garantir que le split Train/Query/Gallery reste fixe
+
+sampler:
+  name: MPerClassSampler # Recommandé pour le Retrieval (vs RandomSampler pour CUB)
+  kwargs:
+    batch_size: 128
+    samples_per_class: 4 # Important pour les pertes type Triplet/Contrastive
+    # Cela signifie qu'un batch de 128 aura 32 classes différentes avec 4 images chacune.
+
+# Informations pour le modèle (nombre de classes total dans CIFAR-100)
+num_classes: 10

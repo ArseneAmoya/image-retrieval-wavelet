@@ -53,7 +53,7 @@ def load_and_evaluate(
         batch_size=bs,
         num_workers=nw,
         exclude=['mean_average_precision'],
-        k=kwargs.get('k', 2047),
+        k=kwargs.get('k', 1000),
     )
 
     lib.LOGGER.info("Evaluation completed...")

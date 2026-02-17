@@ -197,7 +197,7 @@ class Getter:
             }
             lib.LOGGER.info(dataset)
             return dataset
-        elif (config.name == "Cifar100RetrievalDataset") and (mode == "test"):
+        elif (config.name in ["Cifar100RetrievalDataset"]) and (mode == "test"):
             dataset = {
                 # La clé 'test' contient le query set (images requêtes)
                 "test": getattr(datasets, config.name)(transform=transform, mode="query", **config.kwargs),
@@ -206,6 +206,28 @@ class Getter:
             }
             lib.LOGGER.info(dataset)
             return dataset
+        elif config.name ==  "Cifar10Retrieval":
+            # Mode Train classique
+            if mode == 'train':
+                return datasets.Cifar10Retrieval(
+                    data_dir=config.kwargs.data_dir, 
+                    mode='train', 
+                    transform=transform
+                )
+            
+            # Mode Validation (Pour checker le mAP pendant l'entrainement sans tricher sur le Test)
+            elif mode == 'val':
+                return {
+                    "test": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='val', transform=transform),
+                    "gallery": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='database', transform=transform)
+                }
+
+            # Mode Test Final (Query vs Database)
+            elif mode == 'test':
+                return {
+                    "test": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='query', transform=transform),
+                    "gallery": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='database', transform=transform)
+                }
         elif (config.name == "DyMLDataset") and mode.startswith("test"):
             dataset = {
                 "test": getattr(datasets, config.name)(transform=transform, mode="test_query_fine", **config.kwargs),

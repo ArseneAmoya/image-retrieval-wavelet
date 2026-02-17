@@ -140,3 +140,76 @@ class MultiDinoAttention(nn.Module):
         
         # Normalisation finale pour le Retrieval (Hypersphère)
         return F.normalize(final_embedding, p=2, dim=1)
+    
+    
+
+class MultiDinoHashing(nn.Module):
+    """
+    Version Hashing : Utilise la même 'AttentionFusionHead' que MultiDinoAttention
+    mais ajoute une projection binaire et une gestion tanh/sign.
+    """
+    def __init__(self, backbones_config, fusion_config, binary_config, **kwargs):
+        super().__init__()
+        
+        self.backbones = nn.ModuleList()
+        output_dims = []
+        
+        # 1. Chargement des Backbones (Même logique que MultiDinoAttention)
+        for bb_cfg in backbones_config:
+            # On utilise torch.hub pour être sûr d'avoir DINOv2
+            if 'dinov2' in bb_cfg['name']:
+                model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+                dim = model.embed_dim
+            else:
+                raise NotImplementedError("Seul DINOv2 est géré ici.")
+            
+            # Freeze (très important pour le Hashing au début)
+            if bb_cfg.get('frozen', True):
+                for p in model.parameters():
+                    p.requires_grad = False
+                model.eval()
+            
+            self.backbones.append(model)
+            output_dims.append(dim)
+            
+        # 2. Module de Fusion (On réutilise votre classe existante !)
+        self.fusion_head = AttentionFusionHead(
+            input_dims=output_dims,
+            embed_dim=fusion_config['output_dim'],
+            num_heads=fusion_config.get('num_heads', 8),
+            dropout=fusion_config.get('dropout', 0.1)
+        )
+
+        # 3. Tête de Hachage (Spécifique à cette classe)
+        self.nbits = binary_config['nbits']
+        self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits)
+        
+        # Init centrée à 0
+        nn.init.normal_(self.hash_fc.weight, std=0.01)
+        nn.init.constant_(self.hash_fc.bias, 0)
+        
+    def forward(self, x):
+        features = []
+        
+        # Passage dans les backbones (x: [B, N_branches, C, H, W])
+        for i, backbone in enumerate(self.backbones):
+            inp = x[..., i, :, :] 
+            out = backbone(inp)
+            
+            if isinstance(out, dict):
+                feat = out['x_norm_clstoken']
+            else:
+                feat = out
+            features.append(feat)
+            
+        # A. Fusion (Continu)
+        fused_embedding = self.fusion_head(features)
+        
+        # B. Projection Hashing
+        logits = self.hash_fc(fused_embedding)
+        
+        # C. Binarisation
+        if self.training:
+            return torch.tanh(logits) # Relaxé pour la Backprop
+        else:
+            return torch.sign(logits) # Binaire pour l'Eval
