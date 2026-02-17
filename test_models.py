@@ -41,7 +41,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/multidino_attention.yaml')
+    model_configs = OmegaConf.load('config/model/multidino_attention_hashing.yaml')
     getter = Getter()
     # Instanciation du modèle RetrievalNet avec wresnet
     model = getter.get_model(model_configs).to(device)
@@ -68,7 +68,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
     
-    model.train()
+    model.eval()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
@@ -80,6 +80,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     else:
         print("Output shape:", output.shape)  # Doit être [batch_size, embed_dim]
         print("Norm of features:", output.norm(dim=-1))
+        print(output.unique())
     
 
 if __name__ == "__main__":

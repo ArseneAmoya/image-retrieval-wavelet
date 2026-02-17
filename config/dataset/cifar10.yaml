@@ -8,8 +8,8 @@ kwargs:
 sampler:
   name: MPerClassSampler # Recommandé pour le Retrieval (vs RandomSampler pour CUB)
   kwargs:
-    batch_size: 128
-    samples_per_class: 4 # Important pour les pertes type Triplet/Contrastive
+    batch_size: 40
+    samples_per_class: 8 # Important pour les pertes type Triplet/Contrastive
     # Cela signifie qu'un batch de 128 aura 32 classes différentes avec 4 images chacune.
 
 # Informations pour le modèle (nombre de classes total dans CIFAR-100)
