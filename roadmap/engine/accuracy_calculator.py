@@ -246,7 +246,7 @@ class CustomCalculator(AccuracyCalculator):
 
 def get_accuracy_calculator(
     exclude_ranks=None,
-    k=2047,
+    k=5000,
     with_AP=True,
     **kwargs,
 ):
