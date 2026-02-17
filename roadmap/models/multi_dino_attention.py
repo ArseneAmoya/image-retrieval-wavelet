@@ -141,7 +141,7 @@ class MultiDinoAttention(nn.Module):
         # Normalisation finale pour le Retrieval (Hypersphère)
         return F.normalize(final_embedding, p=2, dim=1)
     
-    
+
 
 class MultiDinoHashing(nn.Module):
     """
@@ -180,7 +180,10 @@ class MultiDinoHashing(nn.Module):
             dropout=fusion_config.get('dropout', 0.1)
         )
 
+
+
         # 3. Tête de Hachage (Spécifique à cette classe)
+        self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
         self.nbits = binary_config['nbits']
         self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits)
         
@@ -204,6 +207,7 @@ class MultiDinoHashing(nn.Module):
             
         # A. Fusion (Continu)
         fused_embedding = self.fusion_head(features)
+        fused_embedding = self.bn(fused_embedding)
         
         # B. Projection Hashing
         logits = self.hash_fc(fused_embedding)
