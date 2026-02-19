@@ -69,7 +69,7 @@ def test_dino_zeroshot():
         test_dataset=test_dataset,   # Évalue sur le test (Zero-shot generalization)
         batch_size=32,       # Ajustez selon votre VRAM (32 passe sur 8Go, 64+ sur 24Go)
         num_workers=4,       
-        k=5000,                # On regarde le Recall jusqu'à 2048 voisins
+        k=54000,                # On regarde le Recall jusqu'à 2048 voisins
         exclude_ranks=None   
     )
 

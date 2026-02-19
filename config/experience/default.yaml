@@ -14,7 +14,7 @@ max_iter: 50
 train_eval_freq: 5
 val_eval_freq: -1
 test_eval_freq: 5
-eval_bs: 128
+eval_bs: 1000
 save_model: 10
 eval_split: test
 principal_metric: mean_average_precision_at_r_level0
