@@ -41,9 +41,9 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/multidino_attention_hashing.yaml')
+    model_configs = OmegaConf.load('config/model/detail_tester.yaml')
     getter = Getter()
-    # Instanciation du modèle RetrievalNet avec wresnet
+    # Instanciation du modèle DetailTesterNet
     model = getter.get_model(model_configs).to(device)
     if freeze_bn:
         freeze_batch_norm(model)
