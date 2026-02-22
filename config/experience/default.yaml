@@ -32,3 +32,4 @@ pin_memory: True
 
 sub_batch: 128
 update_type: base_update
+clip_grad: 1.0

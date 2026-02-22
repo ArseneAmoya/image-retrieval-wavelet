@@ -2,6 +2,7 @@ name: DetailTesterNet
 freeze_batch_norm: False
 freeze_pos_embedding: False
 kwargs:
-  backbone_name: 'convnextv2_tiny.fcmae'
-  detail_index: 1  # 1 = Bande LH
+  backbone_name: 'dinov2_vits14'
+  detail_index: 0  # 1 = Bande LH
   output_dim: 64
+  with_autocast: True

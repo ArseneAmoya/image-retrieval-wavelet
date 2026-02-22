@@ -118,6 +118,14 @@ def base_update(
         if config.experience.log_grad:
             grad_norm = lib.get_gradient_norm(net)
             logs["grad_norm"] = grad_norm.item()
+        clip_value = getattr(config.experience, 'clip_grad', None)
+
+        if clip_value is not None and clip_value > 0.0:
+            if scaler is not None:
+                for key, opt in optimizer.items():
+                    scaler.unscale_(opt)
+            torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=clip_value)
+
 
         for key, opt in optimizer.items():
             if epoch < config.experience.warm_up and key != config.experience.warm_up_key:
@@ -152,6 +160,8 @@ def base_update(
                 for k, v in logs.items():
                     lib.LOGGER.info(f'Loss: {k}: {v} ')
 
-    
+    for crit, _ in criterion:
+        if hasattr(crit, 'epoch_step'):
+            crit.epoch_step()
 
     return meter.avg
