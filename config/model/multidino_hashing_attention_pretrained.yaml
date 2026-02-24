@@ -1,0 +1,28 @@
+name: MultiDinoHashingTF
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  # Liste de vos 4 branches
+  pretrained_paths:
+    ll: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+    lh: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+    hh: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+  backbones_config:
+    - name: 'dinov2_vits14' # Branche 1 (RGB Shape)
+      frozen: True
+    - name: 'dinov2_vits14' # Branche 2 (Texture/Wavelet ?)
+      frozen: True
+    - name: 'dinov2_vits14' # Branche 3
+      frozen: True
+    - name: 'dinov2_vits14' # Branche 4
+      frozen: True
+
+  # Configuration de la Tête d'Attention
+  binary_config:
+    nbits: 64
+    
+  fusion_config:
+    output_dim: 384   # Taille du vecteur final (compact = recherche rapide)
+    num_heads: 8       # 8 têtes permet de capturer des relations complexes
+    dropout: 0.1
+  with_autocast: True

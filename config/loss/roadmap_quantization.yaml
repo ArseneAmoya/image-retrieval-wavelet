@@ -18,6 +18,6 @@
     target_value: 1.0
     step_type: 'multi'  # 'linear' ou 'multi'
     warmup_step: True  # Nombre d'itérations de warmup pour le
-    starting_weight: 0.001  # Poids initial pour le multi-step
+    starting_weight: 0.01  # Poids initial pour le multi-step
     alpha: 10  # Facteur de réduction pour le multi-step
     steps: [10, 20, 30]  # Étapes pour le multi-step (en itérations)

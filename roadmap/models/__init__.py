@@ -1,5 +1,5 @@
 from .net import RetrievalNet
-from .multi_dino_attention import MultiDinoAttention, MultiDinoHashing
+from .multi_dino_attention import MultiDinoAttention, MultiDinoHashing, MultiDinoHashingTF
 from .detail_tester import DetailTesterNet
 
 
@@ -8,4 +8,5 @@ __all__ = [
     'MultiDinoAttention',
     'MultiDinoHashing',
     'DetailTesterNet',
+    'MultiDinoHashingTF'
 ]

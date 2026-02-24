@@ -217,3 +217,88 @@ class MultiDinoHashing(nn.Module):
             return torch.tanh(logits) # Relaxé pour la Backprop
         else:
             return torch.sign(logits) # Binaire pour l'Eval
+
+
+class MultiDinoHashingTF(nn.Module):
+    def __init__(self, backbones_config, fusion_config, binary_config, pretrained_paths=None, **kwargs):
+        super().__init__()
+        
+        self.backbones = nn.ModuleList()
+        output_dims = []
+        
+        # 1. Chargement des DINOv2 (ImageNet de base)
+        for bb_cfg in backbones_config:
+            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            self.backbones.append(model)
+            output_dims.append(model.embed_dim)
+            
+        # --- L'ÉTAPE MAGIQUE : Chargement de vos Experts ---
+        if pretrained_paths is not None:
+            # On suppose que pretrained_paths est un dictionnaire :
+            # {'ll': 'path/ll.pth', 'lh': 'path/lh.pth', 'hh': 'path/hh.pth'}
+            print("[INFO] Chargement des Experts pré-entraînés...")
+            
+            # Branche 0 : Expert LL
+            self._load_expert_weights(self.backbones[0], pretrained_paths['ll'])
+            
+            # Branche 1 : Expert LH
+            self._load_expert_weights(self.backbones[1], pretrained_paths['lh'])
+            
+            # Branche 2 : Expert HL (INITIALISÉ AVEC LH ! C'est votre idée)
+            self._load_expert_weights(self.backbones[2], pretrained_paths['lh'])
+            
+            # Branche 3 : Expert HH
+            self._load_expert_weights(self.backbones[3], pretrained_paths['hh'])
+        # ---------------------------------------------------
+
+        # ... (Suite de l'init : Branch Embeddings, Attention, Hash FC) ...
+        self.num_branches = len(backbones_config)
+        self.branch_embeddings = nn.Parameter(torch.randn(self.num_branches, output_dims[0]) * 0.02)
+        
+        self.fusion_head = AttentionFusionHead(
+            input_dims=output_dims, embed_dim=fusion_config['output_dim'], 
+            num_heads=fusion_config.get('num_heads', 8)
+        )
+        self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
+        self.hash_fc = nn.Linear(fusion_config['output_dim'], binary_config['nbits'])
+        
+    def _load_expert_weights(self, target_backbone, checkpoint_path):
+        """Fonction utilitaire pour extraire les poids DINO d'un checkpoint complet."""
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+        
+        # Le state_dict complet contient aussi la fc, la loss, etc.
+        # Il faut filtrer pour ne prendre que les poids du backbone.
+        # Ajustez 'backbone.' selon le nom utilisé dans DetailTesterNet
+        backbone_state_dict = {
+            k.replace('backbone.', ''): v 
+            for k, v in checkpoint['net_state'].items() 
+            if k.startswith('backbone.')
+        }
+        target_backbone.load_state_dict(backbone_state_dict, strict=True)
+
+    def forward(self, x):
+        features = []
+        
+        # Passage dans les backbones (x: [B, N_branches, C, H, W])
+        for i, backbone in enumerate(self.backbones):
+            inp = x[..., i, :, :] 
+            out = backbone(inp)
+            
+            if isinstance(out, dict):
+                feat = out['x_norm_clstoken']
+            else:
+                feat = out
+            features.append(feat)
+            
+        # A. Fusion (Continu)
+        fused_embedding = self.fusion_head(features)
+        fused_embedding = self.bn(fused_embedding)
+        
+        # B. Projection Hashing
+        logits = self.hash_fc(fused_embedding)
+        
+        # C. Binarisation
+        if self.training:
+            return torch.tanh(logits) # Relaxé pour la Backprop
+        else:
+            return torch.sign(logits) # Binaire pour l'Eval
