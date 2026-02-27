@@ -231,24 +231,22 @@ class MultiDinoHashingTF(nn.Module):
             model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
             self.backbones.append(model)
             output_dims.append(model.embed_dim)
-            
-        # --- L'ÉTAPE MAGIQUE : Chargement de vos Experts ---
+
+
         if pretrained_paths is not None:
-            # On suppose que pretrained_paths est un dictionnaire :
-            # {'ll': 'path/ll.pth', 'lh': 'path/lh.pth', 'hh': 'path/hh.pth'}
             print("[INFO] Chargement des Experts pré-entraînés...")
             
-            # Branche 0 : Expert LL
-            self._load_expert_weights(self.backbones[0], pretrained_paths['ll'])
+            # On définit quelle clé correspond à quel index
+            # Index 0 -> 'll', Index 1 -> 'lh', Index 2 -> 'lh' (clone), Index 3 -> 'hh'
+            keys_for_branches = ['ll', 'lh', 'lh', 'hh']
             
-            # Branche 1 : Expert LH
-            self._load_expert_weights(self.backbones[1], pretrained_paths['lh'])
-            
-            # Branche 2 : Expert HL (INITIALISÉ AVEC LH ! C'est votre idée)
-            self._load_expert_weights(self.backbones[2], pretrained_paths['lh'])
-            
-            # Branche 3 : Expert HH
-            self._load_expert_weights(self.backbones[3], pretrained_paths['hh'])
+            # On boucle UNIQUEMENT sur les backbones qui existent réellement
+            for i in range(len(self.backbones)):
+                target_key = keys_for_branches[i]
+                
+                if target_key in pretrained_paths and pretrained_paths[target_key] is not None:
+                    print(f" -> Chargement de la branche {i} avec les poids de '{target_key}'")
+                    self._load_expert_weights(self.backbones[i], pretrained_paths[target_key])
         # ---------------------------------------------------
 
         # ... (Suite de l'init : Branch Embeddings, Attention, Hash FC) ...
