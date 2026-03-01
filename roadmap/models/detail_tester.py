@@ -62,3 +62,46 @@ class DetailTesterNet(nn.Module):
             return torch.tanh(logits)
         else:
             return torch.sign(logits)
+
+
+
+class SingleBandNet(nn.Module):
+    def __init__(self, detail_index=0, output_dim=384, is_hashing=False, **kwargs):
+        super().__init__()
+        self.detail_index = detail_index
+        self.is_hashing = is_hashing
+        
+        # 1. Chargement du Backbone
+        self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+        embed_dim = self.backbone.embed_dim
+        
+        # 2. La Tête de Sortie
+        if output_dim == embed_dim and not is_hashing:
+            self.head = nn.Identity()
+        else:
+            self.head = nn.Linear(embed_dim, output_dim)
+            nn.init.normal_(self.head.weight, std=0.01)
+            nn.init.constant_(self.head.bias, 0)
+
+    def forward(self, x):
+        # --- A. L'ENTRÉE : Gestion des Ondelettes ---
+        if x.dim() == 5:
+            x = x[:, :, self.detail_index, :, :]
+        
+        # --- B. LE CŒUR : Extraction ---
+        features = self.backbone(x)
+        if isinstance(features, dict):
+            features = features['x_norm_clstoken']
+            
+        # --- C. LA SORTIE ---
+        out = self.head(features)
+        
+        if self.is_hashing:
+            if self.training:
+                return torch.tanh(out)
+            else:
+                return torch.sign(out)
+        else:
+            # CORRECTION : Projection sur l'hypersphère (Norme L2 = 1)
+            # Indispensable pour que le produit scalaire == similarité cosinus
+            return F.normalize(out, p=2, dim=1)

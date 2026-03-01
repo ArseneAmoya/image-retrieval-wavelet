@@ -1,0 +1,9 @@
+name: SingleBandNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: 'dinov2_vits14'
+  detail_index: 0  # 1 = Bande LH
+  output_dim: 384
+  with_autocast: True
+  is_hashing: False
