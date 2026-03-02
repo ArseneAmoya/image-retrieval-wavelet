@@ -1,4 +1,6 @@
 import os
+import sys
+import logging
 
 import hydra
 import torch
@@ -13,6 +15,21 @@ def single_experiment_runner(cfg):
     Parses hydra config, check for potential resuming of training
     and launches training
     """
+    
+    # --- DÉBUT DU SILENCIEUX DE CONSOLE ---
+    # 1. On nettoie le logger racine (généré par Hydra)
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        if getattr(handler, 'stream', None) in (sys.stdout, sys.stderr):
+            root_logger.removeHandler(handler)
+            
+    # 2. On nettoie spécifiquement le logger de ROADMAP au cas où 
+    # il aurait été instancié avec ses propres handlers de console.
+    if hasattr(lib, 'LOGGER'):
+        for handler in lib.LOGGER.handlers[:]:
+            if getattr(handler, 'stream', None) in (sys.stdout, sys.stderr):
+                lib.LOGGER.removeHandler(handler)
+    # --- FIN DU SILENCIEUX ---
 
     try:
         try:
@@ -59,6 +76,8 @@ def single_experiment_runner(cfg):
         if os.path.isdir(os.path.join(cfg.experience.log_dir, cfg.experience.experiment_name, 'weights')):
             lib.LOGGER.warning(f"Exiting trial, experiment {cfg.experience.experiment_name} already exists")
             return
+        
+    
 
     metrics = run.run(
         config=cfg,
