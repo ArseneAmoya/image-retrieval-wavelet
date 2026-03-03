@@ -1,0 +1,11 @@
+name: ImageNet100Hashing
+kwargs:
+  data_dir: /content/imagenet100 # Le chemin dans Google Colab
+  train_samples_per_class: 130   # Paramètre de notre classe custom
+  seed: 333                      
+  
+sampler:
+  name: MPerClassSampler
+  kwargs:
+    batch_size: 96
+    samples_per_class: 4
