@@ -197,7 +197,7 @@ class Getter:
             }
             lib.LOGGER.info(dataset)
             return dataset
-        elif (config.name in ["Cifar100RetrievalDataset"]) and (mode == "test"):
+        elif (config.name in ["Cifar100RetrievalDataset", "ImageNet100Hashing"]) and (mode == "test"):
             dataset = {
                 # La clé 'test' contient le query set (images requêtes)
                 "test": getattr(datasets, config.name)(transform=transform, mode="query", **config.kwargs),
