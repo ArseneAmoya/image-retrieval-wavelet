@@ -9,6 +9,7 @@ from .stanforddog12 import StanfordDog12Dataset
 from .textured_data import TexturedDataset
 from .cifar100_v2 import Cifar100RetrievalDataset
 from .cifar10_hashing import Cifar10Retrieval
+from .imagenet100 import ImageNet100Dataset
 
 __all__ = [
     'Cub200Dataset',
@@ -21,5 +22,6 @@ __all__ = [
     'StanfordDog12Dataset',
     'TexturedDataset',
     'Cifar100RetrievalDataset',
-    'Cifar10Retrieval'
+    'Cifar10Retrieval',
+    'ImageNet100Dataset'
 ]
