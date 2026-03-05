@@ -23,6 +23,15 @@ class CustomCalculator(AccuracyCalculator):
     ):
         super().__init__(*args, **kwargs)
         self.with_faiss = with_faiss
+    def label_comparison_fn(self, query_labels, reference_labels):
+        if query_labels.ndim > 1 and reference_labels.ndim > 1:
+            if query_labels.dim() == 2 and reference_labels.dim() == 2:
+                # Évaluation d'une galerie complète
+                return torch.matmul(query_labels.float(), reference_labels.t().float()) > 0
+            else:
+                # Évaluation locale (ex: query_labels[:, None] contre knn_labels)
+                return (query_labels.float() * reference_labels.float()).sum(dim=-1) > 0
+        return query_labels.unsqueeze(1) == reference_labels
     
     def n_relevance_at_k(self, knn_labels, query_labels, k):
         r = self.label_comparison_fn(query_labels, knn_labels[:, :k])
@@ -188,8 +197,9 @@ class CustomCalculator(AccuracyCalculator):
         # print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
         # print("query_labels dtype:", query_labels.dtype, "reference_labels dtype:", reference_labels.dtype)
         # Flatten if not 1D
-        query_labels = query_labels.view(-1)
-        reference_labels = reference_labels.view(-1)
+        if query_labels.ndim == 1 or (query_labels.ndim == 2 and query_labels.size(1) == 1):
+            query_labels = query_labels.view(-1)
+            reference_labels = reference_labels.view(-1)
 
         self.curr_function_dict = self.get_function_dict(include, exclude)
 

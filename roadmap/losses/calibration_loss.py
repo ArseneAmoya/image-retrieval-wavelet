@@ -12,6 +12,12 @@ class CalibrationLoss(losses.ContrastiveLoss):
 
     def forward(self, embeddings, labels, ref_embeddings=None, ref_labels=None):
         if ref_embeddings is None:
+            if labels.ndim > 1:
+                matches = torch.matmul(labels.float(), labels.t().float()) > 0
+                matches.fill_diagonal_(False)
+                a1, p = torch.where(matches)
+                a2, n = torch.where(~matches)
+                return super().forward(embeddings, labels, (a1, p, a2, n))
             return super().forward(embeddings, labels)
 
         indices_tuple = self.create_indices_tuple(
@@ -34,6 +40,13 @@ class CalibrationLoss(losses.ContrastiveLoss):
         E_mem,
         L_mem,
     ):
-        indices_tuple = lmu.get_all_pairs_indices(labels, L_mem)
+        if labels.ndim == 1:
+            indices_tuple = lmu.get_all_pairs_indices(labels, L_mem)
+        else:
+            matches = torch.matmul(labels.float(), L_mem.t().float()) > 0
+            a1, p = torch.where(matches)
+            a2, n = torch.where(~matches)
+            indices_tuple = (a1, p, a2, n)
+        
         indices_tuple = c_f.shift_indices_tuple(indices_tuple, batch_size)
         return indices_tuple

@@ -1,0 +1,9 @@
+name: VOC2012Hashing
+kwargs:
+  data_dir: /content/voc2012
+  
+sampler:
+  name: RandomSampler # Plus de MPerClass !
+  kwargs:
+    batch_size: 64
+    # On supprime samples_per_class
