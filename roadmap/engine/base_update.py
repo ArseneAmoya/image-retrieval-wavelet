@@ -32,7 +32,10 @@ def _batch_optimization(
         losses = []
         for crit, weight in criterion:
             if hasattr(crit, 'takes_embeddings'):
-                loss = crit(di, labels.view(-1))
+                if labels.ndim == 1 or (labels.ndim == 2 and labels.size(1) == 1):
+                    loss = crit(di, labels.view(-1))
+                else:
+                    loss = crit(di, labels)
                 if memory:
                     if epoch >= config.memory.activate_after:
                         mem_loss = crit(di, labels.view(-1), memory_embeddings, memory_labels.view(-1))
