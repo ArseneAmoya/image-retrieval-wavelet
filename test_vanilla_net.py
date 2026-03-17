@@ -8,8 +8,8 @@ from roadmap.utils import get_set_random_state
 # --- CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Chemins relatifs basés sur votre structure de fichiers
-MODEL_CONFIG_PATH = 'config/model/dino_v3.yaml' 
-DATASET_CONFIG_PATH = 'config/dataset/cifar10.yaml'
+MODEL_CONFIG_PATH = 'config/model/dino.yaml' 
+DATASET_CONFIG_PATH = 'config/dataset/cifar100.yaml'
 TRANSFORM_CONFIG_PATH = 'config/transform/cifar_resize.yaml'
 
 def test_dino_zeroshot():
