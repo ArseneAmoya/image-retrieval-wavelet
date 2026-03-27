@@ -1,0 +1,21 @@
+name: PretrainedMultiDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbones_config:
+    - name: dinov2_vits14
+      frozen: true
+    - name: dinov2_vits14
+      frozen: true
+    - name: dinov2_vits14
+      frozen: true
+    - name: dinov2_vits14
+      frozen: true
+  fusion_config:
+    type: "temperature_gated"
+    temperature: 0.1
+    output_dim: 384
+    dropout: 0.0
+  binary_config:
+    nbits: 64
+  pretrained_ckpt_path: null

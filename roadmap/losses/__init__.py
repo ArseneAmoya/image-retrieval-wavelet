@@ -15,6 +15,7 @@ from .smooth_rank_ap import (
 )
 from .quantization_loss import QuantizationLoss
 from .multi_loss import MultiLoss
+from .hash_loss import HashLoss
 
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
     'MultiEmbeddingLoss',
     'ArcFaceLoss',
     'MultiLoss',
-    'QuantizationLoss'
+    'QuantizationLoss',
+    'HashLoss'
 ]

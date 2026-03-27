@@ -2,301 +2,301 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class AttentionFusionHead(nn.Module):
-    """
-    Module de fusion SOTA basé sur l'attention (Cross-Attention).
-    Il utilise un 'Query Token' apprenable qui va agréger l'information 
-    pertinente des N branches (Keys/Values).
-    """
+# =========================================================================
+# 1. LES MODULES DE FUSION
+# =========================================================================
+
+class StandardFusionHead(nn.Module):
     def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1):
-        """
-        Args:
-            input_dims (list[int]): Liste des dimensions de sortie de chaque branche (ex: [384, 384, 768, 768])
-            embed_dim (int): Dimension commune de projection et de sortie.
-            num_heads (int): Nombre de têtes d'attention (doit diviser embed_dim).
-        """
         super().__init__()
-        
-        # 1. Projecteurs : Pour ramener toutes les branches à la même dimension
-        self.projections = nn.ModuleList([
-            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity()
-            for dim in input_dims
-        ])
-        
-        # 2. Le Token d'Agrégation (Query) - C'est lui qui "pose la question" aux branches
+        self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
         self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-        
-        # 3. Multi-Head Cross Attention
-        # batch_first=True attend (Batch, Seq_len, Dim)
         self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
-        
-        # 4. Normalisation et Feed-Forward (Architecture type Transformer Block)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
-        self.mlp = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim * 4),
-            nn.GELU(),
-            nn.Linear(embed_dim * 4, embed_dim),
-            nn.Dropout(dropout)
-        )
-        
-        # Init des poids
+        self.mlp = nn.Sequential(nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout))
         nn.init.trunc_normal_(self.query_token, std=0.02)
 
     def forward(self, features_list):
-        """
-        Args:
-            features_list (list[Tensor]): Liste de tenseurs (B, D_i) issus des backbones
-        """
         batch_size = features_list[0].shape[0]
-        
-        # A. Projection & Stack -> Création de la séquence (Keys/Values)
-        # On projette chaque branche et on les empile : (B, N_branches, embed_dim)
         projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
-        kv = torch.stack(projected_feats, dim=1) 
-        
-        # B. Préparation du Query (B, 1, embed_dim)
+        kv = torch.stack(projected_feats, dim=1)
         q = self.query_token.expand(batch_size, -1, -1)
-        
-        # C. Attention Cross : Le Query regarde les Keys/Values
-        # attn_output shape: (B, 1, embed_dim)
         attn_output, _ = self.attn(query=q, key=kv, value=kv)
-        
-        # D. Connexion résiduelle + Norm (Standard Transformer)
-        # Note: On peut ajouter q à l'output, mais ici q est constant, donc on utilise l'output direct
         x = self.norm1(attn_output)
-        
-        # E. Feed Forward Network
         x = x + self.mlp(x)
-        x = self.norm2(x)
-        
-        # Retourne le vecteur final (B, embed_dim)
-        return x.squeeze(1)
+        return self.norm2(x).squeeze(1)
 
+class TemperatureFusionHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1, temperature=0.1):
+        super().__init__()
+        self.temperature = temperature
+        self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
+        self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout))
+        nn.init.trunc_normal_(self.query_token, std=0.02)
+
+    def forward(self, features_list):
+        batch_size = features_list[0].shape[0]
+        projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
+        kv = torch.stack(projected_feats, dim=1)
+        q = self.query_token.expand(batch_size, -1, -1)
+        q_scaled = q / self.temperature
+        attn_output, _ = self.attn(query=q_scaled, key=kv, value=kv)
+        x = self.norm1(attn_output)
+        x = x + self.mlp(x)
+        return self.norm2(x).squeeze(1)
+
+class SemanticFusionHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1):
+        super().__init__()
+        self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout))
+
+    def forward(self, features_list):
+        projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
+        q = projected_feats[0].unsqueeze(1)
+        kv = torch.stack(projected_feats, dim=1)
+        attn_output, _ = self.attn(query=q, key=kv, value=kv)
+        x = self.norm1(attn_output)
+        x = x + self.mlp(x)
+        return self.norm2(x).squeeze(1)
+
+class GatedFusionHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=512, dropout=0.1):
+        super().__init__()
+        self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
+        self.gate_network = nn.Sequential(nn.Linear(embed_dim, embed_dim // 2), nn.ReLU(), nn.Linear(embed_dim // 2, 1), nn.Sigmoid())
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout))
+
+    def forward(self, features_list):
+        projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
+        fused_out = 0
+        for feat in projected_feats:
+            gate = self.gate_network(feat)
+            fused_out = fused_out + (feat * gate)
+        x = self.norm1(fused_out)
+        x = x + self.mlp(x)
+        return self.norm2(x)
+
+# --- LA NOUVELLE METHODE (COMBINAISON 1 + 3) ---
+class TemperatureGatedFusionHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=512, dropout=0.1, temperature=0.1):
+        super().__init__()
+        self.temperature = temperature
+        self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
+        # Note: Pas de Sigmoid ici, on garde le logit brut pour lui appliquer la température après
+        self.gate_network = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim // 2),
+            nn.ReLU(),
+            nn.Linear(embed_dim // 2, 1)
+        )
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout)
+        )
+
+    def forward(self, features_list):
+        projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
+        fused_out = 0
+        for feat in projected_feats:
+            raw_gate = self.gate_network(feat) # Logit (ex: -0.5, 1.2)
+            # Application de la température + Sigmoid (Hard Gating)
+            hard_gate = torch.sigmoid(raw_gate / self.temperature)
+            fused_out = fused_out + (feat * hard_gate)
+
+        x = self.norm1(fused_out)
+        x = x + self.mlp(x)
+        return self.norm2(x)
+
+# =========================================================================
+# 2. SELECTEUR AUTOMATIQUE
+# =========================================================================
+
+def get_fusion_head(fusion_config, output_dims):
+    fusion_type = fusion_config.get('type', 'standard')
+    embed_dim = fusion_config['output_dim']
+    num_heads = fusion_config.get('num_heads', 8)
+    dropout = fusion_config.get('dropout', 0.1)
+
+    if fusion_type == 'temperature':
+        temp = fusion_config.get('temperature', 0.1)
+        return TemperatureFusionHead(output_dims, embed_dim, num_heads, dropout, temperature=temp)
+    elif fusion_type == 'semantic':
+        return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout)
+    elif fusion_type == 'gated':
+        return GatedFusionHead(output_dims, embed_dim, dropout)
+    elif fusion_type == 'temperature_gated': # L'ajout au routeur
+        temp = fusion_config.get('temperature', 0.1)
+        return TemperatureGatedFusionHead(output_dims, embed_dim, dropout, temperature=temp)
+    else:
+        return StandardFusionHead(output_dims, embed_dim, num_heads, dropout)
+
+
+# =========================================================================
+# 3. VOS MODELES
+# =========================================================================
 
 class MultiDinoAttention(nn.Module):
-    """
-    Wrapper qui gère plusieurs Backbones et fusionne avec Attention.
-    """
     def __init__(self, backbones_config, fusion_config, **kwargs):
         super().__init__()
-        
         self.backbones = nn.ModuleList()
         output_dims = []
-        
-        # 1. Chargement des Backbones (ex: DINOv2 Base, Small, Wavelet...)
         for bb_cfg in backbones_config:
-            # On suppose que 'DinoModel' ou équivalent est accessible
-            # Ici on instancie via getter ou directement si importé
-            # Pour l'exemple, j'instancie DinoModel (adaptez selon votre getter)
-            
-            # Exemple simple si vous utilisez 'roadmap.models.dino_models.DinoModel'
-            # model = DinoModel(name=bb_cfg['name'], ...)
-            
-            # Si vous utilisez timm ou torch.hub direct :
-            if 'dinov2' in bb_cfg['name']:
-                 model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
-                 # Récupération dimension
-                 dim = model.embed_dim 
-            else:
-                 raise NotImplementedError("Seul DINOv2 géré dans cet exemple")
-            
-            # Freeze ou non
+            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            dim = model.embed_dim
             if bb_cfg.get('frozen', True):
-                for p in model.parameters():
-                    p.requires_grad = False
+                for p in model.parameters(): p.requires_grad = False
                 model.eval()
-            
             self.backbones.append(model)
             output_dims.append(dim)
-            
-        # 2. Module de Fusion
-        self.fusion_head = AttentionFusionHead(
-            input_dims=output_dims,
-            embed_dim=fusion_config['output_dim'],
-            num_heads=fusion_config.get('num_heads', 8),
-            dropout=fusion_config.get('dropout', 0.1)
-        )
-        
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
+
     def forward(self, x):
         features = []
-        
-        # Passage dans chaque backbone
         for i, backbone in enumerate(self.backbones):
-        
-            # Extraction feature DINO (souvent output directe ou via forward_features)
-            out = backbone(x[..., i, :, :])  # Adaptez selon votre format d'entrée (ex: [B, 3, H, W] -> [B, 3, H, W] pour chaque branche)
-            
-            # Gestion des outputs DINO (parfois dict, parfois tensor)
-            if isinstance(out, dict):
-                feat = out['x_norm_clstoken'] # Si DINO retourne un dict
-            else:
-                feat = out # Si retourne direct (B, Dim)
-            
-            features.append(feat)
-            
-        # Fusion par Attention
+            out = backbone(x[..., i, :, :])
+            features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
         final_embedding = self.fusion_head(features)
-        
-        # Normalisation finale pour le Retrieval (Hypersphère)
         return F.normalize(final_embedding, p=2, dim=1)
-    
-
 
 class MultiDinoHashing(nn.Module):
-    """
-    Version Hashing : Utilise la même 'AttentionFusionHead' que MultiDinoAttention
-    mais ajoute une projection binaire et une gestion tanh/sign.
-    """
     def __init__(self, backbones_config, fusion_config, binary_config, **kwargs):
         super().__init__()
-        
         self.backbones = nn.ModuleList()
         output_dims = []
-        
-        # 1. Chargement des Backbones (Même logique que MultiDinoAttention)
         for bb_cfg in backbones_config:
-            # On utilise torch.hub pour être sûr d'avoir DINOv2
-            if 'dinov2' in bb_cfg['name']:
-                model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
-                dim = model.embed_dim
-            else:
-                raise NotImplementedError("Seul DINOv2 est géré ici.")
-            
-            # Freeze (très important pour le Hashing au début)
+            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            dim = model.embed_dim
             if bb_cfg.get('frozen', True):
-                for p in model.parameters():
-                    p.requires_grad = False
+                for p in model.parameters(): p.requires_grad = False
                 model.eval()
-            
             self.backbones.append(model)
             output_dims.append(dim)
-            
-        # 2. Module de Fusion (On réutilise votre classe existante !)
-        self.fusion_head = AttentionFusionHead(
-            input_dims=output_dims,
-            embed_dim=fusion_config['output_dim'],
-            num_heads=fusion_config.get('num_heads', 8),
-            dropout=fusion_config.get('dropout', 0.1)
-        )
-
-
-
-        # 3. Tête de Hachage (Spécifique à cette classe)
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
         self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
         self.nbits = binary_config['nbits']
         self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits)
-        
-        # Init centrée à 0
         nn.init.normal_(self.hash_fc.weight, std=0.01)
         nn.init.constant_(self.hash_fc.bias, 0)
-        
+
     def forward(self, x):
         features = []
-        
-        # Passage dans les backbones (x: [B, N_branches, C, H, W])
         for i, backbone in enumerate(self.backbones):
-            inp = x[..., i, :, :] 
-            out = backbone(inp)
-            
-            if isinstance(out, dict):
-                feat = out['x_norm_clstoken']
-            else:
-                feat = out
-            features.append(feat)
-            
-        # A. Fusion (Continu)
+            out = backbone(x[..., i, :, :])
+            features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
         fused_embedding = self.fusion_head(features)
         fused_embedding = self.bn(fused_embedding)
-        
-        # B. Projection Hashing
         logits = self.hash_fc(fused_embedding)
-        
-        # C. Binarisation
-        if self.training:
-            return torch.tanh(logits) # Relaxé pour la Backprop
-        else:
-            return torch.sign(logits) # Binaire pour l'Eval
-
+        return torch.tanh(logits) if self.training else torch.sign(logits)
 
 class MultiDinoHashingTF(nn.Module):
     def __init__(self, backbones_config, fusion_config, binary_config, pretrained_paths=None, **kwargs):
         super().__init__()
-        
         self.backbones = nn.ModuleList()
         output_dims = []
-        
-        # 1. Chargement des DINOv2 (ImageNet de base)
         for bb_cfg in backbones_config:
             model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
             self.backbones.append(model)
             output_dims.append(model.embed_dim)
-
-
         if pretrained_paths is not None:
-            print("[INFO] Chargement des Experts pré-entraînés...")
-            
-            # On définit quelle clé correspond à quel index
-            # Index 0 -> 'll', Index 1 -> 'lh', Index 2 -> 'lh' (clone), Index 3 -> 'hh'
             keys_for_branches = ['ll', 'lh', 'lh', 'hh']
-            
-            # On boucle UNIQUEMENT sur les backbones qui existent réellement
             for i in range(len(self.backbones)):
                 target_key = keys_for_branches[i]
-                
                 if target_key in pretrained_paths and pretrained_paths[target_key] is not None:
-                    print(f" -> Chargement de la branche {i} avec les poids de '{target_key}'")
                     self._load_expert_weights(self.backbones[i], pretrained_paths[target_key])
-        # ---------------------------------------------------
 
-        # ... (Suite de l'init : Branch Embeddings, Attention, Hash FC) ...
         self.num_branches = len(backbones_config)
         self.branch_embeddings = nn.Parameter(torch.randn(self.num_branches, output_dims[0]) * 0.02)
-        
-        self.fusion_head = AttentionFusionHead(
-            input_dims=output_dims, embed_dim=fusion_config['output_dim'], 
-            num_heads=fusion_config.get('num_heads', 8)
-        )
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
         self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
         self.hash_fc = nn.Linear(fusion_config['output_dim'], binary_config['nbits'])
-        
+
     def _load_expert_weights(self, target_backbone, checkpoint_path):
-        """Fonction utilitaire pour extraire les poids DINO d'un checkpoint complet."""
         checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
-        
-        # Le state_dict complet contient aussi la fc, la loss, etc.
-        # Il faut filtrer pour ne prendre que les poids du backbone.
-        # Ajustez 'backbone.' selon le nom utilisé dans DetailTesterNet
-        backbone_state_dict = {
-            k.replace('backbone.', ''): v 
-            for k, v in checkpoint['net_state'].items() 
-            if k.startswith('backbone.')
-        }
+        backbone_state_dict = {k.replace('backbone.', ''): v for k, v in checkpoint['net_state'].items() if k.startswith('backbone.')}
         target_backbone.load_state_dict(backbone_state_dict, strict=True)
 
     def forward(self, x):
         features = []
-        
-        # Passage dans les backbones (x: [B, N_branches, C, H, W])
         for i, backbone in enumerate(self.backbones):
-            inp = x[..., i, :, :] 
-            out = backbone(inp)
-            
-            if isinstance(out, dict):
-                feat = out['x_norm_clstoken']
-            else:
-                feat = out
-            features.append(feat)
-            
-        # A. Fusion (Continu)
+            out = backbone(x[..., i, :, :])
+            features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
         fused_embedding = self.fusion_head(features)
         fused_embedding = self.bn(fused_embedding)
-        
-        # B. Projection Hashing
         logits = self.hash_fc(fused_embedding)
+        return torch.tanh(logits) if self.training else torch.sign(logits)
+class PretrainedMultiDinoHashing(nn.Module):
+    """
+    Architecture SOTA pour l'évaluation du Hachage.
+    Charge un modèle continu pré-entraîné, fige DINO + Attention,
+    et n'entraîne qu'une tête de hachage (Linear + Tanh).
+    """
+    def __init__(self, backbones_config, fusion_config, binary_config, pretrained_ckpt_path=None, **kwargs):
+        super().__init__()
         
-        # C. Binarisation
-        if self.training:
-            return torch.tanh(logits) # Relaxé pour la Backprop
+        # 1. Reconstruction du réseau de base
+        self.backbones = nn.ModuleList()
+        output_dims = []
+        for bb_cfg in backbones_config:
+            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            for p in model.parameters(): p.requires_grad = False
+            model.eval()
+            self.backbones.append(model)
+            output_dims.append(model.embed_dim)
+            
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
+
+        # 2. Chargement des poids de votre meilleur run continu (ex: 98.5%)
+        if pretrained_ckpt_path is not None:
+            print(f"[INFO] Chargement du modèle continu depuis : {pretrained_ckpt_path}")
+            ckpt = torch.load(pretrained_ckpt_path, map_location='cpu', weights_only=False)
+            state_dict = {}
+            for k, v in ckpt['net_state'].items():
+                if k.startswith('fusion_head.'):
+                    state_dict[k.replace('fusion_head.', '')] = v
+            self.fusion_head.load_state_dict(state_dict, strict=True)
         else:
-            return torch.sign(logits) # Binaire pour l'Eval
+            print("[ATTENTION] Aucun chemin de checkpoint fourni. L'attention ne sera pas initialisée avec vos meilleurs poids !")
+
+        # 3. Figer l'attention (Tout le réseau extracteur est maintenant gelé)
+        for p in self.fusion_head.parameters():
+            p.requires_grad = False
+        self.fusion_head.eval()
+
+        # 4. La couche de Hachage (La seule partie qui s'entraîne)
+        self.output_dim = fusion_config['output_dim']
+        self.nbits = binary_config['nbits']
+        
+        self.bn = nn.BatchNorm1d(self.output_dim)
+        self.hash_fc = nn.Linear(self.output_dim, self.nbits)
+        
+        nn.init.normal_(self.hash_fc.weight, std=0.01)
+        nn.init.constant_(self.hash_fc.bias, 0)
+
+    def forward(self, x):
+        # Partie figée : On désactive les gradients pour économiser de la VRAM et accélérer à 100%
+        with torch.no_grad():
+            features = []
+            for i, backbone in enumerate(self.backbones):
+                out = backbone(x[..., i, :, :])
+                features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
+            
+            fused_embedding = self.fusion_head(features)
+            fused_embedding = F.normalize(fused_embedding, p=2, dim=1) # Même format que votre loss continue
+
+        # Partie entraînable : Hashing Head
+        x_hash = self.bn(fused_embedding)
+        logits = self.hash_fc(x_hash)
+        
+        return torch.tanh(logits) if self.training else torch.sign(logits)
