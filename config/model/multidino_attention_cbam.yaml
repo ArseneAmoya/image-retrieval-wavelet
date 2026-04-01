@@ -1,0 +1,19 @@
+name: MultiDinoAttention
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbones_config:
+    - name: dinov2_vits14
+      frozen: False
+    - name: dinov2_vits14
+      frozen: False
+    - name: dinov2_vits14
+      frozen: False
+    - name: dinov2_vits14
+      frozen: False
+
+  fusion_config:
+    type: cbam
+    input_dim: 384
+    output_dim: 384
+  with_autocast: True

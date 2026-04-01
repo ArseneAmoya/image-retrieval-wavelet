@@ -2,9 +2,188 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# =========================================================================
-# 1. LES MODULES DE FUSION
-# =========================================================================
+# ==========================================
+# 1. MODULES DE FUSION (CBAM, ECA, SELF ATTENTION) + SELECTEUR AUTOMATIQUE
+# ==========================================
+
+class BasicConv(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, relu=True, bn=True, bias=False):
+        super(BasicConv, self).__init__()
+        self.out_channels = out_planes
+        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=bias)
+        self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True) if bn else None
+        self.relu = nn.ReLU() if relu else None
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
+class Flatten(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), -1)
+
+def logsumexp_2d(tensor):
+    tensor_flatten = tensor.view(tensor.size(0), tensor.size(1), -1)
+    s, _ = torch.max(tensor_flatten, dim=2, keepdim=True)
+    outputs = s + (tensor_flatten - s).exp().sum(dim=2, keepdim=True).log()
+    return outputs
+
+class ChannelGate(nn.Module):
+    def __init__(self, gate_channels, reduction_ratio=1, pool_types=['avg', 'max']):
+        super(ChannelGate, self).__init__()
+        self.gate_channels = gate_channels
+        self.mlp = nn.Sequential(
+            Flatten(),
+            nn.Linear(gate_channels, gate_channels // reduction_ratio),
+            nn.ReLU(),
+            nn.Linear(gate_channels // reduction_ratio, gate_channels)
+        )
+        self.pool_types = pool_types
+        
+    def forward(self, x):
+        channel_att_sum = None
+        for pool_type in self.pool_types:
+            if pool_type == 'avg':
+                avg_pool = nn.AdaptiveAvgPool1d(1)(x)
+                channel_att_raw = self.mlp(avg_pool)
+            elif pool_type == 'max':
+                max_pool = nn.AdaptiveMaxPool1d(1)(x)
+                channel_att_raw = self.mlp(max_pool)
+            elif pool_type == 'lp':
+                lp_pool = F.lp_pool2d(x, 2, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                channel_att_raw = self.mlp(lp_pool)
+            elif pool_type == 'lse':
+                lse_pool = logsumexp_2d(x)
+                channel_att_raw = self.mlp(lse_pool)
+
+            if channel_att_sum is None:
+                channel_att_sum = channel_att_raw
+            else:
+                channel_att_sum = channel_att_sum + channel_att_raw
+
+        scale = torch.sigmoid(channel_att_sum).unsqueeze(-1)
+        return (x.permute(0, 2, 1) @ scale).squeeze(-1) / self.gate_channels
+
+    def alphas(self, x):
+        channel_att_sum = None
+        for pool_type in self.pool_types:
+            if pool_type == 'avg':
+                avg_pool = nn.AdaptiveAvgPool1d(1)(x)
+                channel_att_raw = self.mlp(avg_pool)
+            elif pool_type == 'max':
+                max_pool = nn.AdaptiveMaxPool1d(1)(x)
+                channel_att_raw = self.mlp(max_pool)
+            elif pool_type == 'lp':
+                lp_pool = F.lp_pool2d(x, 2, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                channel_att_raw = self.mlp(lp_pool)
+            elif pool_type == 'lse':
+                lse_pool = logsumexp_2d(x)
+                channel_att_raw = self.mlp(lse_pool)
+
+            if channel_att_sum is None:
+                channel_att_sum = channel_att_raw
+            else:
+                channel_att_sum = channel_att_sum + channel_att_raw
+
+        scale = torch.sigmoid(channel_att_sum).unsqueeze(-1)
+        return scale
+
+class ChannelPool(nn.Module):
+    def forward(self, x):
+        return torch.cat((torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)), dim=1)
+
+class SpatialGate(nn.Module):
+    def __init__(self):
+        super(SpatialGate, self).__init__()
+        kernel_size = 7
+        self.compress = ChannelPool()
+        self.spatial = BasicConv(2, 1, kernel_size, stride=1, padding=(kernel_size - 1) // 2, relu=False)
+        
+    def forward(self, x):
+        x_compress = self.compress(x)
+        x_out = self.spatial(x_compress)
+        scale = torch.sigmoid(x_out)
+        return x * scale
+        
+    def alphas(self, x):
+        x_compress = self.compress(x)
+        x_out = self.spatial(x_compress)
+        scale = torch.sigmoid(x_out)
+        return scale
+
+class CBAM(nn.Module):
+    def __init__(self, gate_channels=4, reduction_ratio=1, pool_types=['avg', 'max'], no_spatial=True):
+        super(CBAM, self).__init__()
+        self.ChannelGate = ChannelGate(gate_channels, reduction_ratio, pool_types)
+        self.no_spatial = no_spatial
+        if not no_spatial:
+            self.SpatialGate = SpatialGate()
+            
+    def forward(self, x):
+        x_out = self.ChannelGate(x)
+        if not self.no_spatial:
+            x_out = self.SpatialGate(x_out)
+        return x_out
+        
+    def alphas(self, x):
+        x_out = self.ChannelGate.alphas(x)
+        if not self.no_spatial:
+            x_out = self.SpatialGate.alphas(x_out)
+        return x_out
+
+class Eca1D_layer(nn.Module):
+    def __init__(self, channel, k_size=3):
+        super(Eca1D_layer, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+        self.chan = channel
+
+    def forward(self, x):
+        y = self.avg_pool(x)
+        y = self.conv(y.transpose(-1, -2)).transpose(-1, -2)
+        y = self.sigmoid(y)
+        return (x.permute(0, 2, 1) @ y).squeeze(-1) / self.chan
+        
+    def alphas(self, x):
+        y = self.avg_pool(x)
+        y = self.conv(y.transpose(-1, -2)).transpose(-1, -2)
+        y = self.sigmoid(y)
+        return y
+
+# --- MODULE DE LIAISON (WRAPPER) ---
+class AdvancedFusionModule(nn.Module):
+    def __init__(self, fusion_type='cbam', num_branches=4, reduction_ratio=1, input_dim=384, hidden_dim=384):
+        super(AdvancedFusionModule, self).__init__()
+        
+        if fusion_type == 'cbam':
+            self.gate = CBAM(gate_channels=num_branches, reduction_ratio=reduction_ratio, pool_types=['avg', 'max'], no_spatial=True)
+        elif fusion_type == 'eca':
+            self.gate = Eca1D_layer(channel=num_branches, k_size=3)
+            
+        # Projection et régularisation optionnelles
+        self.fcn = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.1)
+        )
+
+    def forward(self, embeddings_list):
+        # Transforme la liste de tenseurs en [Batch, 4_Branches, 384_Features]
+        x = torch.stack(embeddings_list, dim=1) 
+        
+        # Applique CBAM ou ECA (Sortie: [Batch, 384_Features])
+        fused = self.gate(x) 
+        
+        # Applique la normalisation
+        out = self.fcn(fused)
+        return out
+
 
 class StandardFusionHead(nn.Module):
     def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1):
