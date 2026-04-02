@@ -186,7 +186,7 @@ class AdvancedFusionModule(nn.Module):
 
 
 class StandardFusionHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1):
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1):
         super().__init__()
         self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
         self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
@@ -207,7 +207,7 @@ class StandardFusionHead(nn.Module):
         return self.norm2(x).squeeze(1)
 
 class TemperatureFusionHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1, temperature=0.1):
+    def __init__(self, input_dims, embed_dim=384, num_heads=4, dropout=0.1, temperature=0.1):
         super().__init__()
         self.temperature = temperature
         self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
@@ -298,6 +298,57 @@ class TemperatureGatedFusionHead(nn.Module):
         x = x + self.mlp(x)
         return self.norm2(x)
 
+#=========================================================================
+# CORRECTION STANDARD FUSION HEAD (PROJECTION + ATTENTION + MLP)
+#=========================================================================
+class AttentionFusionHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1):
+        super().__init__()
+        # Projections individuelles pour chaque branche (LL, LH, HL, HH)
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() 
+            for dim in input_dims
+        ])
+        
+        # Le "CLS" token apprenable
+        self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
+        nn.init.trunc_normal_(self.query_token, std=0.02)
+        
+        # Attention Multi-Têtes
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        
+        # Normalisations et MLP
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), 
+            nn.GELU(), 
+            nn.Linear(embed_dim * 4, embed_dim), 
+            nn.Dropout(dropout)
+        )
+
+    def forward(self, features_list):
+        batch_size = features_list[0].shape[0]
+        
+        # 1. Projeter et empiler
+        projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
+        kv = torch.stack(projected_feats, dim=1)
+        
+        # 2. Étendre la requête pour le batch
+        q = self.query_token.expand(batch_size, -1, -1)
+        
+        # 3. Multi-Head Attention
+        attn_output, _ = self.attn(query=q, key=kv, value=kv)
+        
+        # 4. PREMIÈRE CONNEXION RÉSIDUELLE (Correction ici !)
+        x = self.norm1(q + attn_output) 
+        
+        # 5. Seconde connexion résiduelle (MLP)
+        x = x + self.mlp(x)
+        
+        return self.norm2(x).squeeze(1)
+
+
 # =========================================================================
 # 2. SELECTEUR AUTOMATIQUE
 # =========================================================================
@@ -315,13 +366,24 @@ def get_fusion_head(fusion_config, output_dims):
         return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout)
     elif fusion_type == 'gated':
         return GatedFusionHead(output_dims, embed_dim, dropout)
-    elif fusion_type == 'temperature_gated': # L'ajout au routeur
+    elif fusion_type == 'temperature_gated': 
         temp = fusion_config.get('temperature', 0.1)
         return TemperatureGatedFusionHead(output_dims, embed_dim, dropout, temperature=temp)
+    elif fusion_type == 'self_attention':
+        return AttentionFusionHead(output_dims, embed_dim, num_heads, dropout)
+    
+    elif fusion_type in ['cbam', 'eca']:
+        return AdvancedFusionModule(
+            fusion_type=fusion_type, 
+            num_branches=len(output_dims), 
+            input_dim=output_dims[0], 
+            hidden_dim=embed_dim
+        )
+    
     else:
         return StandardFusionHead(output_dims, embed_dim, num_heads, dropout)
-
-
+    
+    
 # =========================================================================
 # 3. VOS MODELES
 # =========================================================================
