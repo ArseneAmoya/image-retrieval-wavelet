@@ -298,6 +298,21 @@ def get_backbone(name, pretrained=True, **kwargs):
         )
         out_dim = feature_dim * len(branches)
         pooling = nn.Identity()
+    elif name == 'convnext':
+        bb_name = kwargs.get('bb_name', 'convnext_small')
+        lib.LOGGER.info(f"using ConvNeXt ({bb_name})")
+        
+
+        backbone = timm.create_model(bb_name, pretrained=pretrained, num_classes=0)
+        out_dim = backbone.num_features
+        pooling = nn.Identity()
+
+        # Gestion du gel (utile si vous voulez figer le backbone un jour)
+        if kwargs.get('frozen', False):
+            lib.LOGGER.info(f"Freezing {bb_name} backbone parameters")
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
        
     else:
         raise ValueError(f"{name} is not recognized")
