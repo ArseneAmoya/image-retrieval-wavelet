@@ -1,4 +1,3 @@
-model:
   name: RetrievalNet
   freeze_batchnorm: false
   freeze_pos_emb: false
