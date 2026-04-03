@@ -1,0 +1,16 @@
+# @package _group_
+train:
+  Resize:
+    size: [224, 224]
+  RandomHorizontalFlip:
+    p: 0.5
+  DWTTransform:
+    level: 1
+    wavelet: 'haar'
+
+test:
+  Resize:
+    size: [224, 224]
+  DWTTransform:
+    level: 1
+    wavelet: 'haar'
