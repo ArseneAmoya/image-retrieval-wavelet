@@ -325,8 +325,9 @@ def get_backbone(name, pretrained=True, **kwargs):
             for p in backbone.parameters():
                 p.requires_grad = False
             backbone.eval()
+        pooling = nn.Identity()
+
             
-        return backbone, out_dim, nn.Identity()
 
     elif name == 'ibot':
         bb_name = kwargs.get('bb_name', 'vit_small')
@@ -341,7 +342,7 @@ def get_backbone(name, pretrained=True, **kwargs):
                 p.requires_grad = False
             backbone.eval()
             
-        return backbone, out_dim, nn.Identity()
+        pooling = nn.Identity()
     
     # === AJOUT DE OPENCLIP ===
     elif name == 'openclip':
@@ -363,7 +364,7 @@ def get_backbone(name, pretrained=True, **kwargs):
                 p.requires_grad = False
             backbone.eval()
             
-        return backbone, out_dim, nn.Identity()
+        pooling = nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")
