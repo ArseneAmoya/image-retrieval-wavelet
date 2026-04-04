@@ -1,0 +1,11 @@
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: ibot
+  bb_name: vit_small      # Pour rester comparable à votre DINOv2 vits14
+  embed_dim: 384
+  frozen: false           # FINETUNING ACTIF
+  without_fc: false
+  with_autocast: true
+  pretrained: true          # Utiliser les poids pré-entraînés sur ImageNet

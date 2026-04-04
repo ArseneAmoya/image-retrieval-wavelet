@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 import timm
+import open_clip
+
 
 import roadmap.utils as lib
 
@@ -301,7 +303,6 @@ def get_backbone(name, pretrained=True, **kwargs):
     elif name == 'convnext':
         bb_name = kwargs.get('bb_name', 'convnext_small')
         lib.LOGGER.info(f"using ConvNeXt ({bb_name})")
-        
 
         backbone = timm.create_model(bb_name, pretrained=pretrained, num_classes=0)
         out_dim = backbone.num_features
@@ -313,6 +314,56 @@ def get_backbone(name, pretrained=True, **kwargs):
             for p in backbone.parameters():
                 p.requires_grad = False
             backbone.eval()
+    elif name == 'clip':
+        bb_name = kwargs.get('bb_name', 'vit_base_patch16_clip_224')
+        lib.LOGGER.info(f"using CLIP Vision Encoder ({bb_name})")
+        
+        backbone = timm.create_model(bb_name, pretrained=pretrained, num_classes=0)
+        out_dim = backbone.num_features
+
+        if kwargs.get('frozen', False):
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
+            
+        return backbone, out_dim, nn.Identity()
+
+    elif name == 'ibot':
+        bb_name = kwargs.get('bb_name', 'vit_small')
+        lib.LOGGER.info(f"using iBOT ({bb_name})")
+        
+        # Chargement direct depuis le repo officiel Facebook
+        backbone = torch.hub.load('facebookresearch/ibot', bb_name)
+        out_dim = backbone.embed_dim
+
+        if kwargs.get('frozen', False):
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
+            
+        return backbone, out_dim, nn.Identity()
+    
+    # === AJOUT DE OPENCLIP ===
+    elif name == 'openclip':
+        # Le nom du modèle et le dataset d'entraînement
+        bb_name = kwargs.get('bb_name', 'ViT-S-16')
+        pretrained_dataset = kwargs.get('pretrained_dataset', 'laion2b_s34b_b88k')
+        
+        lib.LOGGER.info(f"using OpenCLIP ({bb_name} trained on {pretrained_dataset})")
+        
+        # open_clip charge un modèle complet (Vision + Texte)
+        model = open_clip.create_model(bb_name, pretrained=pretrained_dataset)
+        
+        # Nous ne gardons que l'encodeur visuel pour la recherche d'images !
+        backbone = model.visual 
+        out_dim = backbone.output_dim # Pour ViT-S, c'est généralement 384
+
+        if kwargs.get('frozen', False):
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
+            
+        return backbone, out_dim, nn.Identity()
        
     else:
         raise ValueError(f"{name} is not recognized")
