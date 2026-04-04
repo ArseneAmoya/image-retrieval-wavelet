@@ -1,10 +1,10 @@
-  name: RetrievalNet
-  freeze_batchnorm: false
-  freeze_pos_emb: false
-  kwargs:
-    backbone_name: convnext
-    bb_name: convnext_small   # Vous pouvez changer pour 'convnext_tiny' ou 'convnext_base'
-    embed_dim: 384
-    frozen: false             # false = Fine-Tuning complet du réseau
-    without_fc: false         # On veut la couche de projection
-    with_autocast: true       # Compatible avec votre mixed precision !
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: convnext
+  bb_name: convnext_small   # Vous pouvez changer pour 'convnext_tiny' ou 'convnext_base'
+  embed_dim: 384
+  frozen: false             # false = Fine-Tuning complet du réseau
+  without_fc: false         # On veut la couche de projection
+  with_autocast: true       # Compatible avec votre mixed precision !
