@@ -1,4 +1,4 @@
-from .cub200 import Cub200Dataset
+from .cub200 import Cub200Dataset, Cub200Indomain
 from .inaturalist import INaturalistDataset
 from .inshop import InShopDataset
 from .revisited_dataset import RevisitedDataset
@@ -25,5 +25,6 @@ __all__ = [
     'Cifar100RetrievalDataset',
     'Cifar10Retrieval',
     'ImageNet100Hashing',
-    'VOC2012Hashing'
+    'VOC2012Hashing',
+    'Cub200Indomain'
 ]
