@@ -65,7 +65,7 @@ class Cub200Indomain(BaseDataset):
         labels = np.array([b for (a, b) in dataset.imgs])
 
         # ==============================================================
-        # MODIFICATION IN-DOMAIN (50% Train  & galer
+        # MODIFICATION IN-DOMAIN (50% Train  & gallery
         # / 20% Test / query pour chaque classe)
         # ==============================================================
         label_to_paths = defaultdict(list)
