@@ -52,12 +52,13 @@ class Cub200Dataset(BaseDataset):
 
 class Cub200Indomain(BaseDataset):
 
-    def __init__(self, data_dir, mode, transform=None, load_super_labels=False, **kwargs):
+    def __init__(self, data_dir, mode, transform=None, load_super_labels=False, seed=42, **kwargs):
         super().__init__(**kwargs)
         self.data_dir = data_dir
         self.mode = mode
         self.transform = transform
         self.load_super_labels = load_super_labels
+        self.seed = seed
 
         dataset = datasets.ImageFolder(os.path.join(self.data_dir, 'images'))
         paths = np.array([a for (a, b) in dataset.imgs])
@@ -81,7 +82,7 @@ class Cub200Indomain(BaseDataset):
             # Utilisation d'une seed fixe (42 + label) pour le mélange. 
             # C'est VITAL : ça garantit que les images du 'train' et du 'test' ne se mélangeront jamais
             # même si la classe est instanciée séparément pour chaque DataLoader.
-            rng = np.random.RandomState(42 + lb)
+            rng = np.random.RandomState(self.seed + lb)
             rng.shuffle(cls_paths)
 
             # Séparation à 80% (Train) / 20% (Test)
