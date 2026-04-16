@@ -7,3 +7,4 @@ kwargs:
   embed_dim: 384
   binary_config:
     nbits: 64
+  with_autocast: true
