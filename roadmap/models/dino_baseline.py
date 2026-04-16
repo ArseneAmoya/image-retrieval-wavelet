@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class DINOHashBaseline(nn.Module):
-    def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}):
+    def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}, **kwargs):
         super().__init__()
     
         self.backbone = torch.hub.load('facebookresearch/dinov2', dino_backbone)
