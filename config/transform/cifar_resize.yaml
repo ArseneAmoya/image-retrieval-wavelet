@@ -1,7 +1,7 @@
 # @package _group_
 train:
   Resize:
-    size: 224
+    size: [224, 224]
   RandomHorizontalFlip:
     p: 0.5
   ToTensor: {}
@@ -11,7 +11,7 @@ train:
 
 test:
   Resize:
-    size: 224
+    size: [224, 224]
   ToTensor: {}
   Normalize:
     mean: [0.4914, 0.4822, 0.4465]

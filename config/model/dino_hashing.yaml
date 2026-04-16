@@ -1,0 +1,13 @@
+# @package _group_
+name: DINOHashBaseline
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  dino_backbone: 'dinov2_vits14'
+  embed_dim: 384
+  binary_config:
+    nbits: 64
+norm_features: false
+without_fc: false         # On met False car on a besoin de la Hash Head
+with_autocast: true
+pretrained: true
