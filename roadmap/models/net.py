@@ -156,7 +156,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'wcnn_attention':
         lib.LOGGER.info(f"using WCNN with Attention, decom_level :, {kwargs.get('decom_level', 3)}, wave :,{ kwargs.get('wave', 'haar')} feature size : {kwargs.get('feature_size', 512)} {kwargs.get('feature_size', 512)}, coarse_only : {kwargs.get('coarse_only', False)}   ")
-        out_dim = 512
+        out_dim = kwargs.get('feature_size', 512)
         backbone = WCNN_Attention(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
     elif name == 'mtwavenet':
