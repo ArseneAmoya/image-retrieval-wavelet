@@ -422,14 +422,15 @@ class MultiDinoHashing(nn.Module):
             if bb_cfg.get('frozen', True):
                 for p in model.parameters(): p.requires_grad = False
                 model.eval()
+                model.train = lambda mode=False: None
             self.backbones.append(model)
             output_dims.append(dim)
         self.fusion_head = get_fusion_head(fusion_config, output_dims)
-        self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
+        self.bn = nn.BatchNorm1d(binary_config['nbits'])
         self.nbits = binary_config['nbits']
-        self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits)
+        self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits, bias=False)
         nn.init.normal_(self.hash_fc.weight, std=0.01)
-        nn.init.constant_(self.hash_fc.bias, 0)
+        #nn.init.constant_(self.hash_fc.bias, 0)
 
     def forward(self, x):
         features = []
@@ -437,8 +438,8 @@ class MultiDinoHashing(nn.Module):
             out = backbone(x[..., i, :, :])
             features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
         fused_embedding = self.fusion_head(features)
-        fused_embedding = self.bn(fused_embedding)
         logits = self.hash_fc(fused_embedding)
+        logits = self.bn(logits)
         return torch.tanh(logits) if self.training else torch.sign(logits)
 
 class MultiDinoHashingTF(nn.Module):
@@ -460,7 +461,7 @@ class MultiDinoHashingTF(nn.Module):
         self.num_branches = len(backbones_config)
         self.branch_embeddings = nn.Parameter(torch.randn(self.num_branches, output_dims[0]) * 0.02)
         self.fusion_head = get_fusion_head(fusion_config, output_dims)
-        self.bn = nn.BatchNorm1d(fusion_config['output_dim'])
+        self.bn = nn.BatchNorm1d(binary_config['nbits'])
         self.hash_fc = nn.Linear(fusion_config['output_dim'], binary_config['nbits'])
 
     def _load_expert_weights(self, target_backbone, checkpoint_path):
@@ -474,8 +475,9 @@ class MultiDinoHashingTF(nn.Module):
             out = backbone(x[..., i, :, :])
             features.append(out['x_norm_clstoken'] if isinstance(out, dict) else out)
         fused_embedding = self.fusion_head(features)
-        fused_embedding = self.bn(fused_embedding)
         logits = self.hash_fc(fused_embedding)
+        logits = self.bn(logits)
+
         return torch.tanh(logits) if self.training else torch.sign(logits)
 class PretrainedMultiDinoHashing(nn.Module):
     """
