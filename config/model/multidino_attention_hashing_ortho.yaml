@@ -27,6 +27,6 @@ kwargs:
     # -- Nouveaux paramètres SOTA (Hybrid Regularization) --
     num_queries: 4                     # 4 experts pour séparer les 4 bandes
     sub_band_dropout_p: 0.3            # Force le réseau à explorer LH, HL, HH
-    ortho_weight: 0.1                  # Force la division du travail (sans exploser la loss)
+    ortho_weight: 0.01                  # Force la division du travail (sans exploser la loss)
 
   with_autocast: true
