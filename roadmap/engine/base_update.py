@@ -78,6 +78,16 @@ def _batch_optimization(
             f"grad_{crit.__class__.__name__}": w for (crit, _), w in zip(criterion, grads)
         })
 
+ 
+    actual_net = net.module if hasattr(net, 'module') else net
+    
+    if hasattr(actual_net, 'fusion_head') and hasattr(actual_net.fusion_head, 'last_ortho_loss'):
+        ortho_loss = actual_net.fusion_head.last_ortho_loss
+        
+        if isinstance(ortho_loss, torch.Tensor) and ortho_loss.requires_grad:
+            losses.append(ortho_loss)
+            logs["Ortho_Loss"] = ortho_loss.item()
+
     total_loss = sum(losses)
     if scaler is None:
         total_loss.backward()

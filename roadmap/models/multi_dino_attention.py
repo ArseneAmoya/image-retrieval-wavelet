@@ -371,6 +371,19 @@ def get_fusion_head(fusion_config, output_dims):
         return TemperatureGatedFusionHead(output_dims, embed_dim, dropout, temperature=temp)
     elif fusion_type == 'self_attention':
         return AttentionFusionHead(output_dims, embed_dim, num_heads, dropout)
+    elif fusion_type == 'cross_attention_bottleneck':
+        num_queries = fusion_config.get('num_queries', 4)
+        sub_band_dropout_p = fusion_config.get('sub_band_dropout_p', 0.3)
+        ortho_weight = fusion_config.get('ortho_weight', 0.1)
+        return CrossAttentionBottleneckHead(
+            output_dims, 
+            embed_dim, 
+            num_queries=num_queries, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            sub_band_dropout_p=sub_band_dropout_p,
+            ortho_weight=ortho_weight
+        )
     
     elif fusion_type in ['cbam', 'eca']:
         return AdvancedFusionModule(
@@ -543,3 +556,84 @@ class PretrainedMultiDinoHashing(nn.Module):
         logits = self.hash_fc(x_hash)
         
         return torch.tanh(logits) if self.training else torch.sign(logits)
+    
+
+
+
+
+
+
+
+
+class CrossAttentionBottleneckHead(nn.Module):
+    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1, sub_band_dropout_p=0.3, ortho_weight=0.1):
+        super().__init__()
+        self.num_queries = num_queries
+        self.sub_band_dropout_p = sub_band_dropout_p
+        self.ortho_weight = ortho_weight
+
+        # Projections pour K et V
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() 
+            for dim in input_dims
+        ])
+
+        # Notre "FCN" générant Q (N requêtes apprenables)
+        self.query_tokens = nn.Parameter(torch.randn(1, num_queries, embed_dim))
+        nn.init.trunc_normal_(self.query_tokens, std=0.02)
+
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout)
+        )
+
+        # Projection finale pour ramener les N requêtes fusionnées à la dimension de Hashing
+        self.out_proj = nn.Linear(num_queries * embed_dim, embed_dim)
+
+        # Variable stockant la perte d'orthogonalité à chaque itération
+        self.last_ortho_loss = 0.0
+
+    def forward(self, features_list):
+        batch_size = features_list[0].shape[0]
+        device = features_list[0].device
+
+        kv_list = [proj(f) for proj, f in zip(self.projections, features_list)]
+
+        # --- HYBRID REGULARIZATION : Sub-band Dropout ---
+        # On masque LL (index 0) avec la probabilité p pendant l'entraînement
+        mask_ll = self.training and (torch.rand(1).item() < self.sub_band_dropout_p)
+        if mask_ll:
+            kv_list[0] = torch.zeros_like(kv_list[0])
+
+        kv = torch.stack(kv_list, dim=1) # [Batch, 4_Bands, Dim]
+        q = self.query_tokens.expand(batch_size, -1, -1) # [Batch, N_Queries, Dim]
+
+        # --- CROSS-ATTENTION ---
+        attn_output, attn_weights = self.attn(query=q, key=kv, value=kv)
+
+        # --- HYBRID REGULARIZATION : Macroscopic Orthogonal Loss ---
+        if mask_ll or not self.training:
+            # Pour éviter les conflits de gradients avec le dropout, on annule la loss
+            self.last_ortho_loss = torch.tensor(0.0, device=device, requires_grad=True)
+        else:
+            # attn_weights est de taille [Batch, N_Queries, N_Bands]
+            M = attn_weights.mean(dim=0) # Moyenne sur le batch -> [N_Queries, N_Bands]
+            identity = torch.eye(self.num_queries, device=device)
+            # Calcul : || M * M^T - I ||_F^2
+            self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
+
+        # --- RESIDUAL & MLP ---
+        x = self.norm1(q + attn_output)
+        x = x + self.mlp(x)
+
+        # --- FLATTEN & PROJECT ---
+        # On compresse les N requêtes [B, 4, 384] vers [B, 384] pour le Hashing
+        x = x.view(batch_size, -1) 
+        x = self.out_proj(x)
+        
+        return self.norm2(x)
