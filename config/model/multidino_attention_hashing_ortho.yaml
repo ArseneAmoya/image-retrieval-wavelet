@@ -6,13 +6,13 @@ kwargs:
   # Liste de vos 4 branches (Ondelettes : LL, LH, HL, HH)
   backbones_config:
     - name: 'dinov2_vits14'
-      frozen: true  # On gèle DINO pour laisser l'attention apprendre en premier
+      frozen: False  # On gèle DINO pour laisser l'attention apprendre en premier
     - name: 'dinov2_vits14'
-      frozen: true
+      frozen: False
     - name: 'dinov2_vits14'
-      frozen: true
+      frozen: False
     - name: 'dinov2_vits14'
-      frozen: true
+      frozen: False
 
   # Configuration du Hachage
   binary_config:
