@@ -632,8 +632,7 @@ class CrossAttentionBottleneckHead(nn.Module):
         x = x + self.mlp(x)
 
         # --- FLATTEN & PROJECT ---
-        # On compresse les N requêtes [B, 4, 384] vers [B, 384] pour le Hashing
-        x = x.view(batch_size, -1) 
+        x = x.mean(dim=1)  # Moyenne des N requêtes -> [Batch, Dim]
         x = self.out_proj(x)
         
         return self.norm2(x)
