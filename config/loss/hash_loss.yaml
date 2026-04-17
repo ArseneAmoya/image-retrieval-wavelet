@@ -1,7 +1,15 @@
-- name: SotaHashLoss
+- name: HashLoss
   weight: 1.0
   kwargs:
-    num_classes: 20
-    embedding_size: 64 # Sera écrasé en ligne de commande pour 16, 32, 64
-    quant_weight: 0.1
-    scale: 15.0
+    num_classes: 20       # 20 classes pour PASCAL VOC
+    embedding_size: 64
+        # Sera écrasé en ligne de commande pour 16 et 32 bits
+    quant_weight: 0.1     # Le poids de la pénalité de binarisation
+    scale: 15.0           # Le facteur d'échelle pour la similarité Cosinus
+
+    # La nouveauté : La configuration de l'optimiseur des Proxies
+    optimizer:
+      name: AdamW
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0001

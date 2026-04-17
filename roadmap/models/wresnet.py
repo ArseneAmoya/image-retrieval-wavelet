@@ -441,7 +441,7 @@ class WCNN(nn.Module):
         x = [self.backbone(x[:, :, 0]), self.lh_backbone(x[:,:, 1]), self.hl_backbone(x[:,:, 2]), self.hh_backbone(x[:,:, 3])]
             #print(y.shape, "all")
         if self.training:
-            return [self.ll_classifier(x[0]), self.lh_classifier(x[1]), self.hl_classifier(x[2]), self.hh_classifier(x[3])]
+            return torch.cat([self.ll_classifier(x[0]), self.lh_classifier(x[1]), self.hl_classifier(x[2]), self.hh_classifier(x[3])], dim=1)
         return F.normalize(torch.cat(x, dim=1), dim=1)
 
 class WCNN_ALL(nn.Module):
@@ -477,7 +477,7 @@ class WCNN_ALL(nn.Module):
         # in_features = self.OUT_SIZE * 7
         # self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
     def forward(self, x):
-        x = torch.cat([self.backbone(x[:, :, 0]), self.backbone2(x[:, :, 1]), self.lh_backbone(x[:,:, 2]), self.hl_backbone(x[:,:, 3]), self.hh_backbone(x[:,:, 4]), self.lh2_backbone(x[:,:, 5]), self.hl2_backbone(x[:,:, 6]), self.hh2_backbone(x[:,:, 7])], dim=1)
+        x = torch.cat([self.backbone(x[:, :, 0]), self.backbone2(x[:, :, 1]), self.lh_backbone(x[:,:, 2]), self.hl_backbone(x[:,:, 3])])#, self.hh_backbone(x[:,:, 4]), self.lh2_backbone(x[:,:, 5]), self.hl2_backbone(x[:,:, 6]), self.hh2_backbone(x[:,:, 7])], dim=1)
             #print(y.shape, "all")
         return x    
 
@@ -486,7 +486,7 @@ class WCNN_Attention(nn.Module):
     '''
         Combining WCNN with attention mechanism (CBAM or ECA)
     '''
-    def __init__(self, backbone = "wcnn", multibranch_backbone = "resnet18", pretrained=True, attention_type="cbam", *args, **kwargs) -> None:
+    def __init__(self, backbone = "wcnn", multibranch_backbone = "resnet50", pretrained=True, attention_type="cbam", *args, **kwargs) -> None:
         super(WCNN_Attention, self).__init__()
         coarse_only = kwargs.get("coarse_only", False)
 
