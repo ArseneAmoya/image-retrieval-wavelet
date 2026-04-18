@@ -628,7 +628,7 @@ class CrossAttentionBottleneckHead(nn.Module):
             self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
 
         # --- RESIDUAL & MLP ---
-        x = self.norm1(attn_output)
+        x = self.norm1(q + attn_output)
         x = x + self.mlp(x)
 
         # --- FLATTEN & PROJECT ---
