@@ -628,11 +628,12 @@ class CrossAttentionBottleneckHead(nn.Module):
             self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
 
         # --- RESIDUAL & MLP ---
-        x = self.norm1(q + attn_output)
+        x = self.norm1(attn_output)
         x = x + self.mlp(x)
 
         # --- FLATTEN & PROJECT ---
-        x = x.mean(dim=1)  # Moyenne des N requêtes -> [Batch, Dim]
+        # On compresse les N requêtes [B, 4, 384] vers [B, 384] pour le Hashing
+        x = x.view(batch_size, -1) 
         x = self.out_proj(x)
         
         return self.norm2(x)
