@@ -1,0 +1,14 @@
+- name: HHFAdapter
+  weight: 1.0
+  kwargs:
+    embedding_size: 64
+    num_classes: 20
+    alpha: 15.0
+    delta: 0.1
+    threshold: 0.0
+    beta: 0.1
+    optimizer:
+      name: AdamW
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0001

@@ -16,6 +16,9 @@ from .smooth_rank_ap import (
 from .quantization_loss import QuantizationLoss
 from .multi_loss import MultiLoss
 from .hash_loss import HashLoss
+from .hashnet_loss import HashNetAdapter
+from .csq_loss import CSQAdapter
+from .hhf_loss import HHFAdapter
 
 
 __all__ = [
@@ -34,5 +37,8 @@ __all__ = [
     'ArcFaceLoss',
     'MultiLoss',
     'QuantizationLoss',
-    'HashLoss'
+    'HashLoss',
+    'HashNetAdapter',
+    'CSQAdapter',
+    'HHFAdapter'
 ]

@@ -37,6 +37,7 @@ class HashLoss(nn.Module):
 
     def forward(self, embeddings, labels, **kwargs):
         # Normalisation L2
+        embeddings = torch.tanh(embeddings)  # Forcer les embeddings dans [-1, 1]
         norm_emb = F.normalize(embeddings, p=2, dim=1)
         norm_proxies = F.normalize(self.proxies, p=2, dim=1)
         

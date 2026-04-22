@@ -1,0 +1,7 @@
+- name: CSQAdapter
+  weight: 1.0
+  kwargs:
+    embedding_size: 64
+    num_classes: 20           
+    lambda_param: 0.0001      
+    is_multi_label: True

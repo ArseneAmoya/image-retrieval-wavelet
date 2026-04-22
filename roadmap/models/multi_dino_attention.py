@@ -453,7 +453,7 @@ class MultiDinoHashing(nn.Module):
         fused_embedding = self.fusion_head(features)
         logits = self.hash_fc(fused_embedding)
         logits = self.bn(logits)
-        return torch.tanh(logits) if self.training else torch.sign(logits)
+        return logits if self.training else torch.sign(logits)
 
 class MultiDinoHashingTF(nn.Module):
     def __init__(self, backbones_config, fusion_config, binary_config, pretrained_paths=None, **kwargs):
@@ -628,7 +628,7 @@ class CrossAttentionBottleneckHead(nn.Module):
             self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
 
         # --- RESIDUAL & MLP ---
-        x = self.norm1(q + attn_output)
+        x = self.norm1(attn_output)
         x = x + self.mlp(x)
 
         # --- FLATTEN & PROJECT ---

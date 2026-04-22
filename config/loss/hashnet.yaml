@@ -1,0 +1,7 @@
+- name: HashNetAdapter
+  weight: 1.0
+  kwargs:
+    alpha: 0.1
+    step_continuation: 20
+    embedding_size: 64
+    batches_per_epoch: 49
