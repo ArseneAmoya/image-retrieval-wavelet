@@ -10,5 +10,10 @@
     optimizer:
       name: AdamW
       kwargs:
-        lr: 0.0001
+        lr: 0.01
         weight_decay: 0.0001
+        scheduler_on_epoch:
+          name: MultiStepLR
+          kwargs:
+            milestones: [25, 50]
+            gamma: 0.3
