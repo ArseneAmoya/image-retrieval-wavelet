@@ -65,7 +65,7 @@ class HHFAdapter(nn.Module):
     def step(self):
         """Mise à jour des proxies à la fin de chaque batch."""
         self.loss_optimizer.step()
-        print("optimizer step for HHFAdapter proxies")
+        #print("optimizer step for HHFAdapter proxies")
         self.loss_optimizer.zero_grad()
         
     def state_dict(self, destination=None, prefix='', keep_vars=False):
