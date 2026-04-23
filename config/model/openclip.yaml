@@ -1,12 +1,13 @@
 name: RetrievalNet
-freeze_batch_norm: False
+freeze_batch_norm: false
 freeze_pos_embedding: False
 kwargs:
   backbone_name: openclip
-  bb_name: ViT-S-16                   # L'architecture Small
-  pretrained_dataset: laion2b_s34b_b88k # Les poids pré-entraînés sur LAION 2 Milliards
+  bb_name: "ViT-B-16"
+  pretrained_dataset: "laion2b_s34b_b88k"
   embed_dim: 384                      # La dimension de votre espace latent de test
   frozen: false                       # FINETUNING ACTIF (Mise à jour des poids)
   without_fc: false
   with_autocast: true
-  pretrained: true          # Utiliser les poids pré-entraînés sur ImageNet
+  pretrained: true
+  # Add any other required kwargs (like output_dim) if necessary

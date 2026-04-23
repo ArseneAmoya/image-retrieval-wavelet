@@ -1,0 +1,28 @@
+# @pakage _group_
+train:
+  Resize:
+    size: 256
+  RandomResizedCrop:
+    scale: [0.16, 1]
+    ratio: [0.75, 1.33]
+    size: 224
+  ColorJitter:
+    brightness: 0.25
+    contrast: 0.25
+    saturation: 0.25
+    hue: 0
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+  Normalize:
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  ToTensor: {}
+  Normalize:
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]

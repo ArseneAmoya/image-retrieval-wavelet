@@ -150,10 +150,15 @@ def base_update(
                 scaler.step(opt)
         for crit, _ in criterion:
             if hasattr(crit, 'step'):
-                if scaler is None:
-                    crit.step()
+                if getattr(crit, 'loss_optimizer', None) is not None:
+                    if scaler is not None:
+                        scaler.step(crit.loss_optimizer)
+                        if hasattr(crit, 'custom_step_logic'):
+                            crit.custom_step_logic()
+                    else:
+                        crit.step()                
                 else:
-                    scaler.step(crit.loss_optimizer)
+                    crit.step()
 
         net.zero_grad()
         _ = [crit.zero_grad() for crit, w in criterion]
