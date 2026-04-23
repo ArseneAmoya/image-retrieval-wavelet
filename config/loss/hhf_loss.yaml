@@ -12,8 +12,3 @@
       kwargs:
         lr: 0.01
         weight_decay: 0.0001
-        scheduler_on_epoch:
-          name: MultiStepLR
-          kwargs:
-            milestones: [10, 25, 60]
-            gamma: 0.3
