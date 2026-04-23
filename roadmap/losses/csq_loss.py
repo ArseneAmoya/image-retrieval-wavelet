@@ -33,7 +33,7 @@ class CSQLoss(torch.nn.Module):
             # to get sign no need to use mean, use sum here
             center_sum = y @ self.hash_targets
             random_center = self.multi_label_random_center.repeat(center_sum.shape[0], 1)
-            center_sum[center_sum == 0] = random_center[center_sum == 0]
+            center_sum[center_sum == 0] = random_center[center_sum == 0].to(center_sum.dtype) # I modified this line to avoid type issues
             hash_center = 2 * (center_sum > 0).float() - 1
         return hash_center
 
