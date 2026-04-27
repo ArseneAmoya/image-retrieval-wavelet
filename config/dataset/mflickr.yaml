@@ -1,6 +1,6 @@
 name: MIRFlickrHashing
 kwargs:
-  data_dir: ./data/mirflickr
+  data_dir: ../data/mirflickr
   
 sampler:
   name: RandomSampler
