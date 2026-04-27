@@ -228,7 +228,7 @@ class Getter:
                     "test": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='query', transform=transform),
                     "gallery": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='database', transform=transform)
                 }
-        elif (config.name == "VOC2012Hashing") and (mode == "test"):
+        elif (config.name in ["VOC2012Hashing", "MIRFlickrHashing", "COCOHashing"]) and (mode == "test"):
             dataset = {
                 "test": getattr(datasets, config.name)(transform=transform, mode="query", **config.kwargs),
                 "gallery": getattr(datasets, config.name)(transform=transform, mode="database", **config.kwargs),

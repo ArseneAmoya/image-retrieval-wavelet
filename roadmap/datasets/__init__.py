@@ -11,6 +11,7 @@ from .cifar100_v2 import Cifar100RetrievalDataset
 from .cifar10_hashing import Cifar10Retrieval
 from .imagenet100 import ImageNet100Hashing
 from .voc import VOC2012Hashing
+from .flikr_coco import MIRFlickrHashing, COCOHashing
 
 __all__ = [
     'Cub200Dataset',
@@ -26,5 +27,7 @@ __all__ = [
     'Cifar10Retrieval',
     'ImageNet100Hashing',
     'VOC2012Hashing',
-    'Cub200Indomain'
+    'Cub200Indomain',
+    'MIRFlickrHashing',
+    'COCOHashing'
 ]

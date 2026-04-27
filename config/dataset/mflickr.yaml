@@ -1,0 +1,8 @@
+name: MIRFlickrHashing
+kwargs:
+  data_dir: ./data/mirflickr
+  
+sampler:
+  name: RandomSampler
+  kwargs:
+    batch_size: 64
