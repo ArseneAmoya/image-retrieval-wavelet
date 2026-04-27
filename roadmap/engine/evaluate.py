@@ -61,7 +61,7 @@ def get_tester(
     num_workers=16,
     pca=None,
     exclude_ranks=None,
-    k=5717,
+    k=18441,
     **kwargs,
 ):
     calculator = get_accuracy_calculator(
