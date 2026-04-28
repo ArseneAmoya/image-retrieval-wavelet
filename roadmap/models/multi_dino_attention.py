@@ -186,8 +186,9 @@ class AdvancedFusionModule(nn.Module):
 
 
 class StandardFusionHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1):
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1, use_all_tokens=False):
         super().__init__()
+        self.use_all_tokens = use_all_tokens
         self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
         self.query_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
@@ -199,7 +200,10 @@ class StandardFusionHead(nn.Module):
     def forward(self, features_list):
         batch_size = features_list[0].shape[0]
         projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
-        kv = torch.stack(projected_feats, dim=1)
+        if self.use_all_tokens:
+            kv = torch.cat(projected_feats, dim=1) # Concatène les patches : [B, 4*197, D]
+        else:
+            kv = torch.stack(projected_feats, dim=1)
         q = self.query_token.expand(batch_size, -1, -1)
         attn_output, _ = self.attn(query=q, key=kv, value=kv)
         x = self.norm1(attn_output)
@@ -302,8 +306,9 @@ class TemperatureGatedFusionHead(nn.Module):
 # CORRECTION STANDARD FUSION HEAD (PROJECTION + ATTENTION + MLP)
 #=========================================================================
 class AttentionFusionHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1):
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1, use_all_tokens=False):
         super().__init__()
+        self.use_all_tokens = use_all_tokens
         # Projections individuelles pour chaque branche (LL, LH, HL, HH)
         self.projections = nn.ModuleList([
             nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() 
@@ -332,7 +337,10 @@ class AttentionFusionHead(nn.Module):
         
         # 1. Projeter et empiler
         projected_feats = [proj(f) for proj, f in zip(self.projections, features_list)]
-        kv = torch.stack(projected_feats, dim=1)
+        if self.use_all_tokens:
+            kv = torch.cat(projected_feats, dim=1) # Concatène les patches : [B, 4*197, D]
+        else:
+            kv = torch.stack(projected_feats, dim=1)
         
         # 2. Étendre la requête pour le batch
         q = self.query_token.expand(batch_size, -1, -1)
@@ -566,11 +574,12 @@ class PretrainedMultiDinoHashing(nn.Module):
 
 
 class CrossAttentionBottleneckHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1, sub_band_dropout_p=0.3, ortho_weight=0.1):
+    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1, sub_band_dropout_p=0.3, ortho_weight=0.1, use_all_tokens=False):
         super().__init__()
         self.num_queries = num_queries
         self.sub_band_dropout_p = sub_band_dropout_p
         self.ortho_weight = ortho_weight
+        self.use_all_tokens = use_all_tokens
 
         # Projections pour K et V
         self.projections = nn.ModuleList([
@@ -609,8 +618,12 @@ class CrossAttentionBottleneckHead(nn.Module):
         mask_ll = self.training and (torch.rand(1).item() < self.sub_band_dropout_p)
         if mask_ll:
             kv_list[0] = torch.zeros_like(kv_list[0])
-
-        kv = torch.stack(kv_list, dim=1) # [Batch, 4_Bands, Dim]
+        
+        if self.use_all_tokens:
+            # Si on utilise tous les tokens, on concatène les séquences de chaque bande
+            kv = torch.cat(kv_list, dim=1) # [Batch, 4*Seq_Len, Dim]
+        else:
+            kv = torch.stack(kv_list, dim=1) # [Batch, 4_Bands, Dim]
         q = self.query_tokens.expand(batch_size, -1, -1) # [Batch, N_Queries, Dim]
 
         # --- CROSS-ATTENTION ---
