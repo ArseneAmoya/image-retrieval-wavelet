@@ -629,36 +629,20 @@ class CrossAttentionBottleneckHead(nn.Module):
         # --- CROSS-ATTENTION ---
         attn_output, attn_weights = self.attn(query=q, key=kv, value=kv)
 
-    
+        # --- HYBRID REGULARIZATION : Macroscopic Orthogonal Loss ---
         if mask_ll or not self.training:
+            # Pour éviter les conflits de gradients avec le dropout, on annule la loss
             self.last_ortho_loss = torch.tensor(0.0, device=device, requires_grad=True)
         else:
-            # 1. Matrice de corrélation POUR CHAQUE IMAGE du batch.
-            # L'opérateur '@' en PyTorch gère le batching automatiquement (Batch Matrix Multiplication)
-            # [Batch, 4, Tokens] @ [Batch, Tokens, 4] -> [Batch, 4, 4]
-            corr_matrix = attn_weights @ attn_weights.transpose(1, 2)
             
-            # 2. Création de la matrice Identité (on ajoute une dimension pour le batch)
-            identity = torch.eye(self.num_queries, device=device).unsqueeze(0) # [1, 4, 4]
-            
-            # 3. Calcul optimisé de la Norme de Frobenius au carré
-            # - On soustrait l'identité (le broadcasting PyTorch gère le [Batch, 4, 4] - [1, 4, 4])
-            # - On met au carré chaque élément
-            # - On fait la somme sur les dimensions de la matrice (dim 1 et 2) pour avoir la norme de Frobenius
-            # - On fait la moyenne (mean) sur le batch entier
-            frobenius_sq = ((corr_matrix - identity) ** 2).sum(dim=(1, 2))
-            
-            self.last_ortho_loss = self.ortho_weight * frobenius_sq.mean()
-
-
-            # # attn_weights est de taille [Batch, N_Queries, N_Bands]
-            # M = attn_weights.mean(dim=0) # Moyenne sur le batch -> [N_Queries, N_Bands]
-            # identity = torch.eye(self.num_queries, device=device)
-            # # Calcul : || M * M^T - I ||_F^2
-            # self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
+            # attn_weights est de taille [Batch, N_Queries, N_Bands]
+            M = attn_weights.mean(dim=0) # Moyenne sur le batch -> [N_Queries, N_Bands]
+            identity = torch.eye(self.num_queries, device=device)
+            # Calcul : || M * M^T - I ||_F^2
+            self.last_ortho_loss = self.ortho_weight * (torch.norm(M @ M.t() - identity, p='fro') ** 2)
 
         # --- RESIDUAL & MLP ---
-        x = self.norm1(attn_output)
+        x = self.norm1(q + attn_output)
         x = x + self.mlp(x)
 
         # --- FLATTEN & PROJECT ---
