@@ -1,0 +1,12 @@
+- name: AdamW
+  params:
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0005
+  scheduler_on_epoch:
+    name: CosineAnnealingLR
+    kwargs:
+      T_max: 50
+      eta_min: 0.0000001
+  scheduler_on_step:
+  scheduler_on_val:
