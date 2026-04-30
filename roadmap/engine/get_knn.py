@@ -11,6 +11,7 @@ def get_knn(references, queries, num_k, embeddings_come_from_same_source, with_f
 
     lib.LOGGER.info("running k-nn with k=%d" % num_k)
     lib.LOGGER.info("embedding dimensionality is %d" % references.size(-1))
+    lib.LOGGER.info(f"distance metric: {distance_metric}")
 
     if with_faiss:
         distances, indices = get_knn_faiss(references, queries, num_k, distance_metric)
