@@ -21,7 +21,7 @@ kwargs:
   # Configuration du Goulot d'Étranglement (SOTA)
   fusion_config:
     use_all_tokens: True
-    type: 'cross_attention_bottleneck' # Active notre nouvelle classe
+    type: 'cross_attention_advanced' # Active notre nouvelle classe
     output_dim: 384                    # Dimension latente
     num_heads: 8                       # Multi-têtes pour des relations complexes
     dropout: 0.1
