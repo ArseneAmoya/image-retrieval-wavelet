@@ -33,3 +33,6 @@ pin_memory: True
 sub_batch: 128
 update_type: base_update
 clip_grad: null
+evaluation:
+  top_k: 5000
+  distance_metric: "hamming"

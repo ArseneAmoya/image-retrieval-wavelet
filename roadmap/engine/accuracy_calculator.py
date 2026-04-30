@@ -19,10 +19,13 @@ class CustomCalculator(AccuracyCalculator):
         self,
         *args,
         with_faiss=True,
+        distance_metric="l2",
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.with_faiss = with_faiss
+        self.distance_metric = distance_metric
+
     def label_comparison_fn(self, query_labels, reference_labels):
         if query_labels.ndim > 1 and reference_labels.ndim > 1:
             if query_labels.dim() == 2 and reference_labels.dim() == 2:
@@ -233,6 +236,7 @@ class CustomCalculator(AccuracyCalculator):
             knn_indices, knn_distances = get_knn(
                 reference, query, num_k, embeddings_come_from_same_source,
                 with_faiss=self.with_faiss,
+                distance_metric=self.distance_metric,
             )
             torch.cuda.empty_cache()
 

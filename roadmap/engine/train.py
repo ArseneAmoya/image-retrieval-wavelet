@@ -98,7 +98,10 @@ def train(
                     num_workers=config.experience.num_workers,
                     with_AP=config.experience.with_AP,
                     exclude=['map', 'rpr', 'pr_rc', 'pr'],
+                    k=config.experience.evaluation.top_k,
+                    distance_metric=config.experience.evaluation.distance_metric,
                     **dataset_dict,
+
                 )
             torch.cuda.empty_cache()
 
