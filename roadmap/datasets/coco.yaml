@@ -1,0 +1,8 @@
+name: COCOHashing
+kwargs:
+  data_dir: ../data/coco_hashing
+  
+sampler:
+  name: RandomSampler
+  kwargs:
+    batch_size: 96

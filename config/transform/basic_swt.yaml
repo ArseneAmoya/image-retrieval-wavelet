@@ -1,0 +1,19 @@
+train:
+  Resize:
+    size: 256
+  RandomResizedCrop:
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  SWTTransform:
+    level: 1
+    wavelet: 'haar'
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  SWTTransform:
+    level: 1
+    wavelet: 'haar'
