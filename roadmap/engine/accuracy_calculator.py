@@ -186,7 +186,7 @@ class CustomCalculator(AccuracyCalculator):
         return dist_h
 
 
-    def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk):
+    def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk, **kwargs):
         num_query = query.shape[0]
         topkmap = 0.0
 
@@ -215,9 +215,7 @@ class CustomCalculator(AccuracyCalculator):
 import pandas as pd
 
 def calculate_pr_rc_hashing(self, query, query_labels, reference, reference_labels, not_lone_query_mask, **kwargs):
-    """
-    Calcule les courbes PR sur toute la galerie et enregistre en csv.
-    """
+
     device = query.device
     num_query = query.shape[0]
     num_gallery = reference.shape[0]
