@@ -187,13 +187,17 @@ class CustomCalculator(AccuracyCalculator):
 
 
     def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk, **kwargs):
+        if isinstance(topk, tuple):
+            topk = topk[0]
         num_query = query.shape[0]
         topkmap = 0.0
 
         for i in range(num_query):
-            # Ground Truth (gnd) : produit scalaire des labels > 0
-            gnd = (torch.matmul(query_labels[i], reference_labels.t()) > 0).float()
-            
+            q_label = query_labels[i:i+1]
+            if q_label.ndim == 1: # Si labels 1D (classique)
+                gnd = (torch.matmul(q_label.float().unsqueeze(0), reference_labels.float().t()) > 0).float().squeeze()
+            else: # Si labels multi-hot (COCO)
+                gnd = (torch.matmul(q_label.float(), reference_labels.float().t()) > 0).float().squeeze()
             # Calcul de distance et tri
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
@@ -225,7 +229,11 @@ class CustomCalculator(AccuracyCalculator):
 
         for i in range(num_query):
             # Ground Truth et Tri
-            gnd = (torch.matmul(query_labels[i], reference_labels.t()) > 0).float()
+            q_label = query_labels[i:i+1]
+            if q_label.ndim == 1:
+                gnd = (torch.matmul(q_label.float().unsqueeze(0), reference_labels.float().t()) > 0).float().squeeze()
+            else:
+                gnd = (torch.matmul(q_label.float(), reference_labels.float().t()) > 0).float().squeeze()
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
             gnd = gnd[indices]
