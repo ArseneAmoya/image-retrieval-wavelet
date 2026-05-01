@@ -297,7 +297,6 @@ class CustomCalculator(AccuracyCalculator):
             "embeddings_come_from_same_source": embeddings_come_from_same_source,
             "label_comparison_fn": self.label_comparison_fn,
             "ref_includes_query": embeddings_come_from_same_source,
-            "top_k": self.num_top_k,
         }
 
         if any(x in self.requires_knn() for x in self.get_curr_metrics()):
@@ -332,6 +331,7 @@ class CustomCalculator(AccuracyCalculator):
             kwargs["knn_distances"] = knn_distances
             kwargs["lone_query_labels"] = lone_query_labels
             kwargs["not_lone_query_mask"] = not_lone_query_mask
+            kwargs["topk"] = self.num_top_k,
 
         if any(x in self.requires_clustering() for x in self.get_curr_metrics()):
             kwargs["cluster_labels"] = self.get_cluster_labels(**kwargs)
