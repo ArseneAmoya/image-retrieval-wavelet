@@ -666,7 +666,7 @@ class CrossAttentionBottleneckHead(nn.Module):
         return self.norm2(x)
 
 class CrossAttentionBottleneckHeadAdvanced(nn.Module):
-    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1, sub_band_dropout_p=0.3, ortho_weight=0.1, margin=0.1, use_all_tokens=False):
+    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1, sub_band_dropout_p=0.3, ortho_weight=0.1, margin=0.0, use_all_tokens=False):
         super().__init__()
         self.num_queries = num_queries
         self.sub_band_dropout_p = sub_band_dropout_p
