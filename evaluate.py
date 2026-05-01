@@ -52,7 +52,7 @@ def load_and_evaluate(
         epoch=state["epoch"],
         batch_size=bs,
         num_workers=nw,
-        exclude=['mean_average_precision'],
+        exclude=[],
         k=kwargs.get('k', 5000),
         distance_metric=kwargs.get('distance_metric', 'cosine')
     )
