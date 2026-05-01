@@ -54,6 +54,7 @@ def load_and_evaluate(
         num_workers=nw,
         exclude=['mean_average_precision'],
         k=kwargs.get('k', 5000),
+        distance_metric=kwargs.get('distance_metric', 'cosine')
     )
 
     lib.LOGGER.info("Evaluation completed...")
@@ -77,6 +78,7 @@ if __name__ == '__main__':
     parser.add_argument("--data-dir", type=str, default=None, help='Possible override of the datadir in the dataset config')
     parser.add_argument("--metric-dir", type=str, default=None, help='Path in which to store the metrics')
     parser.add_argument("--k", type=int, default=2047, help='k for the k-NN evaluation')
+    parser.add_argument("--distance-metric", type=str, default="cosine", help='distance metric for the k-NN evaluation')
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -99,6 +101,7 @@ if __name__ == '__main__':
             nw=args.nw,
             data_dir=args.data_dir,
             k=args.k,
+            distance_metric=args.distance_metric,
         )
         print()
         print()
