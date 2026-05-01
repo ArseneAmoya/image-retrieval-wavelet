@@ -194,11 +194,7 @@ class CustomCalculator(AccuracyCalculator):
 
         for i in range(num_query):
             q_label = query_labels[i:i+1]
-            if q_label.ndim == 1: # Si labels 1D (classique)
-                gnd = (torch.matmul(q_label.float().unsqueeze(0), reference_labels.float().t()) > 0).float().squeeze()
-            else: # Si labels multi-hot (COCO)
-                gnd = (torch.matmul(q_label.float(), reference_labels.float().t()) > 0).float().squeeze()
-            # Calcul de distance et tri
+            gnd = self.label_comparison_fn(query_labels[i:i+1], reference_labels).float().squeeze()            # Calcul de distance et tri
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
             gnd = gnd[indices]
@@ -229,11 +225,7 @@ class CustomCalculator(AccuracyCalculator):
 
         for i in range(num_query):
             # Ground Truth et Tri
-            q_label = query_labels[i:i+1]
-            if q_label.ndim == 1:
-                gnd = (torch.matmul(q_label.float().unsqueeze(0), reference_labels.float().t()) > 0).float().squeeze()
-            else:
-                gnd = (torch.matmul(q_label.float(), reference_labels.float().t()) > 0).float().squeeze()
+            gnd = self.label_comparison_fn(query_labels[i:i+1], reference_labels).float().squeeze()
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
             gnd = gnd[indices]
