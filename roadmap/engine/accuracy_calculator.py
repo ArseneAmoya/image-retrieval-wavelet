@@ -212,52 +212,52 @@ class CustomCalculator(AccuracyCalculator):
 
         return topkmap / num_query
     
-import pandas as pd
+    import pandas as pd
 
-def calculate_pr_rc_hashing(self, query, query_labels, reference, reference_labels, not_lone_query_mask, **kwargs):
+    def calculate_pr_rc_hashing(self, query, query_labels, reference, reference_labels, not_lone_query_mask, **kwargs):
 
-    device = query.device
-    num_query = query.shape[0]
-    num_gallery = reference.shape[0]
-    
-    all_prec = torch.zeros((num_query, num_gallery), device=device)
-    all_recall = torch.zeros((num_query, num_gallery), device=device)
+        device = query.device
+        num_query = query.shape[0]
+        num_gallery = reference.shape[0]
+        
+        all_prec = torch.zeros((num_query, num_gallery), device=device)
+        all_recall = torch.zeros((num_query, num_gallery), device=device)
 
-    for i in range(num_query):
-        # Ground Truth et Tri
-        gnd = (torch.matmul(query_labels[i], reference_labels.t()) > 0).float()
-        hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
-        indices = torch.argsort(hamm)
-        gnd = gnd[indices]
+        for i in range(num_query):
+            # Ground Truth et Tri
+            gnd = (torch.matmul(query_labels[i], reference_labels.t()) > 0).float()
+            hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
+            indices = torch.argsort(hamm)
+            gnd = gnd[indices]
 
-        # Calcul cumulé pour Precision et Recall
-        all_sim_num = torch.sum(gnd)
-        if all_sim_num > 0:
-            prec_sum = torch.cumsum(gnd, dim=0)
-            return_images = torch.arange(1, num_gallery + 1, device=device).float()
-            
-            all_prec[i, :] = prec_sum / return_images
-            all_recall[i, :] = prec_sum / all_sim_num
+            # Calcul cumulé pour Precision et Recall
+            all_sim_num = torch.sum(gnd)
+            if all_sim_num > 0:
+                prec_sum = torch.cumsum(gnd, dim=0)
+                return_images = torch.arange(1, num_gallery + 1, device=device).float()
+                
+                all_prec[i, :] = prec_sum / return_images
+                all_recall[i, :] = prec_sum / all_sim_num
 
-    # Filtrage : not_lone_query_mask ET rappel final == 1.0
-    # On identifie les indices qui respectent les deux conditions
-    valid_recall = torch.where(all_recall[:, -1] == 1.0)[0]
-    valid_queries = torch.where(not_lone_query_mask)[0]
-    
-    # Intersection des indices valides
-    combined_indices = [idx for idx in valid_queries.tolist() if idx in valid_recall.tolist()]
+        # Filtrage : not_lone_query_mask ET rappel final == 1.0
+        # On identifie les indices qui respectent les deux conditions
+        valid_recall = torch.where(all_recall[:, -1] == 1.0)[0]
+        valid_queries = torch.where(not_lone_query_mask)[0]
+        
+        # Intersection des indices valides
+        combined_indices = [idx for idx in valid_queries.tolist() if idx in valid_recall.tolist()]
 
-    if len(combined_indices) > 0:
-        cum_prec = torch.mean(all_prec[combined_indices], dim=0)
-        cum_recall = torch.mean(all_recall[combined_indices], dim=0)
+        if len(combined_indices) > 0:
+            cum_prec = torch.mean(all_prec[combined_indices], dim=0)
+            cum_recall = torch.mean(all_recall[combined_indices], dim=0)
 
-        # Enregistrement dans pr_rc.csv
-        pd.DataFrame({
-            "pr": cum_prec.cpu().numpy(),
-            "rc": cum_recall.cpu().numpy()
-        }).to_csv("pr_rc.csv", index=False)
-    
-    return 0
+            # Enregistrement dans pr_rc.csv
+            pd.DataFrame({
+                "pr": cum_prec.cpu().numpy(),
+                "rc": cum_recall.cpu().numpy()
+            }).to_csv("pr_rc.csv", index=False)
+        
+        return 0
 
 
     def requires_knn(self):
