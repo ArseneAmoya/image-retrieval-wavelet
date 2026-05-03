@@ -160,6 +160,7 @@ class CustomCalculator(AccuracyCalculator):
         indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
         mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
         dists = knn_distances[mask] if self.distance_metric in ["hamming", "cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
+        
         return r_map(
             preds=dists,
             target=relevances[mask],
@@ -359,7 +360,10 @@ def get_accuracy_calculator(
             exclude.append(f'recall_at_{r}')
 
     return CustomCalculator(
-        exclude=exclude,
+        exclude=['NMI', 'AMI', "mean_reciprocal_rank", "mean_average_precision",
+                              "precision_at_1","recall_at_1","r_precision",'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
+                              "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
+                                "recall_at_2", "recall_at_10"],
         k=k,
         **kwargs,
     )
