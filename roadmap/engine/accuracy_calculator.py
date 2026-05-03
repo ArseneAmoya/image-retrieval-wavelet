@@ -134,7 +134,7 @@ class CustomCalculator(AccuracyCalculator):
         relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
         indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
         mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
-        dists = knn_distances[mask] if self.distance_metric in ["hamming", "cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
+        dists = knn_distances[mask] if self.distance_metric in ["cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
         dists += torch.arange(dists.size(0), device=dists.device).float() * 1e-8 # Avoid torchmetrics deleting samples with 0 similarity
         return r_precision(
             preds=dists,
@@ -147,7 +147,7 @@ class CustomCalculator(AccuracyCalculator):
         relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
         indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
         mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
-        dists = knn_distances[mask] if self.distance_metric in ["hamming", "cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
+        dists = knn_distances[mask] if self.distance_metric in ["cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
         return r_precision(
             preds=dists,
             target=relevances[mask],
@@ -159,7 +159,7 @@ class CustomCalculator(AccuracyCalculator):
         relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
         indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
         mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
-        dists = knn_distances[mask] if self.distance_metric in ["hamming", "cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
+        dists = knn_distances[mask] if self.distance_metric in ["cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
         return r_map(
             preds=dists,
             target=relevances[mask],
@@ -171,7 +171,7 @@ class CustomCalculator(AccuracyCalculator):
         relevances = self.label_comparison_fn(query_labels[:, None], knn_labels)
         indexes = torch.arange(query_labels.size(0), device=query_labels.device).unsqueeze(1).repeat(1, knn_labels.size(1))
         mask = not_lone_query_mask.unsqueeze(1).expand_as(knn_labels)
-        dists = knn_distances[mask] if self.distance_metric in ["hamming", "cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
+        dists = knn_distances[mask] if self.distance_metric in ["cosine"] else (1/(knn_distances[mask]+1))  # Avoid division by zero
         pr, rc, _ = pr_rc(preds=dists,  # Avoid division by zero
             target=relevances[mask],
             indexes= indexes[mask]

@@ -76,7 +76,7 @@ def get_tester(
         batch_size=batch_size,
         dataloader_num_workers=num_workers,
         accuracy_calculator=calculator,
-        data_device=None,
+        data_device=torch.device("cpu"),  # Store on CPU to avoid OOM for large datasets like MS COCO
         pca=pca,
     )
 
