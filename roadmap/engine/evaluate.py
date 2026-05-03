@@ -38,19 +38,19 @@ class GlobalEmbeddingSpaceTester(testers.GlobalEmbeddingSpaceTester):
                     labels = torch.zeros(
                         len(dataloader.dataset),
                         label.size(1),
-                        device=self.data_device,
+                        device=torch.device('cpu'),
                         dtype=label.dtype,
                     )
                     all_q = torch.zeros(
                         len(dataloader.dataset),
                         q.size(1),
-                        device=self.data_device,
+                        device=torch.device('cpu'),
                         dtype=q.dtype,
                     )
                 #print(f"Batch {i} - {q.shape} - {label.shape}")
                 e = s + q.size(0)
-                all_q[s:e] = q
-                labels[s:e] = label
+                all_q[s:e] = q.cpu()
+                labels[s:e] = label.cpu()
                 s = e
         return all_q, labels
 
