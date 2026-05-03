@@ -1,5 +1,12 @@
 import torch
 def create_label_matrix(labels, other_labels=None):
+    # Note/Safeguard:
+    # If your background class is stored as class 0 and set to 1 for all images,
+    # or if the data loader pads unused slots with 0 and 0 maps to a valid class,
+    # torch.matmul will count those background/padding 1s as valid intersections!
+    # This causes artificial intersections between ALL images and artificially boosts mAP.
+    # Make sure labels corresponding to padding/background are removed or masked!
+    
     labels = labels.squeeze()
 
     if labels.ndim == 1:
