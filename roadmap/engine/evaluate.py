@@ -72,11 +72,11 @@ def get_tester(
 
     return GlobalEmbeddingSpaceTester(
         normalize_embeddings=normalize_embeddings,
-        data_and_label_getter=lambda batch: (batch["image"], batch["label"]),
+        data_and_label_getter=lambda batch: (batch["image"].cuda(), batch["label"]),
         batch_size=batch_size,
         dataloader_num_workers=num_workers,
         accuracy_calculator=calculator,
-        data_device=None,
+        data_device=torch.device("cpu"),
         pca=pca,
     )
 
