@@ -32,11 +32,9 @@ def get_knn_faiss(references, queries, num_k, distance_metric="l2"):
     ref_np = c_f.to_numpy(references).astype(np.float32)
     que_np = c_f.to_numpy(queries).astype(np.float32)
 
-    if distance_metric in ["cosine"]:
+    if distance_metric in ["hamming", "cosine"]:
         index = faiss.IndexFlatIP(d) 
     else:
-        # L2 is equivalent to Hamming distance for {0, 1} and {-1, 1} binarized vectors.
-        # IP (Inner Product) on {0, 1} favors vectors with many 1s.
         index = faiss.IndexFlatL2(d)
 
     try:
@@ -62,14 +60,14 @@ def get_knn_faiss(references, queries, num_k, distance_metric="l2"):
 def get_knn_torch(references, queries, num_k, distance_metric="l2"):
     lib.LOGGER.debug(f"Computing k-nn with torch (metric: {distance_metric})")
 
-    if distance_metric in ["cosine"]:
+    if distance_metric in ["hamming", "cosine"]:
+        # Les vecteurs étant déjà binarisés ou normalisés,
+        # le produit scalaire donne directement la similarité[cite: 1]
         scores = queries @ references.t()
         distances, indices = torch.topk(scores, num_k, largest=True)
     else:
+        # Distance Euclidienne (L2) : on minimise la distance[cite: 1]
         dist_matrix = torch.cdist(queries, references, p=2)
-        if distance_metric == "hamming":
-            # squared L2 corresponds to Hamming distance for {0, 1} or {-1, 1} vectors
-            dist_matrix = dist_matrix ** 2
         distances, indices = torch.topk(dist_matrix, num_k, largest=False)
 
     return distances, indices
