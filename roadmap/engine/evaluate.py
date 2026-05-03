@@ -67,19 +67,21 @@ def get_tester(
     calculator = get_accuracy_calculator(
         exclude_ranks=exclude_ranks,
         k=k,
+        device=torch.device("cpu"),
         **kwargs,
     )
 
     return GlobalEmbeddingSpaceTester(
         normalize_embeddings=normalize_embeddings,
-        data_and_label_getter=lambda batch: (batch["image"].cuda(), batch["label"]),
+        data_and_label_getter=get_data,
         batch_size=batch_size,
         dataloader_num_workers=num_workers,
         accuracy_calculator=calculator,
-        data_device=torch.device("cpu"),
+        data_device=None,
         pca=pca,
     )
-
+def get_data(batch):
+    return batch["image"].cuda(), batch["label"]
 
 @lib.get_set_random_state
 def evaluate(
