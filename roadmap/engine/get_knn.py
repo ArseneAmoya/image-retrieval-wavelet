@@ -61,7 +61,7 @@ def get_knn_torch(references, queries, num_k, distance_metric="l2"):
     lib.LOGGER.debug(f"Computing k-nn with torch (metric: {distance_metric})")
 
     if distance_metric in ["hamming", "cosine"]:
-        # Les vecteurs étant déjà binarisés ou normalisés, 
+        # Les vecteurs étant déjà binarisés ou normalisés,
         # le produit scalaire donne directement la similarité[cite: 1]
         scores = queries @ references.t()
         distances, indices = torch.topk(scores, num_k, largest=True)
