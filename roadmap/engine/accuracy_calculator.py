@@ -277,9 +277,10 @@ class CustomCalculator(AccuracyCalculator):
         return_indices=False,
     ):
         [query, reference, query_labels, reference_labels] = [
-            c_f.numpy_to_torch(x)
+            c_f.numpy_to_torch(x).to(self.device)
             for x in [query, reference, query_labels, reference_labels]
         ]
+        
 
         # Debug: print shapes and dtypes
         # print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
