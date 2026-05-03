@@ -23,6 +23,7 @@ class CustomCalculator(AccuracyCalculator):
         **kwargs
     ):
         super().__init__(*args, **kwargs)
+        lib.LOGGER.info(f"Initializing CustomCalculator with with_faiss={with_faiss} and distance_metric={distance_metric} device: {self.device}")
         self.with_faiss = with_faiss
         self.distance_metric = distance_metric
         self.num_top_k = kwargs.get('k', None)
@@ -358,6 +359,8 @@ def get_accuracy_calculator(
     if exclude_ranks:
         for r in exclude_ranks:
             exclude.append(f'recall_at_{r}')
+    lib.LOGGER.info(f"Excluding metrics: {exclude}")
+    lib.LOGGER.info(f"device : {torch.device('cpu')}")   
 
     return CustomCalculator(
         exclude=['NMI', 'AMI', "mean_reciprocal_rank", "mean_average_precision",
@@ -365,5 +368,6 @@ def get_accuracy_calculator(
                               "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
                                 "recall_at_2", "recall_at_10","map"],
         k=k,
+        device=torch.device("cpu"),
         **kwargs,
     )
