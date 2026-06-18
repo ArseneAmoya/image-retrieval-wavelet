@@ -15,7 +15,9 @@ kwargs:
     type: "temperature_gated"
     temperature: 0.1
     output_dim: 384
+    num_heads: 8
     dropout: 0.0
   binary_config:
     nbits: 64
   pretrained_ckpt_path: null
+  with_autocast: true

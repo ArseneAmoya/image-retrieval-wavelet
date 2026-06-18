@@ -13,6 +13,7 @@ from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attent
 from .resnet_ce import ResNetCE
 from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
 from .dino_models import DinoModel_ce, Multi_DinoModel
+from transformers import AutoModel
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -327,6 +328,21 @@ def get_backbone(name, pretrained=True, **kwargs):
             backbone.eval()
         pooling = nn.Identity()
 
+    elif name == 'siglip2':
+        bb_name = kwargs.get('bb_name', 'google/siglip2-base-patch16-224')
+        lib.LOGGER.info(f"using SigLIP2 Vision Encoder ({bb_name})")
+        
+        backbone = AutoModel.from_pretrained(bb_name).vision_model
+
+        out_dim = backbone.config.hidden_size 
+
+        if kwargs.get('frozen', False):
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
+        pooling = nn.Identity()
+
+
             
 
     elif name == 'ibot':
@@ -354,8 +370,6 @@ def get_backbone(name, pretrained=True, **kwargs):
         
         # open_clip charge un modèle complet (Vision + Texte)
         model = open_clip.create_model(bb_name, pretrained=pretrained_dataset)
-        
-        # Nous ne gardons que l'encodeur visuel pour la recherche d'images !
         backbone = model.visual 
         out_dim = backbone.output_dim # Pour ViT-S, c'est généralement 384
 

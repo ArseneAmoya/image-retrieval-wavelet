@@ -1,0 +1,13 @@
+name: RetrievalNet
+freeze_batch_norm: false
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: siglip2
+  bb_name: "google/siglip2-base-patch16-224"
+  pretrained_dataset: ""
+  embed_dim: 384                      # La dimension de votre espace latent de test
+  frozen: false                       # FINETUNING ACTIF (Mise à jour des poids)
+  without_fc: false
+  with_autocast: true
+  pretrained: true
+  # Add any other required kwargs (like output_dim) if necessary

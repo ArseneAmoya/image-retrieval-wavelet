@@ -8,7 +8,7 @@ from .base_dataset import BaseDataset
 
 class VOC2012Hashing(BaseDataset):
     """
-    Dataset PASCAL VOC 2012 (Multi-Label) 100% compatible ROADMAP.
+    Dataset PASCAL VOC 2012 (Multi-Label).
     Inclut le téléchargement automatique (Plug & Play).
     """
     VOC_CLASSES = (
