@@ -14,6 +14,7 @@ from .resnet_ce import ResNetCE
 from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
 from .dino_models import DinoModel_ce, Multi_DinoModel
 from transformers import AutoModel
+from .hugging_face_models import HuggingFaceVisionWrapper
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -332,9 +333,9 @@ def get_backbone(name, pretrained=True, **kwargs):
         bb_name = kwargs.get('bb_name', 'google/siglip2-base-patch16-224')
         lib.LOGGER.info(f"using SigLIP2 Vision Encoder ({bb_name})")
         
-        backbone = AutoModel.from_pretrained(bb_name).vision_model
+        backbone = HuggingFaceVisionWrapper(bb_name, pretrained=pretrained, **kwargs)
 
-        out_dim = backbone.config.hidden_size 
+        out_dim = backbone.feature_dim
 
         if kwargs.get('frozen', False):
             for p in backbone.parameters():
