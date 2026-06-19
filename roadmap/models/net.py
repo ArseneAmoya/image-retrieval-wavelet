@@ -342,6 +342,20 @@ def get_backbone(name, pretrained=True, **kwargs):
                 p.requires_grad = False
             backbone.eval()
         pooling = nn.Identity()
+    
+    elif name == 'metaclip2':
+        bb_name = kwargs.get('bb_name', 'facebook/metaclip-2-worldwide-b16')
+        lib.LOGGER.info(f"using MetaCLIP2 Vision Encoder ({bb_name})")
+        
+        backbone = HuggingFaceVisionWrapper(bb_name, pretrained=pretrained, **kwargs)
+
+        out_dim = backbone.feature_dim
+
+        if kwargs.get('frozen', False):
+            for p in backbone.parameters():
+                p.requires_grad = False
+            backbone.eval()
+        pooling = nn.Identity()
 
 
             
