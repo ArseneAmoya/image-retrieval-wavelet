@@ -365,9 +365,9 @@ def get_accuracy_calculator(
 
     return CustomCalculator(
         exclude=['NMI', 'AMI', "mean_reciprocal_rank",
-                              "precision_at_1","recall_at_1","r_precision",'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
+                              "precision_at_1","recall_at_1", "recall_at_1000", "recall_at_100",
                               "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
-                                "recall_at_2", "recall_at_10"],
+                                "recall_at_2", "recall_at_10", "pr_rc_hashing"],
         k=k,
         #device=torch.device("cpu"),
         **kwargs,
