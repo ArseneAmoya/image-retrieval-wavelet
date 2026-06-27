@@ -112,6 +112,8 @@ def train(
                         loss = crit(outputs, fixed_labels)
                 else:
                     scores =  torch.mm(outputs, outputs.t())
+                    label_matrix = lib.create_label_matrix(fixed_labels)
+
                     loss = crit(scores, label_matrix)
 
                 loss = loss.mean()
@@ -126,8 +128,6 @@ def train(
             else:
                 scaler.scale(total_loss).backward()
 
-
-            total_loss.backward() 
             
             # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
