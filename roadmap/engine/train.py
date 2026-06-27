@@ -10,7 +10,7 @@ from .base_update import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
-from model_hooks import MBWDinoInstrumentor
+from roadmap.model_hooks import MBWDinoInstrumentor
 
 
 def train(
@@ -102,8 +102,6 @@ def train(
             # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
 
-            # CORRECTION 4 : Nettoyage post-analyse (Vital !)
-            # On jette les gradients de notre subset pour ne pas polluer l'époque e+1
             if isinstance(optimizer, dict):
                 for opt in optimizer.values():
                     opt.zero_grad()
