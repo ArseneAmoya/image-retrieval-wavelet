@@ -1,4 +1,4 @@
-from mbw_dino_hooks import MBWDinoInstrumentor
+from .mbw_dino_hooks import MBWDinoInstrumentor
 
 
 __all__ = [
