@@ -40,15 +40,26 @@ def train(
 
     # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)
     target_epochs = [1, 5, 10, 25, 50]
-    fixed_analysis_sampler = torch.utils.data.SequentialSampler(test_dts)
-    fixed_analysis_dataloader = DataLoader(
-        test_dts,
-        batch_size=64, # Choisis une taille qui rentre en mémoire
-        sampler=fixed_analysis_sampler,
-        num_workers=config.experience.num_workers,
-        pin_memory=config.experience.pin_memory,
-        drop_last=False
+    lib.LOGGER.info("Extraction du batch d'analyse fixe depuis train_dts...")
+    
+    # On crée un chargeur temporaire utilisant TON sampler d'entraînement
+    # num_workers=0 est utilisé ici pour extraire le batch instantanément sans surcharger le CPU
+    temp_loader = DataLoader(
+        train_dts,
+        batch_sampler=sampler, 
+        num_workers=0 
     )
+    
+    # On vole le premier batch et on le fige en mémoire !
+    fixed_images, fixed_labels = next(iter(temp_loader))
+    
+    # On place les données sur le GPU
+    device = next(net.parameters()).device
+    fixed_images = fixed_images.to(device)
+    
+    # Si ton criterion a besoin des labels pour calculer la loss d'analyse :
+    if isinstance(fixed_labels, torch.Tensor):
+        fixed_labels = fixed_labels.to(device)
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
 
         lib.LOGGER.info(f"Training : @epoch #{e} for model {config.experience.experiment_name}")
@@ -77,39 +88,29 @@ def train(
         instrumentor.gradients.clear()
 
         if e in target_epochs:
-            net.train() # Mode train indispensable pour activer le backward
-
-            # CORRECTION 2 : S'assurer que les données sont sur le bon device
-            # (Assure-toi d'avoir créé 'fixed_analysis_dataloader' avant le 'for e in range(...)')
-            images_subset, labels_subset = next(iter(fixed_analysis_dataloader))
-            
-            # Récupération automatique du device actuel du modèle
-            device = next(net.parameters()).device 
-            images_subset = images_subset.to(device)
-            labels_subset = labels_subset.to(device) # Ajuste si label_subset est un dictionnaire
-            
-            # CORRECTION 3 : Gestion du dictionnaire d'optimiseurs
             if isinstance(optimizer, dict):
-                for opt in optimizer.values():
-                    opt.zero_grad()
+                for opt in optimizer.values(): opt.zero_grad()
+            else:
+                optimizer.zero_grad()
+            net.train() # Mode train indispensable pour le backward
+            
+            # Gestion de l'optimiseur
+            if isinstance(optimizer, dict):
+                for opt in optimizer.values(): opt.zero_grad()
             else:
                 optimizer.zero_grad()
 
-            outputs = net(images_subset)
-            loss = criterion(outputs, labels_subset)
-            loss.backward() # Remplit les hooks de gradients !
+            # ON UTILISE DIRECTEMENT NOTRE TENSEUR PRÉ-CHARGÉ (Plus besoin de next(iter(...)))
+            outputs = net(fixed_images)
+            loss = criterion(outputs, fixed_labels)
+            loss.backward() 
             
             # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
-
             if isinstance(optimizer, dict):
-                for opt in optimizer.values():
-                    opt.zero_grad()
+                for opt in optimizer.values(): opt.zero_grad()
             else:
                 optimizer.zero_grad()
-
-        for sch in scheduler["on_epoch"]:
-            sch.step()
 
         
         end_train_time = time()
