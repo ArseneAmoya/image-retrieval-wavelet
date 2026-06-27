@@ -3,10 +3,11 @@ from roadmap.getter import Getter
 from omegaconf import OmegaConf
 from PIL import Image
 import torch
+from torchinfo import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/cub.yaml'):
+def test_transforms(transform_cfg_path='config/transform/cub_swt.yaml'):
     # Charge la config
     transform_cfg = OmegaConf.load(transform_cfg_path)
     print(transform_cfg)
@@ -41,7 +42,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/siglip2.yaml')
+    model_configs = OmegaConf.load('config/model/multidino_attention.yaml')
 
     getter = Getter()
     # Instanciation du modèle DetailTesterNet
@@ -72,6 +73,8 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
     model.eval()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
+    
+    print(summary(model, input_size=x_transformed.unsqueeze(0).shape))
     
     if isinstance(output, list):
         print("Output is a list of embeddings from each branch.")

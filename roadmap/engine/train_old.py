@@ -10,7 +10,6 @@ from .base_update import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
-from model_hooks import MBWDinoInstrumentor
 
 
 def train(
@@ -35,20 +34,6 @@ def train(
     best_model = None
 
     metrics = None
-    instrumentor = MBWDinoInstrumentor(net, save_dir=f'{log_dir}/analysis_logs_voc')
-    instrumentor.register_hooks()
-
-    # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)
-    target_epochs = [1, 5, 10, 25, 50]
-    fixed_analysis_sampler = torch.utils.data.SequentialSampler(val_dts)
-    fixed_analysis_dataloader = DataLoader(
-        val_dts,
-        batch_size=64, # Choisis une taille qui rentre en mémoire
-        sampler=fixed_analysis_sampler,
-        num_workers=config.experience.num_workers,
-        pin_memory=config.experience.pin_memory,
-        drop_last=False
-    )
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
 
         lib.LOGGER.info(f"Training : @epoch #{e} for model {config.experience.experiment_name}")
@@ -73,47 +58,10 @@ def train(
             epoch=e,
             memory=memory,
         )
-        instrumentor.features.clear()
-        instrumentor.gradients.clear()
-
-        if e in target_epochs:
-            net.train() # Mode train indispensable pour activer le backward
-
-            # CORRECTION 2 : S'assurer que les données sont sur le bon device
-            # (Assure-toi d'avoir créé 'fixed_analysis_dataloader' avant le 'for e in range(...)')
-            images_subset, labels_subset = next(iter(fixed_analysis_dataloader))
-            
-            # Récupération automatique du device actuel du modèle
-            device = next(net.parameters()).device 
-            images_subset = images_subset.to(device)
-            labels_subset = labels_subset.to(device) # Ajuste si label_subset est un dictionnaire
-            
-            # CORRECTION 3 : Gestion du dictionnaire d'optimiseurs
-            if isinstance(optimizer, dict):
-                for opt in optimizer.values():
-                    opt.zero_grad()
-            else:
-                optimizer.zero_grad()
-
-            outputs = net(images_subset)
-            loss = criterion(outputs, labels_subset)
-            loss.backward() # Remplit les hooks de gradients !
-            
-            # Sauvegarde des tenseurs sur le disque
-            instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
-
-            # CORRECTION 4 : Nettoyage post-analyse (Vital !)
-            # On jette les gradients de notre subset pour ne pas polluer l'époque e+1
-            if isinstance(optimizer, dict):
-                for opt in optimizer.values():
-                    opt.zero_grad()
-            else:
-                optimizer.zero_grad()
 
         for sch in scheduler["on_epoch"]:
             sch.step()
 
-        
         end_train_time = time()
 
         dataset_dict = {}
