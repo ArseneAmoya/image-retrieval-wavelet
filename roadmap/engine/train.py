@@ -40,9 +40,9 @@ def train(
 
     # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)
     target_epochs = [1, 5, 10, 25, 50]
-    fixed_analysis_sampler = torch.utils.data.SequentialSampler(val_dts)
+    fixed_analysis_sampler = torch.utils.data.SequentialSampler(test_dts)
     fixed_analysis_dataloader = DataLoader(
-        val_dts,
+        test_dts,
         batch_size=64, # Choisis une taille qui rentre en mémoire
         sampler=fixed_analysis_sampler,
         num_workers=config.experience.num_workers,
