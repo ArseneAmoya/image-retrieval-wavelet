@@ -102,8 +102,32 @@ def train(
 
             # ON UTILISE DIRECTEMENT NOTRE TENSEUR PRÉ-CHARGÉ (Plus besoin de next(iter(...)))
             outputs = net(fixed_images)
-            loss = criterion(outputs, fixed_labels)
-            loss.backward() 
+
+            losses = []
+            for crit, weight in criterion:
+                if hasattr(crit, 'takes_embeddings'):
+                    if fixed_labels.ndim == 1 or (fixed_labels.ndim == 2 and fixed_labels.size(1) == 1):
+                        loss = crit(outputs, fixed_labels.view(-1))
+                    else:
+                        loss = crit(outputs, fixed_labels)
+                else:
+                    scores =  torch.mm(outputs, outputs.t())
+                    loss = crit(scores, label_matrix)
+
+                loss = loss.mean()
+                if weight == 'adaptative':
+                    losses.append(loss)
+                else:
+                    losses.append(weight * loss)
+
+            total_loss = sum(losses)
+            if scaler is None:
+                total_loss.backward()
+            else:
+                scaler.scale(total_loss).backward()
+
+
+            total_loss.backward() 
             
             # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
