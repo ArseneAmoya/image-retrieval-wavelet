@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from roadmap.models import net
 import roadmap.utils as lib
 from .base_update import base_update
 from .evaluate import evaluate
@@ -50,16 +51,15 @@ def train(
         num_workers=0 
     )
     
-    # On vole le premier batch et on le fige en mémoire !
-    fixed_images, fixed_labels = next(iter(temp_loader))
+    fixed_batch = next(iter(temp_loader))
+    device = next(net.parameters()).device
+    
+    # 2. On utilise tes clés exactes !
+    fixed_images = fixed_batch["image"].to(device)
+    fixed_labels = fixed_batch["label"].to(device)
     
     # On place les données sur le GPU
-    device = next(net.parameters()).device
-    fixed_images = fixed_images.to(device)
-    
-    # Si ton criterion a besoin des labels pour calculer la loss d'analyse :
-    if isinstance(fixed_labels, torch.Tensor):
-        fixed_labels = fixed_labels.to(device)
+
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
 
         lib.LOGGER.info(f"Training : @epoch #{e} for model {config.experience.experiment_name}")
