@@ -92,7 +92,7 @@ def train(
                 for opt in optimizer.values(): opt.zero_grad()
             else:
                 optimizer.zero_grad()
-            net.train() # Mode train indispensable pour le backward
+            net.eval()
             
             # Gestion de l'optimiseur
             if isinstance(optimizer, dict):
@@ -135,7 +135,8 @@ def train(
                 for opt in optimizer.values(): opt.zero_grad()
             else:
                 optimizer.zero_grad()
-
+        for sch in scheduler["on_epoch"]:
+            sch.step()
         
         end_train_time = time()
 
