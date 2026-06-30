@@ -40,7 +40,7 @@ def train(
     instrumentor.register_hooks()
 
     # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)
-    target_epochs = [1, 5, 10, 25, 50]
+    target_epochs = [1, 5, 10, 25, 40, 50]
     lib.LOGGER.info("Extraction du batch d'analyse fixe depuis train_dts...")
     
     # On crée un chargeur temporaire utilisant TON sampler d'entraînement
@@ -52,12 +52,15 @@ def train(
     )
     
     fixed_batch = next(iter(temp_loader))
+    
     device = next(net.parameters()).device
     
     # 2. On utilise tes clés exactes !
     fixed_images = fixed_batch["image"].to(device)
     fixed_labels = fixed_batch["label"].to(device)
-    
+    #sauver aussi les images et labels
+    torch.save(fixed_images.cpu(), f"{log_dir}/fixed_images.pt")
+    torch.save(fixed_labels.cpu(), f"{log_dir}/fixed_labels.pt")
     # On place les données sur le GPU
 
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
