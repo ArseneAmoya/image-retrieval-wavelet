@@ -95,7 +95,7 @@ def train(
                 for opt in optimizer.values(): opt.zero_grad()
             else:
                 optimizer.zero_grad()
-            net.eval()
+            net.train()
             
             # Gestion de l'optimiseur
             if isinstance(optimizer, dict):
@@ -103,7 +103,6 @@ def train(
             else:
                 optimizer.zero_grad()
 
-            # ON UTILISE DIRECTEMENT NOTRE TENSEUR PRÉ-CHARGÉ (Plus besoin de next(iter(...)))
             outputs = net(fixed_images)
 
             losses = []
@@ -131,16 +130,6 @@ def train(
             else:
                 scaler.scale(total_loss).backward()
 
-            # --- DÉBUT DU TEST DE VÉRITÉ ---
-            # On vérifie si un poids profond du ViT a reçu un gradient
-            test_param = net.backbones[0].blocks[-1].mlp.fc1.weight
-            if test_param.grad is None:
-                print(f"🚨 EPOCH {e}: LE GRAPHE EST COUPÉ ! Aucun gradient n'atteint le ViT.")
-            else:
-                grad_norm = torch.norm(test_param.grad).item()
-                print(f"✅ EPOCH {e}: Gradient ViT reçu ! Norme = {grad_norm}")
-            # --- FIN DU TEST DE VÉRITÉ ---
-            # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
             if isinstance(optimizer, dict):
                 for opt in optimizer.values(): opt.zero_grad()
