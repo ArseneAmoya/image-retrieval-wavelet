@@ -131,6 +131,21 @@ def train(
             else:
                 scaler.scale(total_loss).backward()
 
+            if scaler is None:
+                total_loss.backward()
+            else:
+                scaler.scale(total_loss).backward()
+
+            # --- DÉBUT DU TEST DE VÉRITÉ ---
+            # On vérifie si un poids profond du ViT a reçu un gradient
+            test_param = net.backbones[0].blocks[-1].mlp.fc1.weight
+            if test_param.grad is None:
+                print(f"🚨 EPOCH {e}: LE GRAPHE EST COUPÉ ! Aucun gradient n'atteint le ViT.")
+            else:
+                grad_norm = torch.norm(test_param.grad).item()
+                print(f"✅ EPOCH {e}: Gradient ViT reçu ! Norme = {grad_norm}")
+            # --- FIN DU TEST DE VÉRITÉ ---
+
             
             # Sauvegarde des tenseurs sur le disque
             instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
