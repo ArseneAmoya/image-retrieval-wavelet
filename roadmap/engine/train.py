@@ -11,7 +11,7 @@ from .base_update import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
-from roadmap.model_hooks import MBWDinoInstrumentor
+from roadmap.model_hooks import MBWDinoInstrumentor, SharedMBWDinoInstrumentor
 
 
 def train(
@@ -36,7 +36,7 @@ def train(
     best_model = None
 
     metrics = None
-    instrumentor = MBWDinoInstrumentor(net, save_dir=f'{log_dir}/analysis_logs_voc')
+    instrumentor = SharedMBWDinoInstrumentor(net, save_dir=f'{log_dir}/analysis_logs_voc')
     instrumentor.register_hooks()
 
     # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)

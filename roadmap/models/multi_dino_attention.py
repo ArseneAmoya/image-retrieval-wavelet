@@ -513,6 +513,54 @@ class MultiDinoHashingTF(nn.Module):
         logits = self.bn(logits)
 
         return torch.tanh(logits) if self.training else torch.sign(logits)
+    
+
+
+class SharedDinoHashing(nn.Module):
+    def __init__(self, backbone_config, fusion_config, binary_config, **kwargs):
+        super().__init__()
+        
+        self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
+        
+        if backbone_config.get('frozen', True):
+            for p in self.shared_backbone.parameters(): 
+                p.requires_grad = False
+            self.shared_backbone.eval()
+            self.shared_backbone.train = lambda mode=False: None
+            
+        embed_dim = self.shared_backbone.embed_dim
+        
+        output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
+        
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
+        
+        self.nbits = binary_config['nbits']
+        self.bn = nn.BatchNorm1d(self.nbits)
+        self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits, bias=False)
+        nn.init.normal_(self.hash_fc.weight, std=0.01)
+
+    def forward(self, x):
+
+        b, c, s, h, w = x.shape
+        #print(f"[DEBUG] Input shape: {x.shape} (Batch, Sub-bands, Channels, Height, Width)")
+        x_concat = x.view(b * s, c, h, w)#torch.cat([LL, LH, HL, HH], dim=0)     
+        out = self.shared_backbone(x_concat)
+        
+        cls_tokens = out['x_norm_clstoken'] if isinstance(out, dict) else out
+        
+
+        feat_LL, feat_LH, feat_HL, feat_HH = cls_tokens.chunk(4, dim=0)
+        
+        # 4. Création de la liste de caractéristiques pour le module de fusion
+        features_list = [feat_LL, feat_LH, feat_HL, feat_HH]
+        
+        # 5. Application de la fusion (Attention) et Hachage
+        fused_embedding = self.fusion_head(features_list)
+        logits = self.hash_fc(fused_embedding)
+        logits = self.bn(logits)
+        
+        return torch.tanh(logits) if self.training else torch.sign(logits)
+
 class PretrainedMultiDinoHashing(nn.Module):
     """
     Architecture SOTA pour l'évaluation du Hachage.
