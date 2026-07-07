@@ -561,6 +561,117 @@ class SharedDinoHashing(nn.Module):
         
         return torch.tanh(logits) if self.training else torch.sign(logits)
 
+class PromptedSharedDinoHashing(nn.Module):
+    def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):
+        super().__init__()
+        
+        # 1. Chargement du backbone partagé DINOv2
+        self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
+        
+        # On gèle massivement le backbone spatial pour forcer 
+        # l'apprentissage sur les nouveaux paramètres fréquentiels
+        if backbone_config.get('frozen', True):
+            for p in self.shared_backbone.parameters(): 
+                p.requires_grad = False
+            self.shared_backbone.eval()
+            self.shared_backbone.train = lambda mode=False: None
+            
+        embed_dim = self.shared_backbone.embed_dim
+        
+        # ==========================================
+        # ÉTAPE 1 : MODULE VISUAL PROMPT TUNING
+        # ==========================================
+        self.num_prompts = num_prompts
+        
+        # Création de 4 jeux de Prompts (un pour chaque bande : LL, LH, HL, HH)
+        # Structure de la dimension : [4_Bandes, N_Prompts, Dim_Embedding]
+        # L'initialisation normale avec un petit écart-type (0.02) est cruciale 
+        # pour ne pas perturber les premières itérations de l'attention.
+        self.prompts = nn.Parameter(torch.randn(4, num_prompts, embed_dim) * 0.02)
+        
+        # ==========================================
+        # Tête de Fusion et Hachage (inchangée)
+        # ==========================================
+        # (Copie ici ta logique d'initialisation habituelle pour ta fusion)
+        
+        # Exemple générique :
+        # output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
+        # self.fusion_head = get_fusion_head(fusion_config, output_dims)
+        # self.nbits = binary_config['nbits']
+        # self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits, bias=False)
+        # self.bn = nn.BatchNorm1d(self.nbits)
+
+        output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
+        
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
+        
+        self.nbits = binary_config['nbits']
+        self.bn = nn.BatchNorm1d(self.nbits)
+        self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits, bias=False)
+        nn.init.normal_(self.hash_fc.weight, std=0.01)
+    def forward(self, x):
+        # Format d'entrée : [b, c, s, h, w] (b=batch, c=channels, s=4 bandes, h, w)
+        b, c, s, h, w = x.shape
+        total_batch_size = b * s
+        
+        # ==========================================
+        # CORRECTION : ALIGNEMENT BAND-MAJOR
+        # ==========================================
+        # 1. On permute pour mettre la dimension des bandes (s) en premier
+        # Nouvelle dimension : [s, b, c, h, w]
+        x_band_major = x.permute(2, 0, 1, 3, 4).contiguous()
+        
+        # 2. On aplatit. L'ordre est maintenant strictement : 
+        # [toutes les LL, toutes les LH, toutes les HL, toutes les HH]
+        x_flat = x_band_major.view(total_batch_size, c, h, w)
+        
+        # ==========================================
+        # 1. PRÉPARATION NATIVE DINOv2
+        # ==========================================
+        x_tokens = self.shared_backbone.prepare_tokens_with_masks(x_flat)
+        
+        # ==========================================
+        # 2. EXTENSION ET INJECTION DES PROMPTS
+        # ==========================================
+        # self.prompts est [s, num_prompts, D]
+        prompts_expanded = self.prompts.unsqueeze(1).expand(-1, b, -1, -1)
+        
+        # Grâce au reshape, l'ordre correspond exactement au x_flat (Band-Major)
+        prompts_expanded = prompts_expanded.reshape(total_batch_size, self.num_prompts, -1)
+        
+        cls_token = x_tokens[:, 0:1, :]       # Shape: [4*B, 1, D]
+        patch_tokens = x_tokens[:, 1:, :]     # Shape: [4*B, N_patches, D]
+        
+        tokens = torch.cat([cls_token, prompts_expanded, patch_tokens], dim=1)
+        
+        # ==========================================
+        # 3. PASSE FORWARD DANS LES BLOCS TRANSFORMERS
+        # ==========================================
+        for blk in self.shared_backbone.blocks:
+            tokens = blk(tokens)
+            
+        tokens = self.shared_backbone.norm(tokens)
+        
+        # ==========================================
+        # 4. EXTRACTION ET ROUTAGE
+        # ==========================================
+        cls_out = tokens[:, 0]  # Shape: [4*B, D]
+        
+        # Le tenseur étant parfaitement Band-Major, chunk() coupe proprement
+        # les blocs de taille 'b' sans mélanger les bandes.
+        feat_LL, feat_LH, feat_HL, feat_HH = cls_out.chunk(4, dim=0)
+        
+        # ==========================================
+        # 5. FUSION ET HACHAGE
+        # ==========================================
+        features_list = [feat_LL, feat_LH, feat_HL, feat_HH]
+        fused_embedding = self.fusion_head(features_list)
+        
+        logits = self.hash_fc(fused_embedding)
+        logits = self.bn(logits)
+        
+        return torch.tanh(logits) if self.training else torch.sign(logits)    
+
 class PretrainedMultiDinoHashing(nn.Module):
     """
     Architecture SOTA pour l'évaluation du Hachage.

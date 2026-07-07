@@ -42,7 +42,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/shareddino_attention_hashing_ortho.yaml')
+    model_configs = OmegaConf.load('config/model/shareddino_attention_hashing_ortho_prtun.yaml')
 
     getter = Getter()
     # Instanciation du modèle DetailTesterNet

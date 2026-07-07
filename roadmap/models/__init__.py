@@ -1,5 +1,5 @@
 from .net import RetrievalNet
-from .multi_dino_attention import MultiDinoAttention, MultiDinoHashing, MultiDinoHashingTF, PretrainedMultiDinoHashing, SharedDinoHashing
+from .multi_dino_attention import MultiDinoAttention, MultiDinoHashing, MultiDinoHashingTF, PretrainedMultiDinoHashing, SharedDinoHashing, PromptedSharedDinoHashing
 from .detail_tester import DetailTesterNet, SingleBandNet
 from .dino_baseline import DINOHashBaseline
 __all__ = [
@@ -11,5 +11,6 @@ __all__ = [
     'SingleBandNet',
     'PretrainedMultiDinoHashing',
     'DINOHashBaseline',
-    'SharedDinoHashing'
+    'SharedDinoHashing',
+    'PromptedSharedDinoHashing'
 ]
