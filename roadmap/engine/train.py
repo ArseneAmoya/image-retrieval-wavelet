@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from roadmap.models import net
 import roadmap.utils as lib
-from .base_update import base_update
+from .base_update_surg import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
@@ -86,9 +86,9 @@ def train(
             scaler=scaler,
             epoch=e,
             memory=memory,
+            instrumentor=instrumentor, # <-- AJOUT : L'instrumenteur est transmis ici
+            log_interval=4             # <-- AJOUT : Capture tous les 4 batchs
         )
-        instrumentor.features.clear()
-        instrumentor.gradients.clear()
 
         if e in target_epochs:
             if isinstance(optimizer, dict):
