@@ -32,19 +32,21 @@ class GlobalEmbeddingSpaceTester(testers.GlobalEmbeddingSpaceTester):
                 #print(f"Batch {i} - {img.shape} - {label.shape}")
                 label = c_f.process_label(label, "all", self.label_mapper)
                 q = self.get_embeddings_for_eval(trunk_model, embedder_model, img)
+                q = q.cpu()
+                label = label.cpu()
                 if label.dim() == 1:
                     label = label.unsqueeze(1)
                 if i == 0:
                     labels = torch.zeros(
                         len(dataloader.dataset),
                         label.size(1),
-                        device=self.data_device,
+                        device=torch.device("cpu"), #self.data_device,
                         dtype=label.dtype,
                     )
                     all_q = torch.zeros(
                         len(dataloader.dataset),
                         q.size(1),
-                        device=self.data_device,
+                        device=torch.device("cpu"), #self.data_device,
                         dtype=q.dtype,
                     )
                 #print(f"Batch {i} - {q.shape} - {label.shape}")

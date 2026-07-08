@@ -12,6 +12,7 @@ from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
 from roadmap.model_hooks import MBWDinoInstrumentor, SharedMBWDinoInstrumentor
+import gc
 
 
 def train(
@@ -138,6 +139,8 @@ def train(
         for sch in scheduler["on_epoch"]:
             sch.step()
         
+        del loader
+        gc.collect()
         end_train_time = time()
 
         dataset_dict = {}
@@ -183,7 +186,7 @@ def train(
 
                 )
             torch.cuda.empty_cache()
-
+            gc.collect()
             random.setstate(RANDOM_STATE)
             np.random.set_state(NP_STATE)
             torch.random.set_rng_state(TORCH_STATE)
