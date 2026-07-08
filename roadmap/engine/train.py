@@ -162,6 +162,10 @@ def train(
 
             lib.LOGGER.info(f"Evaluation : @epoch #{e} for model {config.experience.experiment_name}")
             torch.cuda.empty_cache()
+
+            if hasattr(instrumentor, 'remove_hooks'):
+                instrumentor.remove_hooks()
+
             if config.experience.landmarks:
                 metrics = landmark_evaluation(
                     net=net,
@@ -185,6 +189,8 @@ def train(
                     **dataset_dict,
 
                 )
+            if hasattr(instrumentor, 'register_hooks'):
+                instrumentor.register_hooks()
             torch.cuda.empty_cache()
             gc.collect()
             random.setstate(RANDOM_STATE)
