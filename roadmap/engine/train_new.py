@@ -5,11 +5,14 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from roadmap.models import net
 import roadmap.utils as lib
-from .base_update import base_update
+from .base_update_surg import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
+from roadmap.model_hooks import MBWDinoInstrumentor, SharedMBWDinoInstrumentor
+import gc
 
 
 def train(
@@ -34,6 +37,33 @@ def train(
     best_model = None
 
     metrics = None
+    instrumentor = SharedMBWDinoInstrumentor(net, save_dir=f'{log_dir}/analysis_logs_voc')
+    instrumentor.register_hooks()
+
+    # Define when you want to save (e.g., epochs 1, 5, 10, 25, 50)
+    target_epochs = [1, 5, 10, 25, 40, 50]
+    lib.LOGGER.info("Extraction du batch d'analyse fixe depuis train_dts...")
+    
+    # On crée un chargeur temporaire utilisant TON sampler d'entraînement
+    # num_workers=0 est utilisé ici pour extraire le batch instantanément sans surcharger le CPU
+    temp_loader = DataLoader(
+        train_dts,
+        batch_sampler=sampler, 
+        num_workers=0 
+    )
+    
+    fixed_batch = next(iter(temp_loader))
+    
+    device = next(net.parameters()).device
+    
+    # 2. On utilise tes clés exactes !
+    fixed_images = fixed_batch["image"].to(device)
+    fixed_labels = fixed_batch["label"].to(device)
+    #sauver aussi les images et labels
+    torch.save(fixed_images.cpu(), f"{log_dir}/fixed_images.pt")
+    torch.save(fixed_labels.cpu(), f"{log_dir}/fixed_labels.pt")
+    # On place les données sur le GPU
+
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
 
         lib.LOGGER.info(f"Training : @epoch #{e} for model {config.experience.experiment_name}")
@@ -57,11 +87,60 @@ def train(
             scaler=scaler,
             epoch=e,
             memory=memory,
+            instrumentor=instrumentor, # <-- AJOUT : L'instrumenteur est transmis ici
+            log_interval=4             # <-- AJOUT : Capture tous les 4 batchs
         )
 
+        if e in target_epochs:
+            if isinstance(optimizer, dict):
+                for opt in optimizer.values(): opt.zero_grad()
+            else:
+                optimizer.zero_grad()
+            net.train()
+            
+            # Gestion de l'optimiseur
+            if isinstance(optimizer, dict):
+                for opt in optimizer.values(): opt.zero_grad()
+            else:
+                optimizer.zero_grad()
+
+            outputs = net(fixed_images)
+
+            losses = []
+            for crit, weight in criterion:
+                if hasattr(crit, 'takes_embeddings'):
+                    if fixed_labels.ndim == 1 or (fixed_labels.ndim == 2 and fixed_labels.size(1) == 1):
+                        loss = crit(outputs, fixed_labels.view(-1))
+                    else:
+                        loss = crit(outputs, fixed_labels)
+                else:
+                    scores =  torch.mm(outputs, outputs.t())
+                    label_matrix = lib.create_label_matrix(fixed_labels)
+
+                    loss = crit(scores, label_matrix)
+
+                loss = loss.mean()
+                if weight == 'adaptative':
+                    losses.append(loss)
+                else:
+                    losses.append(weight * loss)
+
+            total_loss = sum(losses)
+            if scaler is None:
+                total_loss.backward()
+            else:
+                scaler.scale(total_loss).backward()
+
+            instrumentor.save_current_state(e, batch_idx="fixed_subset", is_target_batch=True)
+            if isinstance(optimizer, dict):
+                for opt in optimizer.values(): opt.zero_grad()
+            else:
+                optimizer.zero_grad()
         for sch in scheduler["on_epoch"]:
             sch.step()
-
+        
+        del loader
+        gc.collect()
         end_train_time = time()
 
         dataset_dict = {}
@@ -83,6 +162,10 @@ def train(
 
             lib.LOGGER.info(f"Evaluation : @epoch #{e} for model {config.experience.experiment_name}")
             torch.cuda.empty_cache()
+
+            if hasattr(instrumentor, 'remove_hooks'):
+                instrumentor.remove_hooks()
+
             if config.experience.landmarks:
                 metrics = landmark_evaluation(
                     net=net,
@@ -106,8 +189,10 @@ def train(
                     **dataset_dict,
 
                 )
+            if hasattr(instrumentor, 'register_hooks'):
+                instrumentor.register_hooks()
             torch.cuda.empty_cache()
-
+            gc.collect()
             random.setstate(RANDOM_STATE)
             np.random.set_state(NP_STATE)
             torch.random.set_rng_state(TORCH_STATE)
