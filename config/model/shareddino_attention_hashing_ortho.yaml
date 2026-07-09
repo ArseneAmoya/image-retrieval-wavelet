@@ -24,5 +24,7 @@ kwargs:
     num_queries: 4                     # 4 experts pour séparer les 4 bandes
     sub_band_dropout_p: 0            # Force le réseau à explorer LH, HL, HH
     ortho_weight: 0.01                  # Force la division du travail (sans exploser la loss)
+  modelhooks:
+    name: "SharedMBWDinoInstrumentor"
 
   with_autocast: true
