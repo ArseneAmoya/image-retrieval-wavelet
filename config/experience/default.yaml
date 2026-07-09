@@ -36,3 +36,5 @@ clip_grad: null
 evaluation:
   top_k: 5000
   distance_metric: "hamming"
+hooks_configs:
+  active: True

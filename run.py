@@ -136,8 +136,14 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
     if state is not None:
         # set random NumPy and Torch random states
         lib.set_random_state(state)
-
-    return eng.train(
+    
+    if config.experience.hooks_configs.active:
+        lib.LOGGER.info("Activating hooks...")
+        train_func = eng.train_new
+    else:
+        lib.LOGGER.info("Using standard training...")
+        train_func = eng.train
+    return train_func(
         config=config,
         log_dir=log_dir,
         net=net,

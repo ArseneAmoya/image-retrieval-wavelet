@@ -11,6 +11,7 @@ from .evaluate import evaluate, get_tester
 from .landmark_evaluation import landmark_evaluation
 from .make_subset import make_subset
 from .memory import XBM
+from .train_new import train as train_new
 from .train import train
 
 
@@ -28,4 +29,5 @@ __all__ = [
     'make_subset',
     'XBM',
     'train',
+    'train_new'
 ]
