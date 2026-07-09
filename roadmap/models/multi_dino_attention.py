@@ -567,7 +567,10 @@ class PromptedSharedDinoHashing(nn.Module):
         super().__init__()
         
         self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
-
+        self.use_dsln = backbone_config.get('use_dsln', False)
+        if self.use_dsln:
+            self.shared_backbone = inject_domain_specific_layernorms(self.shared_backbone, num_domains=4)
+            print("[INFO] Domain-Specific LayerNorms injected into the shared backbone.")
         if backbone_config.get('frozen', True):
             for p in self.shared_backbone.parameters(): 
                 p.requires_grad = False
@@ -605,10 +608,6 @@ class PromptedSharedDinoHashing(nn.Module):
         # ==========================================
         x_tokens = self.shared_backbone.prepare_tokens_with_masks(x_flat)
         
-        # ==========================================
-        # 2. EXTENSION ET INJECTION DES PROMPTS
-        # ==========================================
-        # self.prompts est [s, num_prompts, D]
         prompts_expanded = self.prompts.unsqueeze(1).expand(-1, b, -1, -1)
         
         # Grâce au reshape, l'ordre correspond exactement au x_flat (Band-Major)
@@ -646,6 +645,54 @@ class PromptedSharedDinoHashing(nn.Module):
         logits = self.bn(logits)
         
         return torch.tanh(logits) if self.training else torch.sign(logits)    
+
+
+class MultiDomainLayerNorm(nn.Module):
+    def __init__(self, original_norm, num_domains=4):
+        super().__init__()
+        self.num_domains = num_domains
+        
+        # Création de 4 LayerNorms distincts avec la même architecture que l'original
+        self.norms = nn.ModuleList([
+            nn.LayerNorm(
+                original_norm.normalized_shape, 
+                eps=original_norm.eps, 
+                elementwise_affine=original_norm.elementwise_affine
+            )
+            for _ in range(num_domains)
+        ])
+        
+        if original_norm.elementwise_affine:
+            with torch.no_grad():
+                for norm in self.norms:
+                    norm.weight.copy_(original_norm.weight)
+                    norm.bias.copy_(original_norm.bias)
+
+    def forward(self, x):
+        chunks = x.chunk(self.num_domains, dim=0)
+        
+        out_chunks = []
+        for i, chunk in enumerate(chunks):
+            out_chunks.append(self.norms[i](chunk))
+            
+        return torch.cat(out_chunks, dim=0)
+
+def inject_domain_specific_layernorms(model, num_domains=4):
+    """
+    Parcourt le ViT et remplace les LayerNorms partagés par des MultiDomainLayerNorms.
+    """
+    # 1. Remplacement à l'intérieur de chaque bloc Transformer
+    for blk in model.blocks:
+        # blk.norm1 normalise avant l'attention (QKV)
+        blk.norm1 = MultiDomainLayerNorm(blk.norm1, num_domains)
+        # blk.norm2 normalise avant le Feed Forward (MLP)
+        blk.norm2 = MultiDomainLayerNorm(blk.norm2, num_domains)
+        
+    # 2. Remplacement du LayerNorm final du modèle (avant l'extraction du CLS)
+    if hasattr(model, 'norm') and model.norm is not None:
+        model.norm = MultiDomainLayerNorm(model.norm, num_domains)
+        
+    return model
 
 class PretrainedMultiDinoHashing(nn.Module):
     """

@@ -1,0 +1,28 @@
+# @package _group_
+name: PromptedSharedDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  # Liste de vos 4 branches (Ondelettes : LL, LH, HL, HH)
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: False  # On gèle DINO pour laisser l'attention apprendre en premier
+    use_dsln: True
+
+  # Configuration du Hachage
+  binary_config:
+    nbits: 64  # Doit être identique à la Baseline pour comparer équitablement !
+  num_prompts: 10 # Nombre de prompts pour chaque bande (LL, LH, HL, HH)
+  # Configuration du Goulot d'Étranglement (SOTA)
+  fusion_config:
+    use_all_tokens: False
+    type: 'cross_attention_advanced' # Active notre nouvelle classe
+    output_dim: 384                    # Dimension latente
+    num_heads: 8                       # Multi-têtes pour des relations complexes
+    dropout: 0.1
+    # -- Nouveaux paramètres SOTA (Hybrid Regularization) --
+    num_queries: 4                     # 4 experts pour séparer les 4 bandes
+    sub_band_dropout_p: 0            # Force le réseau à explorer LH, HL, HH
+    ortho_weight: 0.01                  # Force la division du travail (sans exploser la loss)
+  
+  with_autocast: true
