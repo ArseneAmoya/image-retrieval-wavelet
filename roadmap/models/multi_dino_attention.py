@@ -543,7 +543,8 @@ class SharedDinoHashing(nn.Module):
 
         b, c, s, h, w = x.shape
         #print(f"[DEBUG] Input shape: {x.shape} (Batch, Sub-bands, Channels, Height, Width)")
-        x_concat = x.view(b * s, c, h, w)#torch.cat([LL, LH, HL, HH], dim=0)     
+        x_concat = x.permute(2, 0, 1, 3, 4).contiguous()
+        x_concat = x_concat.view(b * s, c, h, w)  #torch.cat([LL, LH, HL, HH], dim=0)
         out = self.shared_backbone(x_concat)
         
         cls_tokens = out['x_norm_clstoken'] if isinstance(out, dict) else out
@@ -565,11 +566,8 @@ class PromptedSharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):
         super().__init__()
         
-        # 1. Chargement du backbone partagé DINOv2
         self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
-        
-        # On gèle massivement le backbone spatial pour forcer 
-        # l'apprentissage sur les nouveaux paramètres fréquentiels
+
         if backbone_config.get('frozen', True):
             for p in self.shared_backbone.parameters(): 
                 p.requires_grad = False
@@ -578,28 +576,10 @@ class PromptedSharedDinoHashing(nn.Module):
             
         embed_dim = self.shared_backbone.embed_dim
         
-        # ==========================================
-        # ÉTAPE 1 : MODULE VISUAL PROMPT TUNING
-        # ==========================================
         self.num_prompts = num_prompts
         
-        # Création de 4 jeux de Prompts (un pour chaque bande : LL, LH, HL, HH)
-        # Structure de la dimension : [4_Bandes, N_Prompts, Dim_Embedding]
-        # L'initialisation normale avec un petit écart-type (0.02) est cruciale 
-        # pour ne pas perturber les premières itérations de l'attention.
         self.prompts = nn.Parameter(torch.randn(4, num_prompts, embed_dim) * 0.02)
         
-        # ==========================================
-        # Tête de Fusion et Hachage (inchangée)
-        # ==========================================
-        # (Copie ici ta logique d'initialisation habituelle pour ta fusion)
-        
-        # Exemple générique :
-        # output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
-        # self.fusion_head = get_fusion_head(fusion_config, output_dims)
-        # self.nbits = binary_config['nbits']
-        # self.hash_fc = nn.Linear(fusion_config['output_dim'], self.nbits, bias=False)
-        # self.bn = nn.BatchNorm1d(self.nbits)
 
         output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
         
@@ -613,12 +593,7 @@ class PromptedSharedDinoHashing(nn.Module):
         # Format d'entrée : [b, c, s, h, w] (b=batch, c=channels, s=4 bandes, h, w)
         b, c, s, h, w = x.shape
         total_batch_size = b * s
-        
-        # ==========================================
-        # CORRECTION : ALIGNEMENT BAND-MAJOR
-        # ==========================================
-        # 1. On permute pour mettre la dimension des bandes (s) en premier
-        # Nouvelle dimension : [s, b, c, h, w]
+
         x_band_major = x.permute(2, 0, 1, 3, 4).contiguous()
         
         # 2. On aplatit. L'ordre est maintenant strictement : 
