@@ -1,0 +1,7 @@
+# @package _group_
+- name: SCHLoss
+  weight: 1.0
+  kwargs:
+    n_bits: 64
+    alpha: 0.1
+    beta: 0.1
