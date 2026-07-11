@@ -54,3 +54,51 @@ class ResNetCE(nn.Module):
             for m in self.modules():
                 if isinstance(m, nn.BatchNorm2d):
                     m.eval()
+
+class ResNetHashing(nn.Module):
+    def __init__(self, num_bits, dropout=0.5, pretrained=True, freeze_bn=True, **kwargs):
+        super().__init__()
+        
+        # 1. Charger ResNet50 pré-entraîné
+        weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = models.resnet50(weights=weights)
+        
+        # 2. Garder uniquement l'extracteur de features (jusqu'à avgpool inclus)
+        self.features = nn.Sequential(*list(backbone.children())[:-1])
+        self.feature_dim = 2048  # Fixe pour ResNet50
+        
+        # 3. Tête de hashing spécifique au papier
+        self.dropout = nn.Dropout(p=dropout)
+        self.hash_layer = nn.Linear(self.feature_dim, num_bits)
+        
+        # Initialisation à Zéro (Critique)
+        nn.init.constant_(self.hash_layer.weight, 0)
+        nn.init.constant_(self.hash_layer.bias, 0)
+
+        # Flag pour gérer le mode des Batch Norm
+        self.freeze_bn = freeze_bn
+
+    def forward(self, x):
+        # Feature extraction
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+
+        if self.training:
+            # TRAINING: Retourne les logits pour la perte de hashing
+            x = self.dropout(x)
+            hash_logits = self.hash_layer(x)
+            return torch.tanh(hash_logits)
+        else:
+            # EVAL: Retourne les features normalisées L2 pour le calcul de distance (Recall)
+            return torch.sign(self.hash_layer(x))  # Binarisation pour l'évaluation
+
+    def train(self, mode=True):
+        """
+        Surcharge critique : même en mode train=True, 
+        les couches BN doivent rester en mode eval si freeze_bn est activé.
+        """
+        super().train(mode)
+        if self.freeze_bn and mode:
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eval()

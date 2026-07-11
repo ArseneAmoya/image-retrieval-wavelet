@@ -7,10 +7,10 @@ from torchinfo import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/cub_swt.yaml'):
+def test_transforms(transform_cfg_path='config/transform/cub.yaml'):
     # Charge la config
     transform_cfg = OmegaConf.load(transform_cfg_path)
-    print(transform_cfg)
+    
     # Crée les transformations via le getter
     getter = Getter()
     train_transform = getter.get_transform(transform_cfg.train)
@@ -42,7 +42,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/shareddino_attention_hashing_ortho_prtun_dmln.yaml')
+    model_configs = OmegaConf.load('config/model/resnet_hashing.yaml')
 
     getter = Getter()
     # Instanciation du modèle DetailTesterNet
