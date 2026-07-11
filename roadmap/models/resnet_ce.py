@@ -56,7 +56,7 @@ class ResNetCE(nn.Module):
                     m.eval()
 
 class ResNetHashing(nn.Module):
-    def __init__(self, num_bits, dropout=0.5, pretrained=True, freeze_bn=True, **kwargs):
+    def __init__(self, num_bits, pretrained=True, freeze_bn=True, **kwargs):
         super().__init__()
         
         # 1. Charger ResNet50 pré-entraîné
@@ -68,12 +68,18 @@ class ResNetHashing(nn.Module):
         self.feature_dim = 2048  # Fixe pour ResNet50
         
         # 3. Tête de hashing spécifique au papier
-        self.dropout = nn.Dropout(p=dropout)
-        self.hash_layer = nn.Linear(self.feature_dim, num_bits)
+        #self.dropout = nn.Dropout(p=dropout)
+        
+
+    
+        self.hash_layer = nn.Sequential(
+            nn.Linear(self.feature_dim, num_bits),
+            nn.BatchNorm1d(num_bits)
+        )
         
         # Initialisation à Zéro (Critique)
-        nn.init.constant_(self.hash_layer.weight, 0)
-        nn.init.constant_(self.hash_layer.bias, 0)
+        # nn.init.constant_(self.hash_layer.weight, 0)
+        # nn.init.constant_(self.hash_layer.bias, 0)
 
         # Flag pour gérer le mode des Batch Norm
         self.freeze_bn = freeze_bn
@@ -82,15 +88,15 @@ class ResNetHashing(nn.Module):
         # Feature extraction
         x = self.features(x)
         x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+        hash_logits = self.hash_layer(x)
 
         if self.training:
             # TRAINING: Retourne les logits pour la perte de hashing
-            x = self.dropout(x)
-            hash_logits = self.hash_layer(x)
+            # x = self.dropout(x)
             return torch.tanh(hash_logits)
         else:
             # EVAL: Retourne les features normalisées L2 pour le calcul de distance (Recall)
-            return torch.sign(self.hash_layer(x))  # Binarisation pour l'évaluation
+            return torch.sign(hash_logits)  # Binarisation pour l'évaluation
 
     def train(self, mode=True):
         """

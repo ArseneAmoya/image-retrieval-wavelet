@@ -163,9 +163,8 @@ def get_backbone(name, pretrained=True, **kwargs):
         # Instanciation propre
         backbone = ResNetHashing(
             num_bits=num_bits, 
-            dropout=dropout, 
             pretrained=pretrained,
-            freeze_bn=True, # Forcé à True selon le papier
+            freeze_bn=False, # Forcé à True selon le papier
             **kwargs
         )
         out_dim = num_bits
@@ -480,7 +479,7 @@ class RetrievalNet(nn.Module):
     def forward(self, X):
         with torch.amp.autocast('cuda',enabled=self.with_autocast):
             X = self.backbone(X)
-            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50', 'multi_dino', "multi_dino_v3"]:
+            if self.with_classifier or self.backbone_name in ['mtwavenet', 'mtwavenet50', 'multi_dino', "multi_dino_v3"] or 'hash' in self.backbone_name:
                 return X
             if self.backbone_name in ['mtwavenet50_fusion'] and self.training:
                 X[-1] = self.fc(X[-1])

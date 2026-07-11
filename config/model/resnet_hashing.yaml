@@ -8,6 +8,5 @@ kwargs:
   norm_features: False
   without_fc: True
   with_autocast: True
-#  num_classes: ${dataset.num_classes}
   pretrained: True
   num_bits: 64
