@@ -72,10 +72,7 @@ class ResNetHashing(nn.Module):
         
 
     
-        self.hash_layer = nn.Sequential(
-            nn.Linear(self.feature_dim, num_bits),
-            nn.BatchNorm1d(num_bits)
-        )
+        self.hash_layer = nn.Linear(self.feature_dim, num_bits)
         
         # Initialisation à Zéro (Critique)
         # nn.init.constant_(self.hash_layer.weight, 0)
@@ -95,7 +92,6 @@ class ResNetHashing(nn.Module):
             # x = self.dropout(x)
             return torch.tanh(hash_logits)
         else:
-            # EVAL: Retourne les features normalisées L2 pour le calcul de distance (Recall)
             return torch.sign(hash_logits)  # Binarisation pour l'évaluation
 
     def train(self, mode=True):

@@ -70,7 +70,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
     
-    model.eval()
+    model.train()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
     
