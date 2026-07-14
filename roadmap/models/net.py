@@ -178,7 +178,6 @@ def get_backbone(name, pretrained=True, **kwargs):
 
         # Instanciation propre
         backbone = ResNet50Mod(
-            num_bits=num_bits, 
             pretrained=pretrained,
             **kwargs
         )
