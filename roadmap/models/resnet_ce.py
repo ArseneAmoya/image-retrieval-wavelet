@@ -75,8 +75,8 @@ class ResNetHashing(nn.Module):
         self.hash_layer = nn.Linear(self.feature_dim, num_bits)
         
         # Initialisation à Zéro (Critique)
-        # nn.init.constant_(self.hash_layer.weight, 0)
-        # nn.init.constant_(self.hash_layer.bias, 0)
+        nn.init.xavier_uniform_(self.hash_layer.weight)
+        nn.init.constant_(self.hash_layer.bias, 0)
 
         # Flag pour gérer le mode des Batch Norm
         self.freeze_bn = freeze_bn

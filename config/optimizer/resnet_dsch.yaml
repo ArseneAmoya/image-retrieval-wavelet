@@ -1,0 +1,11 @@
+# @package _group_
+- name: SGD
+  params:
+  kwargs:
+    lr: 0.005
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: True
+  scheduler_on_epoch:
+  scheduler_on_step:
+  scheduler_on_val:
