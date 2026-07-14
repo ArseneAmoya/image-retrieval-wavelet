@@ -171,13 +171,14 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity() # Le pooling est déjà fait dans ResNetHashing.features
     elif name == 'resnet_hashing_2':
         lib.LOGGER.info(f"using ResNet-Hashing-2 (Boudiaf et al. reproduction) pretrained : {pretrained}, freeze_bn : {kwargs.get('freeze_bn', False)}, freeze_pos_embedding : {kwargs.get('freeze_pos_embedding', False)}")
-        n_bits = kwargs.pop('num_bits', None)
+        n_bits = kwargs.pop('n_bits', None)
         
         if n_bits is None:
-            raise ValueError("ResNet-Hashing-2 requires 'num_bits' to be defined in kwargs")
+            raise ValueError("ResNet-Hashing-2 requires 'n_bits' to be defined in kwargs")
 
         # Instanciation propre
         backbone = ResNet50Mod(
+            n_bits=n_bits,
             pretrained=pretrained,
             **kwargs
         )
