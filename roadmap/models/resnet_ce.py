@@ -186,12 +186,6 @@ class ResNet50(nn.Module):
         if self.normalize:
             x = F.normalize(x, dim=-1)
 
-        if self.tanh:
-            if self.training:
-                x = torch.tanh(x)
-            else:
-                x = x.sign()
-
         return x
     
 class ResNet50Mod(nn.Module):
