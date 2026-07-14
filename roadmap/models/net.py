@@ -10,7 +10,7 @@ import roadmap.utils as lib
 
 from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE
-from .resnet_ce import ResNetCE, ResNetHashing
+from .resnet_ce import ResNetCE, ResNetHashing, ResNet50Mod
 from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50Fusion, HybridMultiBranch, HybridMultiBranchV2
 from .dino_models import DinoModel_ce, Multi_DinoModel
 from transformers import AutoModel
@@ -169,6 +169,21 @@ def get_backbone(name, pretrained=True, **kwargs):
         )
         out_dim = num_bits
         pooling = nn.Identity() # Le pooling est déjà fait dans ResNetHashing.features
+    elif name == 'resnet_hashing_2':
+        lib.LOGGER.info("using ResNet-Hashing-2 (Boudiaf et al. reproduction)")
+        num_bits = kwargs.pop('num_bits', None)
+        
+        if num_bits is None:
+            raise ValueError("ResNet-Hashing-2 requires 'num_bits' to be defined in kwargs")
+
+        # Instanciation propre
+        backbone = ResNet50Mod(
+            num_bits=num_bits, 
+            pretrained=pretrained,
+            **kwargs
+        )
+        out_dim = num_bits
+        pooling = nn.Identity() # Le pooling est déjà fait dans ResNet50Mod.features
     elif name == 'resnet18_ce':
         lib.LOGGER.info(f"using ResNet 18 for cross entropy, num classes : {kwargs.get('num_classes', "not specified")}")
         backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet18",**kwargs)

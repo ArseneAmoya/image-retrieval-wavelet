@@ -193,5 +193,8 @@ def base_update(
     for crit, _ in criterion:
         if hasattr(crit, 'epoch_step'):
             crit.epoch_step()
+    if hasattr(net, 'epoch_step'):
+        net.epoch_step(epoch)
+    
 
     return meter.avg

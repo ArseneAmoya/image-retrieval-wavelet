@@ -3,10 +3,11 @@ name: RetrievalNet
 freeze_batch_norm: False
 freeze_pos_embedding: False
 kwargs:
-  backbone_name: resnet_hashing
+  backbone_name: resnet_hashing_2
   embed_dim: 2048
   norm_features: False
   without_fc: True
   with_autocast: False
   pretrained: True
   num_bits: 64
+  tanh : True
