@@ -9,5 +9,5 @@ kwargs:
   without_fc: True
   with_autocast: False
   pretrained: True
-  num_bits: 64
+  n_bits: 64
   tanh : True
