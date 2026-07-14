@@ -152,7 +152,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 2048
         pooling = nn.Identity() # Le pooling est déjà fait dans ResNetCE.features
     elif name == 'resnet_hashing':
-        lib.LOGGER.info("using ResNet-Hashing (Boudiaf et al. reproduction)")
+        lib.LOGGER.info(f"using ResNet-Hashing (Boudiaf et al. reproduction) pretrained : {pretrained}, freeze_bn : {kwargs.get('freeze_bn', False)}, freeze_pos_embedding : {kwargs.get('freeze_pos_embedding', False)}")
         # On récupère num_bits et dropout depuis kwargs
         num_bits = kwargs.pop('num_bits', None)
         dropout = kwargs.pop('dropout', 0.5)
@@ -170,7 +170,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = num_bits
         pooling = nn.Identity() # Le pooling est déjà fait dans ResNetHashing.features
     elif name == 'resnet_hashing_2':
-        lib.LOGGER.info("using ResNet-Hashing-2 (Boudiaf et al. reproduction)")
+        lib.LOGGER.info(f"using ResNet-Hashing-2 (Boudiaf et al. reproduction) pretrained : {pretrained}, freeze_bn : {kwargs.get('freeze_bn', False)}, freeze_pos_embedding : {kwargs.get('freeze_pos_embedding', False)}")
         num_bits = kwargs.pop('num_bits', None)
         
         if num_bits is None:
