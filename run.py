@@ -159,7 +159,7 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 "device": 'cuda:0',
                 "parallel_val": True,
                 "dataset": 'flickr',
-                "n_classes": len(train_dts.classes),
+                "n_classes": 38, #len(train_dts.classes),
                 "topk": None,
                 "save_dir": log_dir if log_dir is not None else "./output",
                 "n_bits": config.model.kwargs.binary_config.n_bits,
