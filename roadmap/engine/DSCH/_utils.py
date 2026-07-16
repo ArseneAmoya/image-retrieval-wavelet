@@ -22,7 +22,7 @@ from torch.optim.lr_scheduler import MultiStepLR, CosineAnnealingLR, StepLR, Red
 from torchvision import transforms
 from tqdm import tqdm
 
-from _data import get_topk, build_loader, get_class_num
+from ._data import get_topk, build_loader, get_class_num
 
 
 def seed_everything(seed=42):

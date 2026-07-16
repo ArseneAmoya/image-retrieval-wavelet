@@ -6,8 +6,8 @@ import torch
 from loguru import logger
 from timm.utils import AverageMeter
 
-from _data import build_loader, get_topk, get_class_num
-from _utils import (
+from ._data import build_loader, get_topk, get_class_num
+from ._utils import (
     build_optimizer,
     build_scheduler,
     calc_learnable_params,
@@ -19,9 +19,9 @@ from _utils import (
     seed_everything,
     validate_smart,
 )
-from config import get_config
-from loss import SCHLoss
-from network import build_model
+from .config import get_config
+from .loss import SCHLoss
+from .network import build_model
 
 
 def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):

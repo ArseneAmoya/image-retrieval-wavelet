@@ -2,8 +2,8 @@ import math
 import torch
 from torch import nn
 
-from _network import ResNet50
-from _network import build_model as build_net
+from ._network import ResNet50
+from ._network import build_model as build_net
 
 
 def build_model(args, pretrained=True):

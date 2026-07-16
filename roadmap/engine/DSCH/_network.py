@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torchvision
 from torch import nn
 
-from _utils import calc_learnable_params
+from ._utils import calc_learnable_params
 
 
 def get_attr(obj, pos):
