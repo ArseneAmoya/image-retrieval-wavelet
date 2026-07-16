@@ -38,7 +38,7 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
             images, labels = data["image"], data["label"]
         else:
             images, labels, _ = data
-        print(f"images.shape: {images.shape}, labels.shape: {labels.shape}")
+        #print(f"images.shape: {images.shape}, labels.shape: {labels.shape}")
 
         images, labels = images.to(args.device), labels.to(args.device)
         embeddings = net(images)

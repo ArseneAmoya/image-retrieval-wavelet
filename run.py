@@ -163,7 +163,7 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 "n_classes": 38, #len(train_dts.classes),
                 "topk": None,
                 "save_dir": log_dir if log_dir is not None else "./output",
-                "n_bits": config.model.kwargs.num_bits,
+                "n_bits": config.model.kwargs.n_bits,
                 "momentum": 0.7,
                 "gamma": 0.3,
                 "tau": [1000],
