@@ -12,6 +12,9 @@ import roadmap.utils as lib
 import roadmap.engine as eng
 from roadmap.getter import Getter
 
+from argparse import Namespace
+from roadmap.engine.DSCH import train as train_dsch
+
 
 def run(config, base_config=None, checkpoint_dir=None, splits=None):
     """
@@ -141,8 +144,40 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
         lib.LOGGER.info("Activating hooks...")
         train_func = eng.train_new
     else:
-        lib.LOGGER.info("Using standard training...")
-        train_func = eng.train
+        if config.experience.dsch_train:
+            lib.LOGGER.info("Using DSCH training...")
+            args = {
+                "backbone": config.model.name,
+                "data_dir": config.dataset.kwargs.data_dir,
+                "n_workers": config.experience.num_workers,
+                "n_epochs": config.experience.max_iter,
+                "batch_size": config.dataset.sampler.kwargs.batch_size,
+                "optimizer": config.optimizer[0].name,
+                "lr": config.optimizer[0].kwargs.lr,
+                "wd": config.optimizer[0].kwargs.weight_decay,
+                "scheduler": 'step',
+                "device": 'cuda:0',
+                "parallel_val": True,
+                "dataset": 'flickr',
+                "n_classes": len(train_dts.classes),
+                "topk": None,
+                "save_dir": log_dir if log_dir is not None else "./output",
+                "n_bits": config.model.kwargs.binary_config.n_bits,
+                "momentum": 0.7,
+                "gamma": 0.3,
+                "tau": [1000],
+                "alpha": config.loss.kwargs.alpha,
+                "beta": config.loss.kwargs.beta
+            }
+
+            args = Namespace(**args)
+            train_func = train_dsch
+            a, b = train_func(args, train_dts, test_dts["test"], test_dts["gallery"])
+            print(f"Best epoch: {a}, Best mAP: {b}")
+            return
+        else:
+            lib.LOGGER.info("Using standard training...")
+            train_func = eng.train
     return train_func(
         config=config,
         log_dir=log_dir,
