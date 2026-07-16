@@ -49,21 +49,21 @@ def train(
             num_workers=config.experience.num_workers,
             pin_memory=config.experience.pin_memory,
         )
-        # logs = base_update(
-        #     config=config,
-        #     net=net,
-        #     loader=loader,
-        #     criterion=criterion,
-        #     optimizer=optimizer,
-        #     scheduler=scheduler,
-        #     scaler=scaler,
-        #     epoch=e,
-        #     memory=memory,
-        # )
-        # print(criterion)
-        # print(optimizer)
-        # print(scheduler)
-        train_epoch(args, loader, net, criterion, optimizer, scheduler, e)
+        logs = base_update(
+            config=config,
+            net=net,
+            loader=loader,
+            criterion=criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            epoch=e,
+            memory=memory,
+        )
+        print(criterion)
+        print(optimizer)
+        print(scheduler)
+        #train_epoch(args, loader, net, criterion, optimizer, scheduler, e)
 
         for sch in scheduler["on_epoch"]:
             sch.step()

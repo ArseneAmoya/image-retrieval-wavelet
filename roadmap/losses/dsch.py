@@ -4,6 +4,7 @@ from torch import nn
 
 
 class SCHLoss(nn.Module):
+    takes_embeddings = True
     def __init__(self, n_bits=64, alpha=0.1, beta=0.1, *args, **kwargs):
         super().__init__()
         self.n_bits = n_bits
