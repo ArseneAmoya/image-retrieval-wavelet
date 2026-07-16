@@ -14,6 +14,7 @@ from roadmap.getter import Getter
 
 from argparse import Namespace
 from roadmap.engine.DSCH.train import train as train_dsch
+from torch.utils.data import DataLoader
 
 
 def run(config, base_config=None, checkpoint_dir=None, splits=None):
@@ -172,7 +173,26 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
 
             args = Namespace(**args)
             train_func = train_dsch
-            a, b = train_func(args, train_dts, test_dts["test"], test_dts["gallery"])
+            train_loader = DataLoader(
+                train_dts,
+                num_workers=config.experience.num_workers,
+                pin_memory=config.experience.pin_memory,
+                shuffle=True
+            )
+            query_loader = DataLoader(
+                test_dts,
+                num_workers=config.experience.num_workers,
+                pin_memory=config.experience.pin_memory,
+                generator=torch.Generator()
+            )
+            dbase_loader = DataLoader(
+                test_dts,
+                num_workers=config.experience.num_workers,
+                pin_memory=config.experience.pin_memory,
+                generator=torch.Generator()
+            )   
+
+            a, b = train_func(args, train_loader, query_loader, dbase_loader)
             print(f"Best epoch: {a}, Best mAP: {b}")
             return
         else:
