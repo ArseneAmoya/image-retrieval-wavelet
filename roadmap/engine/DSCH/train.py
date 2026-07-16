@@ -33,6 +33,7 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
 
     net.train()
     net.set_alpha(epoch)
+    loss_fn = lambda x, y: sum( criterion[i][0](x, y) * criterion[i][1] for i in range(len(criterion)) )    if isinstance(criterion, list) else criterion(x, y)
     for data in dataloader:
         if isinstance(data, dict):
             images, labels = data["image"], data["label"]
@@ -43,7 +44,8 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
         images, labels = images.to(args.device), labels.to(args.device)
         embeddings = net(images)
 
-        loss = criterion(embeddings, labels)
+
+        loss = loss_fn(embeddings, labels)
 
         stat_meters["loss"].update(loss)
 
