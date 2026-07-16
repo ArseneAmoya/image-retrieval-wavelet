@@ -51,6 +51,9 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
 
         optimizer.zero_grad()
         loss.backward()
+        if isinstance(optimizer, dict):
+            for key, opt in optimizer.items():
+                opt.step()
         optimizer.step()
 
         # to check overfitting
@@ -65,8 +68,15 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
     if scheduler is None:
         last_lr = None
     else:
-        last_lr = scheduler.get_last_lr()
-        scheduler.step()
+        if isinstance(scheduler, dict):
+            for key, schs in scheduler.items():
+                for sch in schs:
+                    sch.step()
+            last_lr = {key: [sch.get_last_lr() for sch in schs] for key, schs in scheduler.items()}
+        else:
+            last_lr = scheduler.get_last_lr()
+            scheduler.step()
+
 
     toc = time.time()
     lr_str = "[lr:{}]".format("/".join("{:.8f}".format(x) for x in last_lr)) if last_lr else ""
