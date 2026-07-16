@@ -260,6 +260,7 @@ def gen_test_data(B, C, K, is_multi_hot=False, normalize_embeddings=True):
 def build_optimizer(optim_type, parameters, **kwargs):
     # optimizer_names = ["Adam", "RMSprop", "SGD"]
     # optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
+    optim_type = optim_type.lower()
     if optim_type == "sgd":
         optimizer = optim.SGD(parameters, **kwargs)
     elif optim_type == "rmsprop":
