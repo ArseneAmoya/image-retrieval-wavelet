@@ -60,9 +60,9 @@ def train(
             epoch=e,
             memory=memory,
         )
-        print(criterion)
-        print(optimizer)
-        print(scheduler)
+        # print(criterion)
+        # print(optimizer)
+        # print(scheduler)
         #train_epoch(args, loader, net, criterion, optimizer, scheduler, e)
 
         for sch in scheduler["on_epoch"]:
