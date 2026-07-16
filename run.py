@@ -181,14 +181,14 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 batch_size=args.batch_size,
             )
             query_loader = DataLoader(
-                test_dts,
+                test_dts["test"],
                 num_workers=config.experience.num_workers,
                 pin_memory=config.experience.pin_memory,
                 generator=torch.Generator(),
                 batch_size=args.batch_size,
             )
             dbase_loader = DataLoader(
-                test_dts,
+                test_dts["gallery"],
                 num_workers=config.experience.num_workers,
                 pin_memory=config.experience.pin_memory,
                 generator=torch.Generator(),
