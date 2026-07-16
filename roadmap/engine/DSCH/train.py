@@ -49,12 +49,17 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
 
         stat_meters["loss"].update(loss)
 
-        optimizer.zero_grad()
+        if isinstance(optimizer, dict):
+            for key, opt in optimizer.items():
+                opt.zero_grad()
+        else:
+            optimizer.zero_grad()
         loss.backward()
         if isinstance(optimizer, dict):
             for key, opt in optimizer.items():
                 opt.step()
-        optimizer.step()
+        else:
+            optimizer.step()
 
         # to check overfitting
         q_cnt = labels.shape[0] // 10
