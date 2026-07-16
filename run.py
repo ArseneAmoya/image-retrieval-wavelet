@@ -147,7 +147,7 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
         if config.experience.dsch_train:
             lib.LOGGER.info("Using DSCH training...")
             args = {
-                "backbone": config.model.name,
+                "backbone": config.model.kwargs.backbone_name,
                 "data_dir": config.dataset.kwargs.data_dir,
                 "n_workers": config.experience.num_workers,
                 "n_epochs": config.experience.max_iter,
