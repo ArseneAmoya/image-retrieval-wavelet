@@ -10,6 +10,7 @@ from .base_update import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
+from .DSCH.train import train_epoch
 
 
 def train(
@@ -27,6 +28,7 @@ def train(
     sampler,
     writer,
     restore_epoch,
+    args=None,
 ):
     # """""""""""""""""" Iter over epochs """"""""""""""""""""""""""
     lib.LOGGER.info(f"Training of model {config.experience.experiment_name}")
@@ -47,17 +49,18 @@ def train(
             num_workers=config.experience.num_workers,
             pin_memory=config.experience.pin_memory,
         )
-        logs = base_update(
-            config=config,
-            net=net,
-            loader=loader,
-            criterion=criterion,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            scaler=scaler,
-            epoch=e,
-            memory=memory,
-        )
+        # logs = base_update(
+        #     config=config,
+        #     net=net,
+        #     loader=loader,
+        #     criterion=criterion,
+        #     optimizer=optimizer,
+        #     scheduler=scheduler,
+        #     scaler=scaler,
+        #     epoch=e,
+        #     memory=memory,
+        # )
+        train_epoch(args, train_loader, net, criterion, optimizer, scheduler, e)
 
         for sch in scheduler["on_epoch"]:
             sch.step()
@@ -132,9 +135,9 @@ def train(
         for grp, opt in optimizer.items():
             writer.add_scalar(f"LR/{grp}", list(lib.get_lr(opt).values())[0], e)
 
-        for k, v in logs.items():
-            lib.LOGGER.info(f"{k} : {v:.4f}")
-            writer.add_scalar(f"Train/{k}", v, e)
+        # for k, v in logs.items():
+        #     lib.LOGGER.info(f"{k} : {v:.4f}")
+        #     writer.add_scalar(f"Train/{k}", v, e)
 
         if metrics is not None:
             for split, mtrc in metrics.items():

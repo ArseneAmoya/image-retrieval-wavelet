@@ -172,7 +172,7 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
             }
 
             args = Namespace(**args)
-            train_func = train_dsch
+            train_func = eng.train#train_dsch
             train_loader = DataLoader(
                 train_dts,
                 num_workers=config.experience.num_workers,
@@ -195,7 +195,20 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 batch_size=args.batch_size,
             )   
 
-            a, b = train_func(args, train_loader, query_loader, dbase_loader)
+            a, b = train_func( config=config,
+                log_dir=log_dir,
+                net=net,
+                criterion=criterion,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                scaler=scaler,
+                memory=memory,
+                train_dts=train_dts,
+                val_dts=val_dts,
+                test_dts=test_dts,
+                sampler=sampler,
+                writer=writer,
+                restore_epoch=restore_epoch,args=args)#(args, train_loader, query_loader, dbase_loader)
             print(f"Best epoch: {a}, Best mAP: {b}")
             return
         else:
