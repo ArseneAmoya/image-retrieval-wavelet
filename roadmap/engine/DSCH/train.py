@@ -74,10 +74,12 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
         last_lr = None
     else:
         if isinstance(scheduler, dict):
+            last_lr = []
             for key, schs in scheduler.items():
-                for sch in schs:
-                    sch.step()
-            last_lr = {key: [sch.get_last_lr() for sch in schs] for key, schs in scheduler.items()}
+                if len(schs):
+                    for sch in schs:
+                        last_lr.append(sch.get_last_lr())
+                        sch.step()
         else:
             last_lr = scheduler.get_last_lr()
             scheduler.step()
