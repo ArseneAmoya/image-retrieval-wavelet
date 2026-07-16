@@ -107,6 +107,28 @@ class ResNetHashing(nn.Module):
             for m in self.modules():
                 if isinstance(m, nn.BatchNorm2d):
                     m.eval()
+class ResNetHashingAlpha(ResNetHashing):
+    def __init__(self, num_bits, pretrained=True, freeze_bn=False, **kwargs):
+        super().__init__(num_bits, pretrained, freeze_bn, **kwargs)
+        self.alpha = 1.0
+
+    def set_alpha(self, epoch):
+        """
+        Méthode de continuation inspirée de HashNet
+        """
+        self.alpha = math.pow((1.0 * epoch + 1.0), 0.5)
+    
+
+    def forward(self, x):
+        # Feature extraction
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+        hash_logits = self.hash_layer(x)
+
+        if self.training:
+            return torch.tanh(self.alpha * hash_logits)
+        else:
+            return torch.sign(hash_logits)  # Binarisation pour l'évaluation
 
 class ResNet50(nn.Module):
     def __init__(self, n_bits, pretrained=True, **kwargs):
@@ -200,6 +222,8 @@ class ResNet50Mod(nn.Module):
         continuation methods from HashNet
         """
         self.alpha = math.pow((1.0 * epoch + 1.0), 0.5)
+    def set_alpha(self, epoch):
+        self.epoch_step(epoch)
 
     def forward(self, x):
         x = self.net(x)
