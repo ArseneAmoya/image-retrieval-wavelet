@@ -36,6 +36,8 @@ def train_epoch(args, dataloader, net, criterion, optimizer, scheduler, epoch):
     for data in dataloader:
         if isinstance(data, dict):
             images, labels = data["image"], data["label"]
+        else:
+            images, labels, _ = data
         images, labels = images.to(args.device), labels.to(args.device)
         embeddings = net(images)
 
