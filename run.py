@@ -13,7 +13,7 @@ import roadmap.engine as eng
 from roadmap.getter import Getter
 
 from argparse import Namespace
-from roadmap.engine.DSCH import train as train_dsch
+from roadmap.engine.DSCH.train import train as train_dsch
 
 
 def run(config, base_config=None, checkpoint_dir=None, splits=None):
