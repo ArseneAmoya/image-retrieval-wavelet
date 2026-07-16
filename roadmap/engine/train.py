@@ -60,7 +60,7 @@ def train(
         #     epoch=e,
         #     memory=memory,
         # )
-        train_epoch(args, train_loader, net, criterion, optimizer, scheduler, e)
+        train_epoch(args, loader, net, criterion, optimizer, scheduler, e)
 
         for sch in scheduler["on_epoch"]:
             sch.step()
