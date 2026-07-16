@@ -38,3 +38,4 @@ evaluation:
   distance_metric: "hamming"
 hooks_configs:
   active: True
+dsch_train: True
