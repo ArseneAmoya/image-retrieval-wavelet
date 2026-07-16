@@ -391,6 +391,8 @@ def predict(net, dataloader, in_idx=0, out_idx=None, use_sign=True, verbose=True
     # for img, cls, _ in tqdm(dataloader):
     # for img, tag, cls, _ in tqdm(dataloader): # CrossModal
     for x in _iter:
+        if isinstance(x, dict):
+            x = [x["image"], x["label"]]
         with torch.no_grad():
             out = net(x[in_idx].to(device))
         if out_idx is None:
