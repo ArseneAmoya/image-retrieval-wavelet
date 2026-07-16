@@ -177,19 +177,22 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 train_dts,
                 num_workers=config.experience.num_workers,
                 pin_memory=config.experience.pin_memory,
-                shuffle=True
+                shuffle=True,
+                batch_size=args.batch_size,
             )
             query_loader = DataLoader(
                 test_dts,
                 num_workers=config.experience.num_workers,
                 pin_memory=config.experience.pin_memory,
-                generator=torch.Generator()
+                generator=torch.Generator(),
+                batch_size=args.batch_size,
             )
             dbase_loader = DataLoader(
                 test_dts,
                 num_workers=config.experience.num_workers,
                 pin_memory=config.experience.pin_memory,
-                generator=torch.Generator()
+                generator=torch.Generator(),
+                batch_size=args.batch_size,
             )   
 
             a, b = train_func(args, train_loader, query_loader, dbase_loader)
