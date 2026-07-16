@@ -166,8 +166,8 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
                 "momentum": 0.7,
                 "gamma": 0.3,
                 "tau": [1000],
-                "alpha": config.loss.kwargs.alpha,
-                "beta": config.loss.kwargs.beta
+                "alpha": config.loss[0].kwargs.alpha,
+                "beta": config.loss[0].kwargs.beta
             }
 
             args = Namespace(**args)
