@@ -31,7 +31,7 @@ def train(
     args=None,
 ):
     # """""""""""""""""" Iter over epochs """"""""""""""""""""""""""
-    lib.LOGGER.info(f"Training of model {config.experience.experiment_name}")
+    lib.LOGGER.info(f"Training of model {config.experience.experiment_name} for {config.experience.max_iter} epochs with {config.experience.step_per_epoch} steps per epoch")
     best_score = 0.
     best_model = None
 

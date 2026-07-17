@@ -10,6 +10,7 @@ warm_up: -1
 warm_up_key: fc
 
 max_iter: 50
+step_per_epoch: 1000
 
 train_eval_freq: 5
 val_eval_freq: -1

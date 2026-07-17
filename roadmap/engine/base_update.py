@@ -117,6 +117,8 @@ def base_update(
 
     iterator = tqdm(loader, disable=os.getenv('TQDM_DISABLE'))
     for i, batch in enumerate(iterator):
+        if i > config.experience.step_per_epoch:
+            break
         logs = _batch_optimization(
             config,
             net,
