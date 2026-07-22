@@ -1,5 +1,6 @@
 from .accuracy_calculator import CustomCalculator
 from .base_update import base_update
+from .batch_map import build_batch_map_calculator, compute_batch_map, build_fast_eval_subset
 from .chepoint import checkpoint
 from .cross_validation_splits import (
     get_class_disjoint_splits,
@@ -18,6 +19,9 @@ from .train import train
 __all__ = [
     'CustomCalculator',
     'base_update',
+    'build_batch_map_calculator',
+    'compute_batch_map',
+    'build_fast_eval_subset',
     'checkpoint',
     'get_class_disjoint_splits',
     'get_hierarchical_class_disjoint_splits',

@@ -10,48 +10,34 @@ from torchvision.models import ResNet50_Weights
 class ResNetCE(nn.Module):
     def __init__(self, num_classes, dropout=0.5, pretrained=True, freeze_bn=True, **kwargs):
         super().__init__()
-        
-        # 1. Charger ResNet50 pré-entraîné
+
         weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
         backbone = models.resnet50(weights=weights)
-        
-        # 2. Garder uniquement l'extracteur de features (jusqu'à avgpool inclus)
-        # ResNet50 structure: children()[:-1] retire la couche FC finale
+
         self.features = nn.Sequential(*list(backbone.children())[:-1])
-        self.feature_dim = 2048  # Fixe pour ResNet50
-        
-        # 3. Tête de classification spécifique au papier
-        # Dropout (0.5) -> Linear (2048 -> num_classes)
-        # Pas de BN supplémentaire ici pour CUB !
+        self.feature_dim = 2048
+
         self.dropout = nn.Dropout(p=dropout)
         self.classifier = nn.Linear(self.feature_dim, num_classes)
-        
-        # 4. Initialisation à Zéro (Critique)
+
         nn.init.constant_(self.classifier.weight, 0)
         nn.init.constant_(self.classifier.bias, 0)
 
-        # Flag pour gérer le mode des Batch Norm
         self.freeze_bn = freeze_bn
 
     def forward(self, x):
-        # Feature extraction
         x = self.features(x)
-        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+        x = x.view(x.size(0), -1)
 
         if self.training:
-            # TRAINING: Retourne les logits pour la CrossEntropy
             x = self.dropout(x)
             logits = self.classifier(x)
             return logits
         else:
-            # EVAL: Retourne les features normalisées L2 pour le calcul de distance (Recall)
             return F.normalize(x, p=2, dim=1)
 
     def train(self, mode=True):
-        """
-        Surcharge critique : même en mode train=True, 
-        les couches BN doivent rester en mode eval si freeze_bn est activé.
-        """
+        """Keeps BatchNorm layers in eval mode even when mode=True, if freeze_bn is set."""
         super().train(mode)
         if self.freeze_bn and mode:
             for m in self.modules():
@@ -61,47 +47,32 @@ class ResNetCE(nn.Module):
 class ResNetHashing(nn.Module):
     def __init__(self, num_bits, pretrained=True, freeze_bn=True, **kwargs):
         super().__init__()
-        
-        # 1. Charger ResNet50 pré-entraîné
+
         weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
         backbone = models.resnet50(weights=weights)
-        
-        # 2. Garder uniquement l'extracteur de features (jusqu'à avgpool inclus)
-        self.features = nn.Sequential(*list(backbone.children())[:-1])
-        self.feature_dim = 2048  # Fixe pour ResNet50
-        
-        # 3. Tête de hashing spécifique au papier
-        #self.dropout = nn.Dropout(p=dropout)
-        
 
-    
+        self.features = nn.Sequential(*list(backbone.children())[:-1])
+        self.feature_dim = 2048
+
         self.hash_layer = nn.Linear(self.feature_dim, num_bits)
-        
-        # Initialisation à Zéro (Critique)
+
         nn.init.xavier_uniform_(self.hash_layer.weight)
         nn.init.constant_(self.hash_layer.bias, 0)
 
-        # Flag pour gérer le mode des Batch Norm
         self.freeze_bn = freeze_bn
 
     def forward(self, x):
-        # Feature extraction
         x = self.features(x)
-        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+        x = x.view(x.size(0), -1)
         hash_logits = self.hash_layer(x)
 
         if self.training:
-            # TRAINING: Retourne les logits pour la perte de hashing
-            # x = self.dropout(x)
             return torch.tanh(hash_logits)
         else:
-            return torch.sign(hash_logits)  # Binarisation pour l'évaluation
+            return torch.sign(hash_logits)
 
     def train(self, mode=True):
-        """
-        Surcharge critique : même en mode train=True, 
-        les couches BN doivent rester en mode eval si freeze_bn est activé.
-        """
+        """Keeps BatchNorm layers in eval mode even when mode=True, if freeze_bn is set."""
         super().train(mode)
         if self.freeze_bn and mode:
             for m in self.modules():
@@ -113,22 +84,18 @@ class ResNetHashingAlpha(ResNetHashing):
         self.alpha = 1.0
 
     def set_alpha(self, epoch):
-        """
-        Méthode de continuation inspirée de HashNet
-        """
+        """HashNet-style continuation schedule for alpha."""
         self.alpha = math.pow((1.0 * epoch + 1.0), 0.5)
-    
 
     def forward(self, x):
-        # Feature extraction
         x = self.features(x)
-        x = x.view(x.size(0), -1)  # Flatten (Batch, 2048)
+        x = x.view(x.size(0), -1)
         hash_logits = self.hash_layer(x)
 
         if self.training:
             return torch.tanh(self.alpha * hash_logits)
         else:
-            return torch.sign(hash_logits)  # Binarisation pour l'évaluation
+            return torch.sign(hash_logits)
 
 class ResNet50(nn.Module):
     def __init__(self, n_bits, pretrained=True, **kwargs):

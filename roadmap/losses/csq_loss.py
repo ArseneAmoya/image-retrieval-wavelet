@@ -79,20 +79,20 @@ class CSQAdapter(nn.Module):
 
     def __init__(self, embedding_size=64, num_classes=20, lambda_param=0.0001, is_multi_label=True, **kwargs):
         super().__init__()
-        
-        #Faking dataset name to avoid the bug in CSQLoss which relies on the dataset name to determine if it's multi-label or single-label. This is a temporary workaround and should be fixed properly in the future.
+
+        # CSQLoss infers multi-label vs single-label from the dataset name; faking it here
+        # is a temporary workaround and should be fixed properly upstream.
         fake_dataset_name = "coco" if is_multi_label else "cifar10"
-        
+
         config = {
-            "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"), 
-            "n_class": num_classes, 
+            "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            "n_class": num_classes,
             "lambda": lambda_param,
-            "dataset": fake_dataset_name # <-- L'astuce pour éviter le bug
+            "dataset": fake_dataset_name
         }
         self.criterion = CSQLoss(config=config, bit=embedding_size)
 
     def forward(self, embeddings, labels, **kwargs):
-        # Appel de la vraie perte
         return self.criterion(u=embeddings, y=labels, ind=None, config={"lambda": self.criterion.lambda_param if hasattr(self.criterion, 'lambda_param') else 0.0001})
 
     def step(self):

@@ -17,26 +17,22 @@ class HashNetAdapter(nn.Module):
         super().__init__()
         config = {"alpha": alpha, "step_continuation": step_continuation}
         self.criterion = HashNetLoss(config=config, bit=embedding_size)
-        
+
         self.step_continuation = step_continuation
-        
-        # AJOUT : variables pour le suivi des batches
+
         self.batches_per_epoch = batches_per_epoch
         self.global_batch_step = 0
 
     def forward(self, embeddings, labels, **kwargs):
-        config_dict = {"alpha": 0.1} # On réinjecte l'alpha pour la perte
+        config_dict = {"alpha": 0.1}
         loss = self.criterion(u=embeddings, y=labels, ind=None, config=config_dict)
         return loss
 
     def step(self):
-        # MODIFICATION : Incrémentation par batch plutôt que par epoch
         self.global_batch_step += 1
-        
-        # Calcul mathématique de l'époque réelle en cours
+
         current_real_epoch = self.global_batch_step // self.batches_per_epoch
-        
-        # Mise à jour du scale basée sur l'époque réelle
+
         self.criterion.scale = (current_real_epoch // self.step_continuation) + 1
 
 

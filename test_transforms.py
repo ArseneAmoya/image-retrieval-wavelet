@@ -7,25 +7,20 @@ import os
 os.path
 
 def test_transforms():
-    # Charge la config
     transform_cfg = OmegaConf.load('config/transform/cifar_swt.yaml')
     print(transform_cfg)
-    # Crée les transformations via le getter
     getter = Getter()
     train_transform = getter.get_transform(transform_cfg.train)
     test_transform = getter.get_transform(transform_cfg.test)
 
-    # Charge une image test
-    img_path = r"c:\These\data\stanforddogs\Images\n02085620-Chihuahua\n02085620_1271.jpg"#"../../data/car.jpg"#"../../data/stanforddogs/Images/n02086646-Blenheim_spaniel/n02086646_45.jpg"  # Remplace avec ton chemin
+    img_path = r"c:\These\data\stanforddogs\Images\n02085620-Chihuahua\n02085620_1271.jpg"
     img = Image.open(img_path).convert('RGB')
-    
-    # Applique les transformations
+
     img_train = train_transform(img)
     img_test = test_transform(img)
 
-    print(img_train[0])  # Affiche le type et la shape du tenseur transformé
+    print(img_train[0])
 
-    # Affiche les résultats
     plt.figure(figsize=(12, 4))
     
     plt.subplot(251)

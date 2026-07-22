@@ -31,10 +31,8 @@ class CustomCalculator(AccuracyCalculator):
     def label_comparison_fn(self, query_labels, reference_labels):
         if query_labels.ndim > 1 and reference_labels.ndim > 1:
             if query_labels.dim() == 2 and reference_labels.dim() == 2:
-                # Évaluation d'une galerie complète
                 return torch.matmul(query_labels.float(), reference_labels.t().float()) > 0
             else:
-                # Évaluation locale (ex: query_labels[:, None] contre knn_labels)
                 return (query_labels.float() * reference_labels.float()).sum(dim=-1) > 0
         return query_labels.unsqueeze(1) == reference_labels
     
@@ -187,6 +185,20 @@ class CustomCalculator(AccuracyCalculator):
         dist_h = 0.5 * (q - torch.matmul(qB, rB.t()))
         return dist_h
 
+    def per_bit_balance(self, reference):
+        """
+        Per-bit balance over the gallery: 1.0 = bit splits ~50/50 across the gallery,
+        0.0 = bit is constant (dead) for every sample.
+        """
+        frac_positive = (reference > 0).float().mean(dim=0)
+        return 1.0 - 2.0 * (frac_positive - 0.5).abs()
+
+    def calculate_bit_balance(self, reference, **kwargs):
+        return self.per_bit_balance(reference).mean().item()
+
+    def calculate_worst_bit_balance(self, reference, **kwargs):
+        return self.per_bit_balance(reference).min().item()
+
 
     def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk, **kwargs):
         if isinstance(topk, tuple):
@@ -196,19 +208,16 @@ class CustomCalculator(AccuracyCalculator):
 
         for i in range(num_query):
             q_label = query_labels[i:i+1]
-            gnd = self.label_comparison_fn(query_labels[i:i+1], reference_labels).float().squeeze()            # Calcul de distance et tri
+            gnd = self.label_comparison_fn(query_labels[i:i+1], reference_labels).float().squeeze()
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
             gnd = gnd[indices]
 
-            # Sélection du Top-K et calcul de tsum
             tgnd = gnd[0:topk]
             tsum = torch.sum(tgnd).int().item()
-            
+
             if tsum > 0:
-                # Rangs des éléments positifs (commençant à 1.0)
                 tindex = torch.where(tgnd == 1)[0].float() + 1.0
-                # Numérateur basé sur le nombre de positifs trouvés
                 count = torch.arange(1, tsum + 1, device=query.device).float()
                 topkmap += torch.mean(count / tindex).item()
 
@@ -226,34 +235,29 @@ class CustomCalculator(AccuracyCalculator):
         all_recall = torch.zeros((num_query, num_gallery), device=device)
 
         for i in range(num_query):
-            # Ground Truth et Tri
             gnd = self.label_comparison_fn(query_labels[i:i+1], reference_labels).float().squeeze()
             hamm = self.calc_hamming_dist(query[i:i+1], reference).squeeze()
             indices = torch.argsort(hamm)
             gnd = gnd[indices]
 
-            # Calcul cumulé pour Precision et Recall
             all_sim_num = torch.sum(gnd)
             if all_sim_num > 0:
                 prec_sum = torch.cumsum(gnd, dim=0)
                 return_images = torch.arange(1, num_gallery + 1, device=device).float()
-                
+
                 all_prec[i, :] = prec_sum / return_images
                 all_recall[i, :] = prec_sum / all_sim_num
 
-        # Filtrage : not_lone_query_mask ET rappel final == 1.0
-        # On identifie les indices qui respectent les deux conditions
+        # Keep queries that are both not lone and reach recall == 1.0.
         valid_recall = torch.where(all_recall[:, -1] == 1.0)[0]
         valid_queries = torch.where(not_lone_query_mask)[0]
-        
-        # Intersection des indices valides
+
         combined_indices = [idx for idx in valid_queries.tolist() if idx in valid_recall.tolist()]
 
         if len(combined_indices) > 0:
             cum_prec = torch.mean(all_prec[combined_indices], dim=0)
             cum_recall = torch.mean(all_recall[combined_indices], dim=0)
 
-            # Enregistrement dans pr_rc.csv
             pd.DataFrame({
                 "pr": cum_prec.cpu().numpy(),
                 "rc": cum_recall.cpu().numpy()
@@ -263,7 +267,7 @@ class CustomCalculator(AccuracyCalculator):
 
 
     def requires_knn(self):
-        return super().requires_knn() + ["recall_classic","rpr", "pr", 'pr_rc']
+        return super().requires_knn() + ["recall_classic","rpr", "pr", 'pr_rc', 'map']
 
     def get_accuracy(
         self,
@@ -280,12 +284,7 @@ class CustomCalculator(AccuracyCalculator):
             c_f.numpy_to_torch(x).to(self.device)
             for x in [query, reference, query_labels, reference_labels]
         ]
-        
 
-        # Debug: print shapes and dtypes
-        # print("query_labels shape:", query_labels.shape, "reference_labels shape:", reference_labels.shape)
-        # print("query_labels dtype:", query_labels.dtype, "reference_labels dtype:", reference_labels.dtype)
-        # Flatten if not 1D
         if query_labels.ndim == 1 or (query_labels.ndim == 2 and query_labels.size(1) == 1):
             query_labels = query_labels.view(-1)
             reference_labels = reference_labels.view(-1)
@@ -300,6 +299,7 @@ class CustomCalculator(AccuracyCalculator):
             "embeddings_come_from_same_source": embeddings_come_from_same_source,
             "label_comparison_fn": self.label_comparison_fn,
             "ref_includes_query": embeddings_come_from_same_source,
+            "topk": self.num_top_k,
         }
 
         if any(x in self.requires_knn() for x in self.get_curr_metrics()):
@@ -318,7 +318,6 @@ class CustomCalculator(AccuracyCalculator):
                 label_counts[1], len(reference), embeddings_come_from_same_source
             )
 
-            # USE OUR OWN KNN SEARCH
             knn_indices, knn_distances = get_knn(
                 reference, query, num_k, embeddings_come_from_same_source,
                 with_faiss=self.with_faiss,
@@ -334,13 +333,11 @@ class CustomCalculator(AccuracyCalculator):
             kwargs["knn_distances"] = knn_distances
             kwargs["lone_query_labels"] = lone_query_labels
             kwargs["not_lone_query_mask"] = not_lone_query_mask
-            kwargs["topk"] = self.num_top_k,
 
         if any(x in self.requires_clustering() for x in self.get_curr_metrics()):
             kwargs["cluster_labels"] = self.get_cluster_labels(**kwargs)
 
         if return_indices:
-            # ADDED
             return knn_indices, self._get_accuracy(self.curr_function_dict, **kwargs)
         return self._get_accuracy(self.curr_function_dict, **kwargs)
 

@@ -64,10 +64,7 @@ class Cub200Indomain(BaseDataset):
         paths = np.array([a for (a, b) in dataset.imgs])
         labels = np.array([b for (a, b) in dataset.imgs])
 
-        # ==============================================================
-        # MODIFICATION IN-DOMAIN (50% Train  & gallery
-        # / 20% Test / query pour chaque classe)
-        # ==============================================================
+        # In-domain split: 50% train/gallery, 50% test/query, per class.
         label_to_paths = defaultdict(list)
         for lb, pth in zip(labels, paths):
             label_to_paths[lb].append(pth)
@@ -77,34 +74,29 @@ class Cub200Indomain(BaseDataset):
 
         for lb in sorted(label_to_paths.keys()):
             cls_paths = label_to_paths[lb]
-            cls_paths.sort()  # Tri alphabétique pour garantir un ordre stable sur tout OS
-            
-            # Utilisation d'une seed fixe (42 + label) pour le mélange. 
-            # C'est VITAL : ça garantit que les images du 'train' et du 'test' ne se mélangeront jamais
-            # même si la classe est instanciée séparément pour chaque DataLoader.
+            cls_paths.sort()  # stable order across OSes before shuffling
+
+            # A fixed seed (self.seed + label) ensures train/test never mix even when
+            # this class is instantiated separately for each DataLoader.
             rng = np.random.RandomState(self.seed + lb)
             rng.shuffle(cls_paths)
 
-            # Séparation à 80% (Train) / 20% (Test)
             split_idx = int(len(cls_paths) * 0.5)
 
             if mode in ['train', 'gallery', 'database']:
                 selected_paths = cls_paths[:split_idx]
-                
-            # Les images inédites à rechercher (Requêtes)
+
             elif mode in ['test', 'query']:
                 selected_paths = cls_paths[split_idx:]
-                
-            # Au cas où un autre script demande tout le dataset
+
             elif mode == 'all':
                 selected_paths = cls_paths
-                
+
             else:
                 raise ValueError(f"Mode de dataset non supporté : {mode}")
 
             self.paths.extend(selected_paths)
             self.labels.extend([lb] * len(selected_paths))
-        # ==============================================================
 
         self.super_labels = None
         if self.load_super_labels:

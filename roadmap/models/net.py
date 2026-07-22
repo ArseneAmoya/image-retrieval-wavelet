@@ -131,59 +131,53 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = 2048
         backbone = WCNN(pretrained=pretrained,**kwargs)#(decom_level=2, wave='haar',ll_only=False, attention=True)
         pooling = nn.Identity()
-    # Dans get_backbone(...)
     elif name == 'resnet_ce':
         lib.LOGGER.info("using ResNet-CE (Boudiaf et al. reproduction)")
-        # On récupère num_classes et dropout depuis kwargs
         num_classes = kwargs.pop('num_classes', None)
         dropout = kwargs.pop('dropout', 0.5)
-        
+
         if num_classes is None:
             raise ValueError("ResNet-CE requires 'num_classes' to be defined in kwargs")
 
-        # Instanciation propre
         backbone = ResNetCE(
-            num_classes=num_classes, 
-            dropout=dropout, 
+            num_classes=num_classes,
+            dropout=dropout,
             pretrained=pretrained,
-            freeze_bn=True, # Forcé à True selon le papier
+            freeze_bn=True,
             **kwargs
         )
         out_dim = 2048
-        pooling = nn.Identity() # Le pooling est déjà fait dans ResNetCE.features
+        pooling = nn.Identity()
     elif name == 'resnet50_tanh':
         lib.LOGGER.info(f"using ResNet-Hashing (Boudiaf et al. reproduction) pretrained : {pretrained}, freeze_bn : {kwargs.get('freeze_bn', False)}, freeze_pos_embedding : {kwargs.get('freeze_pos_embedding', False)}")
-        # On récupère num_bits et dropout depuis kwargs
         num_bits = kwargs.pop('num_bits', None)
         dropout = kwargs.pop('dropout', 0.5)
-        
+
         if num_bits is None:
             raise ValueError("ResNet-Hashing requires 'num_bits' to be defined in kwargs")
 
-        # Instanciation propre
         backbone = ResNetHashing(
-            num_bits=num_bits, 
+            num_bits=num_bits,
             pretrained=pretrained,
-            freeze_bn=False, # Forcé à True selon le papier
+            freeze_bn=False,
             **kwargs
         )
         out_dim = num_bits
-        pooling = nn.Identity() # Le pooling est déjà fait dans ResNetHashing.features
+        pooling = nn.Identity()
     elif name == 'resnet_hashing_2':
         lib.LOGGER.info(f"using ResNet-Hashing-2 (Boudiaf et al. reproduction) pretrained : {pretrained}, freeze_bn : {kwargs.get('freeze_bn', False)}, freeze_pos_embedding : {kwargs.get('freeze_pos_embedding', False)}")
         n_bits = kwargs.pop('n_bits', None)
-        
+
         if n_bits is None:
             raise ValueError("ResNet-Hashing-2 requires 'n_bits' to be defined in kwargs")
 
-        # Instanciation propre
         backbone = ResNet50Mod(
             n_bits=n_bits,
             pretrained=pretrained,
             **kwargs
         )
         out_dim = n_bits
-        pooling = nn.Identity() # Le pooling est déjà fait dans ResNet50Mod.features
+        pooling = nn.Identity()
     elif name == 'resnet18_ce':
         lib.LOGGER.info(f"using ResNet 18 for cross entropy, num classes : {kwargs.get('num_classes', "not specified")}")
         backbone = ResNetCE(pretrained=pretrained, backbone_name="resnet18",**kwargs)
@@ -196,22 +190,16 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'mtwavenet':
         lib.LOGGER.info(f"using Multi-Branch TWaveNet, num classes : {kwargs.get('num_classes', 'not specified')}")
-        # Avoid passing `num_classes` twice if it is already present in kwargs
-    
         backbone = FourBranchResNet(pretrained=pretrained, **kwargs)
         out_dim = 512 * 4
         pooling = nn.Identity()
     elif name == 'mtwavenet50_fusion':
         lib.LOGGER.info(f"using Multi-Branch TWaveNet50 with Fusion Module, num classes : {kwargs.get('num_classes', 'not specified')}")
-        # Avoid passing `num_classes` twice if it is already present in kwargs
-    
         backbone = FourBranchResNet50Fusion(pretrained=pretrained, **kwargs)
-        out_dim = 2048  # Because fusion does a weighted sum, not a concatenation
+        out_dim = 2048  # fusion does a weighted sum, not a concatenation
         pooling = nn.Identity()
     elif name == 'mtwavenet50':
         lib.LOGGER.info(f"using Multi-Branch TWaveNet50, num classes : {kwargs.get('num_classes', 'not specified')}")
-        # Avoid passing `num_classes` twice if it is already present in kwargs
-    
         backbone = FourBranchResNet50(pretrained=pretrained, **kwargs)
         out_dim = 2048 * 4
         pooling = nn.Identity()
@@ -222,15 +210,11 @@ def get_backbone(name, pretrained=True, **kwargs):
         pooling = nn.Identity()
     elif name == 'hybrid_mtwavenet_ce':
         lib.LOGGER.info(f"using Hybrid Multi-Branch TWaveNet with Cross Entropy, num classes : {kwargs.get('num_classes', 'not specified')}")
-        # Avoid passing `num_classes` twice if it is already present in kwargs
-    
         backbone = HybridMultiBranch(pretrained=pretrained, **kwargs)
         out_dim = 2048 + 1024* 3
         pooling = nn.Identity()
     elif name == 'hybrid_mtwavenet_v2_ce':
         lib.LOGGER.info(f"using Hybrid Multi-Branch V2 TWaveNet with Cross Entropy, num classes : {kwargs.get('num_classes', 'not specified')}")
-        # Avoid passing `num_classes` twice if it is already present in kwargs
-    
         backbone = HybridMultiBranchV2(pretrained=pretrained, **kwargs)
         out_dim = 2048 + 1024* 2
         pooling = nn.Identity()
@@ -343,7 +327,6 @@ def get_backbone(name, pretrained=True, **kwargs):
         out_dim = backbone.num_features
         pooling = nn.Identity()
 
-        # Gestion du gel (utile si vous voulez figer le backbone un jour)
         if kwargs.get('frozen', False):
             lib.LOGGER.info(f"Freezing {bb_name} backbone parameters")
             for p in backbone.parameters():
@@ -396,8 +379,7 @@ def get_backbone(name, pretrained=True, **kwargs):
     elif name == 'ibot':
         bb_name = kwargs.get('bb_name', 'vit_small')
         lib.LOGGER.info(f"using iBOT ({bb_name})")
-        
-        # Chargement direct depuis le repo officiel Facebook
+
         backbone = torch.hub.load('facebookresearch/ibot', bb_name)
         out_dim = backbone.embed_dim
 
@@ -405,21 +387,18 @@ def get_backbone(name, pretrained=True, **kwargs):
             for p in backbone.parameters():
                 p.requires_grad = False
             backbone.eval()
-            
+
         pooling = nn.Identity()
-    
-    # === AJOUT DE OPENCLIP ===
+
     elif name == 'openclip':
-        # Le nom du modèle et le dataset d'entraînement
         bb_name = kwargs.get('bb_name', 'ViT-S-16')
         pretrained_dataset = kwargs.get('pretrained_dataset', 'laion2b_s34b_b88k')
-        
+
         lib.LOGGER.info(f"using OpenCLIP ({bb_name} trained on {pretrained_dataset})")
-        
-        # open_clip charge un modèle complet (Vision + Texte)
+
         model = open_clip.create_model(bb_name, pretrained=pretrained_dataset)
-        backbone = model.visual 
-        out_dim = backbone.output_dim # Pour ViT-S, c'est généralement 384
+        backbone = model.visual
+        out_dim = backbone.output_dim  # ViT-S output_dim is typically 384
 
         if kwargs.get('frozen', False):
             for p in backbone.parameters():

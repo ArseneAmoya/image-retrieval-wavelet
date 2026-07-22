@@ -43,7 +43,6 @@ class Getter:
         }
 
         for opt_cfg in config:
-            # --- 1. Definition of the target module (Global or Sub-part) ---
             if opt_cfg.params is None:
                 target_module = net
                 name_key = "net"
@@ -51,9 +50,6 @@ class Getter:
                 target_module = getattr(net, opt_cfg.params)
                 name_key = opt_cfg.params
 
-            # --- 2. Advanced Parameter Separation (Specific Modules vs Rest) ---
-            
-            # Helper function to separate weights/biases for a list of parameters
             def split_weight_bias(params_iterator):
                 p_weight = []
                 p_bias = []
@@ -66,75 +62,58 @@ class Getter:
                         p_weight.append(param)
                 return p_weight, p_bias
 
-            # Lists to hold the final groups
             final_param_groups = []
 
-            # A. Check if there are specific modules with their own LR (ex: conv1)
-            # We look for a 'modules' key in kwargs or directly in opt_cfg
+            # Modules listed under 'modules' get their own param group (e.g. a distinct LR for conv1).
             specific_modules_cfg = getattr(opt_cfg, 'modules', [])
-            
-            # We keep track of processed parameters to avoid duplicates
+
             processed_params = set()
 
             if specific_modules_cfg:
                 for mod_cfg in specific_modules_cfg:
-                    # mod_cfg should contain: {'name': 'conv1', 'lr': 0.2, ...}
                     target_name = mod_cfg.get('name')
-                    module_specific_kwargs = mod_cfg.get('kwargs', {}) # lr, etc.
-                    
-                    # We look for parameters matching this name/prefix
+                    module_specific_kwargs = mod_cfg.get('kwargs', {})
+
                     specific_params_list = []
                     for name, param in target_module.named_parameters():
-                        # Logic: if the parameter name starts with the target module name
-                        # Example: target='backbone.conv1' matches 'backbone.conv1.weight'
-                        if target_name in name: 
+                        if target_name in name:
                             specific_params_list.append((name, param))
                             processed_params.add(param)
-                    
+
                     if specific_params_list:
-                        # We separate weights/biases for this specific module
                         sp_weight, sp_bias = split_weight_bias(specific_params_list)
-                        
-                        # We create the groups for this module
+
                         if sp_weight:
                             final_param_groups.append({'params': sp_weight, **module_specific_kwargs})
                         if sp_bias:
-                            # For biases, we can inherit weight_decay=0 if needed, or take the general one
-                            # Here we apply the module's specific kwargs (ex: high LR)
                             final_param_groups.append({'params': sp_bias, **module_specific_kwargs})
-                            
+
                         lib.LOGGER.info(f"   -> Applied specific config to module '{target_name}' ({len(specific_params_list)} params)")
 
-            # B. Processing the REST of the parameters (Standard logic)
             rest_params_list = []
             for name, param in target_module.named_parameters():
                 if param not in processed_params:
                     rest_params_list.append((name, param))
 
-            # Separating Weight/Bias for the rest
             params_weight, params_bias = split_weight_bias(rest_params_list)
 
-            # Retrieving general configs (Your original logic)
             common_kwargs = opt_cfg.kwargs if opt_cfg.kwargs else {}
             bias_overrides = opt_cfg.bias_kwargs if hasattr(opt_cfg, 'bias_kwargs') and opt_cfg.bias_kwargs else {}
-            
+
             bias_kwargs = common_kwargs.copy()
             bias_kwargs.update(bias_overrides)
 
-            # Adding general groups
             if params_weight:
                 final_param_groups.append({'params': params_weight, **common_kwargs})
             if params_bias:
                 final_param_groups.append({'params': params_bias, **bias_kwargs})
 
-            # --- 4. Instantiating the Optimizer ---
             optimizer_cls = getattr(optim, opt_cfg.name)
             optimizer = optimizer_cls(final_param_groups)
-            
+
             optimizers[name_key] = optimizer
             lib.LOGGER.info(f"Optimizer created for {name_key}: {optimizer}")
 
-            # --- 5. Handling Schedulers (Unchanged) ---
             if opt_cfg.scheduler_on_epoch is not None:
                 schedulers["on_epoch"].append(self.get_scheduler(optimizer, opt_cfg.scheduler_on_epoch))
             if opt_cfg.scheduler_on_step is not None:
@@ -147,31 +126,28 @@ class Getter:
         return optimizers, schedulers
 
     def get_scheduler(self, opt, config):
-        # --- Specific Case: Boudiaf et al. Reproduction (Warm Cosine) ---
         if config.name == 'warmcos':
             total_steps = config.kwargs.get('total_steps')
             warmup_steps = config.kwargs.get('warmup_steps', 100)
-            
+
             if total_steps is None:
                 raise ValueError("For 'warmcos', you must specify 'total_steps' in kwargs")
 
             lr_lambda = lambda step: min(
-                (step + 1) / warmup_steps, 
+                (step + 1) / warmup_steps,
                 (1 + math.cos(math.pi * step / total_steps)) / 2
             )
-            
+
             sch = optim.lr_scheduler.LambdaLR(opt, lr_lambda=lr_lambda)
-        
-        # --- SequentialLR Case ---
+
         elif config.name == "SequentialLR":
-            schedulers_cfg = config.kwargs.schedulers 
+            schedulers_cfg = config.kwargs.schedulers
             schedulers = [getattr(optim.lr_scheduler, s.name)(opt, **s.kwargs) for s in schedulers_cfg]
             sch = optim.lr_scheduler.SequentialLR(opt, schedulers=schedulers, milestones=config.kwargs.milestones)
-        
-        # --- Standard Case ---
+
         else:
             sch = getattr(optim.lr_scheduler, config.name)(opt, **config.kwargs)
-            
+
         lib.LOGGER.info(f"Scheduler created: {config.name}")
         return sch
 
@@ -199,30 +175,25 @@ class Getter:
             return dataset
         elif (config.name in ["Cifar100RetrievalDataset", "ImageNet100Hashing", "Cub200Indomain"]) and (mode == "test"):
             dataset = {
-                # La clé 'test' contient le query set (images requêtes)
                 "test": getattr(datasets, config.name)(transform=transform, mode="query", **config.kwargs),
-                # La clé 'gallery' contient le gallery set (images base de recherche)
                 "gallery": getattr(datasets, config.name)(transform=transform, mode="gallery", **config.kwargs),
             }
             lib.LOGGER.info(dataset)
             return dataset
         elif config.name ==  "Cifar10Retrieval":
-            # Mode Train classique
             if mode == 'train':
                 return datasets.Cifar10Retrieval(
-                    data_dir=config.kwargs.data_dir, 
-                    mode='train', 
+                    data_dir=config.kwargs.data_dir,
+                    mode='train',
                     transform=transform
                 )
-            
-            # Mode Validation (Pour checker le mAP pendant l'entrainement sans tricher sur le Test)
+
             elif mode == 'val':
                 return {
                     "test": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='val', transform=transform),
                     "gallery": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='database', transform=transform)
                 }
 
-            # Mode Test Final (Query vs Database)
             elif mode == 'test':
                 return {
                     "test": datasets.Cifar10Retrieval(data_dir=config.kwargs.data_dir, mode='query', transform=transform),

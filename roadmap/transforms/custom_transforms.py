@@ -124,20 +124,14 @@ class CustomTransform:
 
 
 class BaseWaveletTransform(object):
-    """
-    Classe Mère abstraite gérant le pipeline commun aux ondelettes :
-    - Ajustement de la taille de l'image
-    - Boucle sur les canaux RGB
-    - Conversion finale en Tenseur PyTorch
-    """
+    """Shared wavelet pipeline: resize to fit the level, transform each RGB channel, stack into a tensor."""
     def __init__(self, level=1, wavelet='haar'):
         self.level = level
         self.wavelet = wavelet
 
     def fix_size(self, image):
         w, h = image.size
-        # Le facteur dépend du niveau pour s'assurer que la division euclidienne passe
-        factor = 2 ** self.level 
+        factor = 2 ** self.level
         new_w = int(np.ceil(w / factor) * factor)
         new_h = int(np.ceil(h / factor) * factor)
         if new_w != w or new_h != h:
@@ -145,34 +139,27 @@ class BaseWaveletTransform(object):
         return image
 
     def _apply_wavelet(self, channel_pixels):
-        """
-        Méthode polymorphe. Doit être écrasée par les classes filles.
-        Prend un tableau 2D (H, W) et retourne un tableau 3D (4, H', W').
-        """
+        """Overridden by subclasses. Takes a 2D array (H, W), returns a 3D array (4, H', W')."""
         raise NotImplementedError("Cette méthode doit être définie dans la sous-classe.")
 
     def __call__(self, img):
         img = self.fix_size(img)
         img_np = np.array(img).astype(np.float32) / 255.0
-        
+
         channels_output = []
         for c in range(3):
             channel_pixels = img_np[:, :, c]
             subbands = self._apply_wavelet(channel_pixels)
-            
+
             channels_output.append(subbands)
 
         output = np.stack(channels_output)
         return torch.from_numpy(output).float()
 
 
-# ==========================================
-# LES CLASSES FILLES
-# ==========================================
-
 class SWTTransform(BaseWaveletTransform):
-    """ Transformée Stationnaire (Taille préservée: H, W) """
-    
+    """Stationary wavelet transform (size preserved: H, W)."""
+
     def _apply_wavelet(self, channel_pixels):
         coeffs = pywt.swt2(channel_pixels, self.wavelet, level=self.level)
         cA, (cH, cV, cD) = coeffs[0]
@@ -183,7 +170,7 @@ class SWTTransform(BaseWaveletTransform):
 
 
 class DWTTransform(BaseWaveletTransform):
-    """ Transformée Discrète multi-niveaux (Taille divisée par 2^level) """
+    """Discrete multi-level wavelet transform (size divided by 2^level)."""
 
     def __init__(self, level=1, wavelet='haar'):
         super().__init__(level=level, wavelet=wavelet)

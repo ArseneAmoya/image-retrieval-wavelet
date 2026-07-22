@@ -8,7 +8,6 @@ import roadmap.utils as lib
 
 
 def _batch_optimization(
-    # ... (inchangé, garde ton code actuel) ...
     config,
     net,
     batch,
@@ -111,8 +110,8 @@ def base_update(
     scaler,
     epoch,
     memory=None,
-    instrumentor=None, # <-- AJOUT : On passe l'instrumenteur
-    log_interval=4     # <-- AJOUT : Intervalle de capture
+    instrumentor=None,
+    log_interval=4
 ):
     meter = lib.DictAverage()
     net.train()
@@ -131,15 +130,9 @@ def base_update(
             memory,
         )
 
-        # =================================================================
-        # SAUVEGARDE CHIRURGICALE DES GRADIENTS ET FEATURES
-        # =================================================================
         if instrumentor is not None:
-            # On capture uniquement à l'époque 1, tous les 'log_interval' batchs
             is_target = (epoch == 1 and (i % log_interval == 0))
-            # L'instrumenteur gère lui-même le nettoyage (clear) si is_target_batch=False
             instrumentor.save_current_state(epoch, batch_idx=i, is_target_batch=is_target)
-        # =================================================================
 
         if config.experience.log_grad:
             grad_norm = lib.get_gradient_norm(net)

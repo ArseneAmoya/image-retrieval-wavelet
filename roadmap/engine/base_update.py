@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 import roadmap.utils as lib
+from .batch_map import compute_batch_map
 
 
 def _batch_optimization(
@@ -15,12 +16,20 @@ def _batch_optimization(
     optimizer,
     scaler,
     epoch,
-    memory
+    memory,
+    batch_map_calculator=None,
+    batch_map_metric=None,
 ):
-    with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+    with torch.amp.autocast('cuda', enabled=(scaler is not None)):
         di = net(batch["image"].cuda())
         labels = batch["label"].cuda()
         label_matrix = lib.create_label_matrix(labels)
+
+        logs = {}
+        if batch_map_calculator is not None:
+            logs[f"proxy_{batch_map_metric}"] = compute_batch_map(
+                batch_map_calculator, batch_map_metric, di, labels,
+            )
 
         if memory:
             memory_embeddings, memory_labels = memory(di.detach(), labels, batch["path"])
@@ -28,7 +37,6 @@ def _batch_optimization(
                 memory_scores = torch.mm(di, memory_embeddings.t())
                 memory_label_matrix = lib.create_label_matrix(labels, memory_labels)
 
-        logs = {}
         losses = []
         for crit, weight in criterion:
             if hasattr(crit, 'takes_embeddings'):
@@ -110,6 +118,8 @@ def base_update(
     scaler,
     epoch,
     memory=None,
+    batch_map_calculator=None,
+    batch_map_metric=None,
 ):
     meter = lib.DictAverage()
     net.train()
@@ -128,6 +138,8 @@ def base_update(
             scaler,
             epoch,
             memory,
+            batch_map_calculator=batch_map_calculator,
+            batch_map_metric=batch_map_metric,
         )
 
         if config.experience.log_grad:

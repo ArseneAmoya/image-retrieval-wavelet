@@ -384,9 +384,9 @@ class WaveResNetCE(nn.Module):
         if(self.att):
             x = x.view(x.size(0), 4, self.OUT_SIZE)
             x = self.attention(x)
-        if self.training:          # ⇢ mode entrainement : logits
+        if self.training:
             return self.classifier(x)
-        else:                      # ⇢ mode évaluation / test : embeddings
+        else:
             return x
     def alphas(self, x):
         x, high = self.dwt(x)

@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 
 import roadmap.utils as lib
 from .base_update import base_update
+from .batch_map import build_batch_map_calculator, build_fast_eval_subset
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
@@ -35,6 +36,20 @@ def train(
     best_score = 0.
     best_model = None
 
+    batch_map_calculator, batch_map_metric = (None, None)
+    if getattr(config.experience, "batch_map_proxy", False):
+        batch_map_calculator, batch_map_metric = build_batch_map_calculator(
+            distance_metric=config.experience.evaluation.distance_metric,
+            device=next(net.parameters()).device,
+        )
+
+    fast_eval_subset = None
+    fast_eval_freq = getattr(config.experience, "fast_eval_freq", -1)
+    if fast_eval_freq > -1:
+        fast_eval_subset = build_fast_eval_subset(
+            train_dts, size=getattr(config.experience, "fast_eval_size", 500),
+        )
+
     metrics = None
     for e in range(1 + restore_epoch, config.experience.max_iter + 1):
 
@@ -59,7 +74,12 @@ def train(
             scaler=scaler,
             epoch=e,
             memory=memory,
+            batch_map_calculator=batch_map_calculator,
+            batch_map_metric=batch_map_metric,
         )
+        for key, value in logs.items():
+            if key.startswith("proxy_"):
+                writer.add_scalar(f"Train/{key}", value, e)
         # print(criterion)
         # print(optimizer)
         # print(scheduler)
@@ -118,6 +138,31 @@ def train(
             np.random.set_state(NP_STATE)
             torch.random.set_rng_state(TORCH_STATE)
             torch.cuda.set_rng_state_all(TORCH_CUDA_STATE)
+
+        if (fast_eval_subset is not None) and (e % fast_eval_freq == 0):
+            lib.LOGGER.info(f"Fast evaluation : @epoch #{e} for model {config.experience.experiment_name}")
+            torch.cuda.empty_cache()
+            # evaluate() is decorated with @lib.get_set_random_state, so it already
+            # saves/restores the global RNG state around the call below.
+            fast_metrics = evaluate(
+                net,
+                epoch=e,
+                batch_size=config.experience.eval_bs,
+                num_workers=config.experience.num_workers,
+                with_AP=config.experience.with_AP,
+                exclude=[ "mean_reciprocal_rank",
+                          "precision_at_1","recall_at_1", "recall_at_1000", "recall_at_100",
+                          "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
+                            "recall_at_2", "recall_at_10", "pr_rc_hashing"],
+                k=config.experience.evaluation.top_k,
+                distance_metric=config.experience.evaluation.distance_metric,
+                custom_eval={"dataset": {"fast": fast_eval_subset}, "splits": [("fast", ["fast"])]},
+            )
+            torch.cuda.empty_cache()
+
+            for k_, v_ in fast_metrics.get("fast", {}).items():
+                if k_ != "epoch":
+                    writer.add_scalar(f"Fast/Evaluation/{k_}", v_, e)
 
         # """""""""""""""""" Evaluate Model """"""""""""""""""""""""""
         score = None

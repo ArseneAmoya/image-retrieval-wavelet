@@ -15,6 +15,9 @@ step_per_epoch: 1000
 train_eval_freq: 5
 val_eval_freq: -1
 test_eval_freq: 5
+batch_map_proxy: False
+fast_eval_freq: -1
+fast_eval_size: 500
 eval_bs: 1000
 save_model: 10
 eval_split: test
