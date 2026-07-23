@@ -5,7 +5,7 @@ from pytorch_metric_learning import testers
 import pytorch_metric_learning.utils.common_functions as c_f
 from tqdm import tqdm
 
-import roadmap.utils as lib
+import main.utils as lib
 from .accuracy_calculator import get_accuracy_calculator
 
 

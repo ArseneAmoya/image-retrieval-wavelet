@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from pytorch_wavelets import DWTForward, DWTInverse
 from torchvision.models import resnet50, ResNet50_Weights
 import torchvision.models as models
-import roadmap.utils as lib
+import main.utils as lib
 
 WEIGHTS_DICT = {
     'resnet18': models.ResNet18_Weights,

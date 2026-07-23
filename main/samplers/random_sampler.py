@@ -1,7 +1,7 @@
 import numpy as np
 from torch.utils.data import BatchSampler
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 class RandomSampler(BatchSampler):

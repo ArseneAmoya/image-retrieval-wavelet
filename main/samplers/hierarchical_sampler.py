@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 from torch.utils.data.sampler import BatchSampler
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def safe_random_choice(input_data, size):

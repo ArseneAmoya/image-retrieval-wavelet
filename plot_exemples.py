@@ -33,8 +33,8 @@ from typing import List, Dict, Optional
 
 import argparse
 
-from roadmap.getter import Getter
-import roadmap.utils as lib
+from main.getter import Getter
+import main.utils as lib
 
 # ====== CONFIG ======
 CIFAR_MEAN = (0.4914, 0.4822, 0.4465)

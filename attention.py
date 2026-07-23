@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import argparse
 
-from roadmap.getter import get_model, get_dataset
+from main.getter import get_model, get_dataset
 from torch.utils.data import DataLoader
 
 def main():

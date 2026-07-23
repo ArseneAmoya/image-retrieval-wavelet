@@ -1,9 +1,9 @@
 import torch
 import os
 from omegaconf import OmegaConf
-from roadmap.getter import Getter
-from roadmap.engine.evaluate import evaluate
-from roadmap.utils import get_set_random_state
+from main.getter import Getter
+from main.engine.evaluate import evaluate
+from main.utils import get_set_random_state
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_CONFIG_PATH = 'config/model/dino.yaml'

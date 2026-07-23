@@ -5,7 +5,7 @@ import os
 from omegaconf import OmegaConf
 
 try:
-    from roadmap.getter import Getter
+    from main.getter import Getter
 except ImportError:
     print("Erreur : Lancez ce script depuis la racine du projet 'image-retrieval-wavelet'.")
     sys.exit(1)

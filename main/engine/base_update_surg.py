@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def _batch_optimization(

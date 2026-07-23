@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def create_projection_head(

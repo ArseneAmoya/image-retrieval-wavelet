@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 import torch.nn.functional as F
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 class ChannelGate1D(nn.Module):

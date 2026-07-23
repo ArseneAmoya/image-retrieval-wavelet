@@ -6,7 +6,7 @@ import timm
 import open_clip
 
 
-import roadmap.utils as lib
+import main.utils as lib
 
 from .create_projection_head import create_projection_head
 from .wresnet import WaveResNet, WaveResNetCE, WCNN, WCNN_Attention, WCNN_Attention_CE

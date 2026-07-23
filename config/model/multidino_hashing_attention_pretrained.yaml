@@ -4,9 +4,9 @@ freeze_pos_embedding: False
 kwargs:
   # Liste de vos 4 branches
   pretrained_paths:
-    ll: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
-    lh: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
-    hh: 'C:/These/image retrieval/ROADMAP/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+    ll: 'C:/These/image retrieval/retrieval/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+    lh: 'C:/These/image retrieval/retrieval/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
+    hh: 'C:/These/image retrieval/retrieval/experiments/tests dino0 cifar/outputs/experiments/tests dino0 cifar/weights/rolling.ckpt'
   backbones_config:
     - name: 'dinov2_vits14' # Branche 1 (RGB Shape)
       frozen: True

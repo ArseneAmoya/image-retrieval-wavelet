@@ -5,13 +5,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from roadmap.models import net
-import roadmap.utils as lib
+from main.models import net
+import main.utils as lib
 from .base_update_surg import base_update
 from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
-import roadmap.model_hooks as model_hooks
+import main.model_hooks as model_hooks
 import gc
 
 

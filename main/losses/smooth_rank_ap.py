@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
 
-import roadmap.utils as lib
+import main.utils as lib
 
 class Heaviside(torch.autograd.Function):
     def forward(ctx, inputs, val=1 ):

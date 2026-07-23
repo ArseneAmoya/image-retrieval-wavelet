@@ -2,7 +2,7 @@ from os.path import join
 
 import torch
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def checkpoint(

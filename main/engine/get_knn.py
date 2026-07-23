@@ -3,7 +3,7 @@ import torch
 import faiss
 import pytorch_metric_learning.utils.common_functions as c_f
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def get_knn(references, queries, num_k, embeddings_come_from_same_source, with_faiss=True, distance_metric="l2"):

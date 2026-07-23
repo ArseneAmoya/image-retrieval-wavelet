@@ -1,5 +1,5 @@
 import torch.nn as nn
-from roadmap.getter import Getter
+from main.getter import Getter
 from omegaconf import OmegaConf
 from PIL import Image
 import torch
@@ -25,7 +25,7 @@ def freeze_batch_norm(model):
 
 def test_retrievalnet_with_wresnet(freeze_bn=False):
     import torch
-    from roadmap.models.net import RetrievalNet
+    from main.models.net import RetrievalNet
 
     batch_size = 15
     channels = 3

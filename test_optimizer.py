@@ -4,7 +4,7 @@ import torch.optim as optim
 import math
 import yaml
 import os
-from roadmap.getter import Getter
+from main.getter import Getter
 from omegaconf import OmegaConf
 
 getter = Getter()

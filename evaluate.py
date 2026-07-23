@@ -4,9 +4,9 @@ import argparse
 import torch
 import numpy as np
 
-from roadmap.getter import Getter
-import roadmap.utils as lib
-import roadmap.engine as eng
+from main.getter import Getter
+import main.utils as lib
+import main.engine as eng
 
 
 def load_and_evaluate(

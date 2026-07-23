@@ -6,7 +6,7 @@ from pytorch_metric_learning.utils.accuracy_calculator import (
     get_lone_query_labels,
 )
 from torchmetrics.retrieval import RetrievalRPrecision, RetrievalMAP, RetrievalPrecisionRecallCurve, RetrievalPrecision
-import roadmap.utils as lib
+import main.utils as lib
 from .get_knn import get_knn
 import pandas as pd
 
@@ -200,9 +200,16 @@ class CustomCalculator(AccuracyCalculator):
         return self.per_bit_balance(reference).min().item()
 
 
-    def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk, **kwargs):
-        if isinstance(topk, tuple):
-            topk = topk[0]
+    def calculate_maphashing(self, query, query_labels, reference, reference_labels, topk, ref_includes_query=False, **kwargs):
+        while isinstance(topk, (tuple, list)):
+            topk = topk[0] if len(topk) else None
+        if topk == "max_bin_count":
+            # Same resolution as pytorch_metric_learning's own determine_k(), but self-contained
+            # since calculate_maphashing isn't a knn-requiring metric and skips that branch.
+            _, bin_counts = get_label_match_counts(reference_labels, reference_labels, self.label_comparison_fn)
+            topk = bin_counts.max().item() - int(ref_includes_query)
+        if topk is not None:
+            topk = int(topk)
         num_query = query.shape[0]
         topkmap = 0.0
 

@@ -8,12 +8,12 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
-import roadmap.utils as lib
-import roadmap.engine as eng
-from roadmap.getter import Getter
+import main.utils as lib
+import main.engine as eng
+from main.getter import Getter
 
 from argparse import Namespace
-from roadmap.engine.DSCH.train import train as train_dsch
+from main.engine.DSCH.train import train as train_dsch
 from torch.utils.data import DataLoader
 
 

@@ -1,6 +1,6 @@
 import torch
 from PIL import Image
-from roadmap.getter import Getter
+from main.getter import Getter
 from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 import os

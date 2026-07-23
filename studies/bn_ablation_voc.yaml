@@ -1,0 +1,36 @@
+study_name: bn_ablation_voc
+
+# Static Hydra overrides, identical for every job in this study.
+base_overrides:
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: voc_swt
+  dataset: mflickr
+  loss: hash_loss
+  dataset.kwargs.data_dir: /content/data/mirflickr
+  experience.num_workers: 10
+  experience.max_iter: 50
+  experience.eval_bs: 200
+  dataset.sampler.kwargs.batch_size: 32
+  experience.test_eval_freq: 5
+  experience.train_eval_freq: 5
+  experience.clip_grad: null
+  experience.save_model: 5
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.with_autocast: false
+  experience.evaluation.top_k: 19581
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.fusion_config.use_all_tokens: false
+  loss.0.kwargs.num_classes: 38
+  experience.evaluation.distance_metric: hamming
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.batch_map_proxy: true
+  experience.log_dir: ./experiments_runs
+
+# Swept params: Hydra multirun computes the Cartesian product of these lists,
+# one job per combination (6 jobs here: 2 use_bn values x 3 seeds).
+sweep:
+  model.kwargs.use_bn: [true, false]
+  experience.seed: [111, 222, 333]

@@ -6,7 +6,7 @@ import copy
 
 import numpy as np
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def flatten(list_):

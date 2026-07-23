@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 def compute_ap(ranks, nres):

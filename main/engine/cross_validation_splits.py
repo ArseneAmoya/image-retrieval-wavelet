@@ -3,7 +3,7 @@ import random
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
 
-import roadmap.utils as lib
+import main.utils as lib
 
 
 @lib.get_set_random_state

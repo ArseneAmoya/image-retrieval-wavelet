@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-import roadmap.utils as lib
+import main.utils as lib
 from .base_update import base_update
 from .batch_map import build_batch_map_calculator, build_fast_eval_subset
 from .evaluate import evaluate
