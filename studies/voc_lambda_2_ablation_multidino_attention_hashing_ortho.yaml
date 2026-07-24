@@ -1,0 +1,49 @@
+study_name: voc_lambda_2_ablation
+
+# Variants of the reference config `voc_multidino_hashing_64bits_v2_ortho`, varying only
+# model.kwargs.fusion_config.ortho_weight (lambda2). Everything under loss/model/optimizer/
+# transform is pinned to that reference exactly (even where it happens to match a static
+# default -- explicit here so it can't silently drift later). Only pure engineering/compute
+# knobs (num_workers, eval_bs, sub_batch, logging toggles) are allowed to differ.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: voc_swt
+  dataset: voc
+  loss: hash_loss
+
+  # Dataset location (not a hyperparameter) -- matches the reference config exactly
+  dataset.kwargs.data_dir: /content/voc
+
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 20
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 5717
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep:
+  model.kwargs.fusion_config.ortho_weight: [0.0, 0.01, 0.1, 1.0, 10.0]
