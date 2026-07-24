@@ -228,7 +228,15 @@ class CustomCalculator(AccuracyCalculator):
                 count = torch.arange(1, tsum + 1, device=query.device).float()
                 topkmap += torch.mean(count / tindex).item()
 
-        return topkmap / num_query
+        result = topkmap / num_query
+        # TEMPORARY DEBUG -- remove once the proxy_maphashing scale issue is diagnosed.
+        lib.LOGGER.info(
+            f"[DEBUG calculate_maphashing] topk={topk} num_query={num_query} "
+            f"query.shape={tuple(query.shape)} reference.shape={tuple(reference.shape)} "
+            f"query.min={query.min().item():.4f} query.max={query.max().item():.4f} "
+            f"raw_topkmap_sum={topkmap:.4f} result={result:.4f}"
+        )
+        return result
     
     import pandas as pd
 
