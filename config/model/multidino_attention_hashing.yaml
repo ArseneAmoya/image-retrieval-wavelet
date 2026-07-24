@@ -16,7 +16,9 @@ kwargs:
   # Configuration de la Tête d'Attention
   binary_config:
     nbits: 32
-    
+
+  use_bn: True
+
   fusion_config:
     output_dim: 384   # Taille du vecteur final (compact = recherche rapide)
     num_heads: 8       # 8 têtes permet de capturer des relations complexes
