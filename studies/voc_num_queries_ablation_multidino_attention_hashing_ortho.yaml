@@ -41,7 +41,7 @@ base_overrides:
   experience.num_workers: 10
   experience.eval_bs: 200
   experience.sub_batch: 48
-  experience.batch_map_proxy: true
+  experience.batch_map_proxy: false
   experience.hooks_configs.active: false
   experience.dsch_train: false
   experience.log_dir: ./experiments_runs
