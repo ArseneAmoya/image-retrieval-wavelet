@@ -1,7 +1,10 @@
 """
 Launches a study defined in a YAML experiment plan (see bn_ablation_voc.yaml for the
-schema) via Hydra's built-in --multirun, reusing config/hydra/launcher/ray_launcher.yaml
-for parallel dispatch on the Ray cluster.
+schema) via Hydra's built-in --multirun. By default this uses Hydra's plain sequential
+sweeper (no extra plugin needed) -- the right choice on a single-GPU machine, since Ray
+would just serialize the jobs anyway and requires hydra-ray-launcher to be installed. Pass
+--ray (or set use_ray: true in the plan) to dispatch via config/hydra/launcher/ray_launcher.yaml
+instead, e.g. for a multi-GPU/multi-node cluster.
 
 Each job's experience.experiment_name is derived from Hydra's own
 `${hydra:job.override_dirname}` resolver, restricted to only the swept keys (the static
@@ -11,6 +14,7 @@ log_dir/<experiment_name>/ without any manual naming.
 Usage:
     python studies/run_plan.py studies/bn_ablation_voc.yaml
     python studies/run_plan.py studies/bn_ablation_voc.yaml --dry-run
+    python studies/run_plan.py studies/bn_ablation_voc.yaml --ray
 """
 import argparse
 import itertools
@@ -42,7 +46,7 @@ def load_plan(plan_path):
     return plan
 
 
-def build_command(plan):
+def build_command(plan, use_ray):
     base_overrides = plan["base_overrides"]
     sweep = plan["sweep"]
 
@@ -57,12 +61,11 @@ def build_command(plan):
     exclude_arg = "hydra.job.config.override_dirname.exclude_keys=[" + ",".join(exclude_keys) + "]"
     name_arg = f"experience.experiment_name={plan['study_name']}_${{hydra:job.override_dirname}}"
 
-    return (
-        [sys.executable, "single_experiment_runner.py", "-m", "hydra/launcher=ray_launcher"]
-        + base_args
-        + sweep_args
-        + [name_arg, exclude_arg]
-    )
+    command = [sys.executable, "single_experiment_runner.py", "-m"]
+    if use_ray:
+        command.append("hydra/launcher=ray_launcher")
+
+    return command + base_args + sweep_args + [name_arg, exclude_arg]
 
 
 def preview_job_names(plan):
@@ -81,10 +84,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("plan", type=str, help="Path to a YAML experiment plan")
     parser.add_argument("--dry-run", action="store_true", help="Print the command and job names without launching")
+    parser.add_argument("--ray", action="store_true", help="Dispatch via hydra/launcher=ray_launcher instead of Hydra's plain sequential sweeper")
     args = parser.parse_args()
 
     plan = load_plan(args.plan)
-    command = build_command(plan)
+    use_ray = args.ray or plan.get("use_ray", False)
+    command = build_command(plan, use_ray)
     names = preview_job_names(plan)
 
     print(f"Study '{plan['study_name']}': {len(names)} jobs")
