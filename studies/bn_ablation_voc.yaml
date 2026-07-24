@@ -27,6 +27,7 @@ base_overrides:
   experience.hooks_configs.active: false
   experience.dsch_train: false
   experience.batch_map_proxy: true
+  experience.step_per_epoch: 10
   experience.log_dir: ./experiments_runs
 
 sweep:
