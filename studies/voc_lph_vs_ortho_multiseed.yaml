@@ -1,0 +1,51 @@
+study_name: voc_lph_vs_ortho_multiseed
+
+# Multi-seed comparison of the paper's Table 3 rows for VOC: "LPH" (ortho_weight=0) vs
+# "LPH+Ortho" (ortho_weight=0.1, matching the reference config
+# `voc_multidino_hashing_64bits_v2_ortho`). Unlike the sensitivity sweeps, this comparison
+# actually substantiates a paper claim, so it needs seeds (3 minimum, per the revision plan)
+# -- both ortho_weight and seed are swept here, everything else pinned to the reference.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: voc_swt
+  dataset: voc
+  loss: hash_loss
+
+  # Dataset location (not a hyperparameter) -- matches the reference config exactly
+  dataset.kwargs.data_dir: /content/voc
+
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 20
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 5717
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# LPH (no ortho) vs LPH+Ortho, x3 seeds = 6 jobs.
+sweep:
+  model.kwargs.fusion_config.ortho_weight: [0.0, 0.1]
+  experience.seed: [111, 222, 333]
