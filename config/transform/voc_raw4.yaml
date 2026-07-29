@@ -1,0 +1,30 @@
+# Parameter-matched control for Reviewer #3: identical augmentation pipeline to
+# voc_swt.yaml, but the final wavelet decomposition is replaced by 4 identical
+# copies of the raw image. Same output tensor layout [C, 4, H, W], same value
+# scale (/255), same everything upstream -- only the input *content* differs.
+train:
+  Resize:
+    size: 256
+  RandomResizedCrop:
+    scale: [0.16, 1]
+    ratio: [0.75, 1.33]
+    size: 224
+  ColorJitter:
+    brightness: 0.25
+    contrast: 0.25
+    saturation: 0.25
+    hue: 0
+  RandomHorizontalFlip:
+    p: 0.5
+  RawStackTransform:
+    level: 1
+    copies: 4
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  RawStackTransform:
+    level: 1
+    copies: 4

@@ -169,6 +169,25 @@ class SWTTransform(BaseWaveletTransform):
         return f"SWTTransform(shape='C,S,H,W', wavelet={self.wavelet}, level={self.level})"
 
 
+class RawStackTransform(BaseWaveletTransform):
+    """Parameter-matched control for the wavelet decomposition: outputs the same
+    [C, 4, H, W] layout as SWTTransform, but every 'subband' is an identical copy
+    of the raw image channel. Isolates the effect of the frequency decomposition
+    from the effect of having 4 parallel branches."""
+
+    def __init__(self, level=1, wavelet='haar', copies=4):
+        # level/wavelet are accepted (and level drives fix_size) so this slots into
+        # the exact same pipeline position as SWTTransform; wavelet is unused.
+        super().__init__(level=level, wavelet=wavelet)
+        self.copies = copies
+
+    def _apply_wavelet(self, channel_pixels):
+        return np.stack([channel_pixels] * self.copies)
+
+    def __repr__(self):
+        return f"RawStackTransform(shape='C,{self.copies},H,W', copies={self.copies})"
+
+
 class DWTTransform(BaseWaveletTransform):
     """Discrete multi-level wavelet transform (size divided by 2^level)."""
 

@@ -1,0 +1,55 @@
+study_name: voc_wavelet_vs_raw4_control
+
+# Reviewer #3's parameter-matched control: does MBW-DINO's gain come from the
+# wavelet/frequency decomposition, or merely from having 4 parallel DINOv2
+# branches? Both arms use the *identical* architecture (4 unshared dinov2_vits14,
+# CrossAttentionBottleneckHeadAdvanced, num_queries=4, ortho_weight=0.1, LPH head)
+# and the identical augmentation pipeline -- the only difference is the last
+# transform step: SWT subbands (voc_swt) vs 4 raw copies of the image (voc_raw4).
+# Parameter counts are exactly matched by construction.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  dataset: voc
+  loss: hash_loss
+
+  # Dataset location (not a hyperparameter) -- matches the reference config exactly
+  dataset.kwargs.data_dir: /content/voc
+
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 20
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 5717
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single job: the raw-copies control arm only, seed 333 (matching the reference).
+# The SWT counterpart is the ortho_weight=0.1 / seed=333 run from
+# voc_lph_vs_ortho_multiseed -- reuse its number as the comparison arm.
+sweep:
+  transform: [voc_raw4]
+  experience.seed: [333]
