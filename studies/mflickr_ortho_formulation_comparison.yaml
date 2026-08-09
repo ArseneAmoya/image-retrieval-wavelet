@@ -1,0 +1,65 @@
+study_name: mflickr_ortho_formulation_comparison
+
+# Not requested by a reviewer directly, but falls out of the investigation into
+# why ortho_weight doesn't reduce attention collapse: `cross_attention_advanced`
+# (used for the paper's headline results) computes compute_ortho_loss() directly
+# on the raw query_tokens parameter (Q_norm @ Q_norm.T vs identity) -- a purely
+# parameter-space constraint, fully decoupled from what the attention softmax
+# actually does at inference time. `cross_attention_bottleneck` (the older,
+# non-"Advanced" head, still in the codebase) instead regularizes
+# attn_weights.mean(dim=0) @ ... vs identity -- i.e. it constrains the *attention
+# distribution* itself. These are mathematically different objects: perfect
+# query-token orthogonality (confirmed separately via measure_query_orthogonality.py)
+# does not imply anything about the attention distribution, which is why LL
+# dominance can persist unchanged even at ortho_weight=0.1 with the Advanced head.
+# This study trains both heads at the paper's real hyperparameters and is meant to
+# be read together with measure_attention_collapse.py: does the attention-space
+# formulation (cross_attention_bottleneck) actually move mass off LL where the
+# parameter-space formulation (cross_attention_advanced) does not?
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2, real paper value, held fixed
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: -1              # never used for best_score/principal_metric (eval_split=test) -- pure overhead
+  experience.test_eval_freq: 50                # = max_iter: full top_k=19581 eval only at the final epoch
+  experience.fast_eval_freq: 5                  # cheap progress curve on a small subset instead
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single seed each (this is a mechanism-diagnostic study, not a headline mAP
+# claim -- the headline gain's robustness is covered by mflickr_lph_vs_ortho_multiseed).
+sweep:
+  model.kwargs.fusion_config.type: [cross_attention_advanced, cross_attention_bottleneck]
+  experience.seed: [333]

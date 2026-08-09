@@ -1,0 +1,24 @@
+# For single-spatial-domain architectures (one plain image in, e.g.
+# DINOHashBaseline / config/model/dino_hashing.yaml) -- not for the wavelet
+# branches (those use basic_swt.yaml / voc_raw4.yaml, which stack into a
+# [C, 4, H, W] tensor). No ColorJitter. Plain RandomCrop instead of
+# RandomResizedCrop -- no scale/ratio params at all (RandomCrop doesn't take
+# any), so there's no zoom-in or aspect-ratio distortion, just a random
+# 224x224 window inside the 256x256 resized image. Plain ToTensor at the end
+# (matches the rest of the pipeline's convention: [0,1] scaling, no ImageNet
+# mean/std normalization -- none of the wavelet transforms apply it either).
+train:
+  Resize:
+    size: 256
+  RandomCrop:
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  ToTensor: {}

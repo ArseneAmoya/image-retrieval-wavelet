@@ -1,0 +1,61 @@
+study_name: mflickr_single_band_ablation
+
+# Standalone informativeness probe per SWT subband, decoupled from the fusion
+# head entirely -- tests the hypothesis that attention concentrates on LL
+# because LL genuinely carries more discriminative signal (DINOv2 is
+# pretrained on natural images; LL is a downsampled natural image, LH/HL/HH
+# are high-frequency detail coefficients that look nothing like DINOv2's
+# pretraining distribution), not because of any property of the queries.
+# Uses SingleBandNet (main/models/detail_tester.py): one DINOv2 backbone,
+# `detail_index` selects which of the 4 stacked SWT bands it sees
+# (0=LL, 1=LH, 2=HL, 3=HH -- matches the band order used everywhere else in
+# the codebase, e.g. mbw_dino_hooks.py's band_names list). Trained and
+# evaluated exactly like the fusion models (HashLoss, 64-bit, hamming mAP) so
+# the numbers are directly comparable to the full MBW-DINO result and to each
+# other. This is also a clean architectural ablation in its own right: it
+# shows what each individual band is worth before any fusion/attention
+# mechanism is applied at all.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: single_band
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: must match the reference hashing setup exactly ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.output_dim: 64                   # = nbits, so codes are directly comparable
+  model.kwargs.is_hashing: true
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1              # never used for best_score/principal_metric (eval_split=test) -- pure overhead
+  experience.test_eval_freq: 50                # = max_iter: full top_k=19581 eval only at the final epoch
+  experience.fast_eval_freq: 5                  # cheap progress curve on a small subset instead
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single seed per band (this is an ablation/justification study, not the
+# headline claim -- the headline gain's robustness is covered separately by
+# mflickr_lph_vs_ortho_multiseed). Cheaper per job than the fusion studies:
+# one DINOv2 backbone instead of four.
+sweep:
+  model.kwargs.detail_index: [0, 1, 2, 3]

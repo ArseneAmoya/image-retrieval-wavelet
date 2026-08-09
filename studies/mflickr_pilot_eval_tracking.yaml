@@ -1,0 +1,62 @@
+study_name: mflickr_pilot_eval_tracking
+
+# Single pilot job, run before committing to the reduced-eval policy
+# (train_eval_freq=-1, test_eval_freq=50) across the other 6 MIRFLICKR studies.
+# Two questions this answers:
+#   1. Does test mAP (the real, expensive top_k=19581 signal) actually plateau
+#      by epoch 50 under CosineAnnealingLR, or does it peak earlier and decay?
+#      If it decays, "final epoch = best epoch" doesn't hold and the reduced
+#      policy needs a safety-net eval point added back.
+#   2. Does fast_eval (cheap, 500-image train-subset self-retrieval, already
+#      wired into main/engine/train.py via build_fast_eval_subset) actually
+#      track the real test-set trajectory, or does it diverge? If it tracks
+#      well, it's a trustworthy cheap proxy for monitoring the other jobs; if
+#      it doesn't, it's only useful as a divergence/collapse canary, not a
+#      stand-in for the real signal.
+# Both are logged at the *same* frequency (every 5 epochs) specifically so
+# they can be compared point-for-point -- see measure_eval_tracking.py.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2, real paper value
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: -1                # still never used for best_score/principal_metric -- keep off
+  experience.test_eval_freq: 5                   # PILOT ONLY: full eval every 5 epochs, to see the real trajectory
+  experience.fast_eval_freq: 5                   # same frequency as test_eval_freq, for a fair point-by-point comparison
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: null
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single job -- seed 333, matching the reference config used elsewhere for
+# single-run studies (wavelet_vs_raw4_control, ortho_formulation_comparison).
+sweep:
+  experience.seed: [333]

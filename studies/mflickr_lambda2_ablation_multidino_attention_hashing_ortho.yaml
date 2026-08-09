@@ -1,5 +1,11 @@
-study_name: mflickr_lph_vs_ortho_multiseed
+study_name: mflickr_lambda2_ablation
 
+# MIRFLICKR counterpart of voc_lambda_2_ablation. Sensitivity study on
+# model.kwargs.fusion_config.ortho_weight (lambda2) -- Reviewer #2's request
+# ("no sensitivity study ... on the weight of the regularization term").
+# Everything under loss/model/optimizer/transform is pinned to the reference
+# MIRFLICKR config (mflickr_lph_vs_ortho_multiseed) exactly. Only pure
+# engineering/compute knobs are allowed to differ.
 base_overrides:
   # Config groups
   optimizer: basic
@@ -10,6 +16,7 @@ base_overrides:
 
   dataset.kwargs.data_dir: /content/data/mirflickr
 
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
   dataset.sampler.kwargs.batch_size: 96
   loss.0.kwargs.num_classes: 38
   loss.0.kwargs.embedding_size: 64
@@ -21,6 +28,7 @@ base_overrides:
   model.kwargs.fusion_config.use_all_tokens: false
   model.kwargs.fusion_config.sub_band_dropout_p: 0
   model.kwargs.with_autocast: false
+  experience.seed: 333
   experience.max_iter: 50
   experience.train_eval_freq: -1              # never used for best_score/principal_metric (eval_split=test) -- pure overhead
   experience.test_eval_freq: 50                # = max_iter: full top_k=19581 eval only at the final epoch
@@ -40,7 +48,8 @@ base_overrides:
   experience.dsch_train: false
   experience.log_dir: ./experiments_runs
 
-# LPH (no ortho) vs LPH+Ortho, x3 seeds = 6 jobs.
+# Same grid as voc_lambda_2_ablation, single seed (this is a sensitivity sweep,
+# not the headline claim -- the headline gain's robustness is covered separately
+# by mflickr_lph_vs_ortho_multiseed, which does repeat 0.0 vs 0.1 over 3 seeds).
 sweep:
-  model.kwargs.fusion_config.ortho_weight: [0.0, 0.1]
-  experience.seed: [111, 222, 333]
+  model.kwargs.fusion_config.ortho_weight: [0.0, 0.01, 0.1, 1.0, 10.0]
