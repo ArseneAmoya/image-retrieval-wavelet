@@ -248,6 +248,21 @@ python evaluate.py --config to_eval.txt --parse-file \
 gradient memory to share with; increasing `eval_bs` (already 200 in these
 studies) similarly speeds up any in-training eval that does still run.
 
+**Bug fixed (2026-08-09):** turning on `fast_eval_freq` surfaced a real bug in
+`main/engine/batch_map.py`'s `build_fast_eval_subset` — it grouped images by
+`dataset.labels` used as a raw dict key, but labels are multi-hot float
+tensors for both VOC and MIRFLICKR (multi-label datasets), and a tensor's
+default `__hash__` is identity-based, not value-based. Every image silently
+became its own singleton "class," `eligible_classes` ended up empty, the fast
+subset was empty, and `compute_all_embeddings` crashed with
+`UnboundLocalError: all_q` on the empty dataloader. Fixed to group by
+`dataset.instance_dict` (already built correctly per tag by every dataset
+class) instead, with deduplication since one image can carry multiple tags.
+Also added a clear error instead of the opaque `UnboundLocalError` if any
+split's dataloader is ever empty. Verified against a standalone repro
+(`/tmp/verify_fast_eval_fix.py`) since torch isn't available in this sandbox
+to run the real modules directly.
+
 ### 6.1 Pilot run: validate the policy before trusting it on all 6 studies
 
 `studies/mflickr_pilot_eval_tracking.yaml` — single job (ortho_weight=0.1,

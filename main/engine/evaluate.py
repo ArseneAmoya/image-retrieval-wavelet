@@ -23,6 +23,12 @@ class GlobalEmbeddingSpaceTester(testers.GlobalEmbeddingSpaceTester):
             return self.label_hierarchy_level
 
     def compute_all_embeddings(self, dataloader, trunk_model, embedder_model):
+        if len(dataloader.dataset) == 0:
+            raise ValueError(
+                "compute_all_embeddings got an empty dataset -- this used to fail later "
+                "with an opaque 'UnboundLocalError: all_q' once the loop below ran zero "
+                "iterations. Check whatever built this split (e.g. build_fast_eval_subset)."
+            )
         s, e = 0, 0
         with torch.no_grad():
             lib.LOGGER.info("Computing embeddings")

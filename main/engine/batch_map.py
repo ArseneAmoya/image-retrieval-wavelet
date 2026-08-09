@@ -38,22 +38,51 @@ def compute_batch_map(calculator, metric_name, embeddings, labels):
 
 def build_fast_eval_subset(dataset, size, min_per_class=2, seed=0):
     """Fixed, stratified self-retrieval subsample of `dataset`, built once so
-    it can be re-evaluated cheaply and consistently across epochs."""
+    it can be re-evaluated cheaply and consistently across epochs.
+
+    Groups by `dataset.instance_dict` ({class/tag index: [image indices]}),
+    which every dataset class already builds correctly via get_instance_dict()
+    (see VOC2012Hashing / MIRFlickrHashing). This does NOT group by
+    `dataset.labels` directly: labels are multi-hot float tensors for
+    multi-label datasets (VOC, MIRFLICKR), and a tensor's default `__hash__`
+    is identity-based, not value-based -- grouping by raw label silently
+    turned every image into its own singleton "class" (nothing satisfied
+    `len(idx_list) >= min_per_class`), leaving `eligible_classes` empty and
+    crashing downstream in `compute_all_embeddings` with
+    `UnboundLocalError: all_q` on an empty dataloader.
+
+    A single image can belong to multiple groups here (multiple active tags),
+    so selection is deduplicated as it goes.
+    """
     rng = random.Random(seed)
 
-    label_to_idx = {}
-    for idx, label in enumerate(dataset.labels):
-        label_to_idx.setdefault(label, []).append(idx)
+    if not hasattr(dataset, "instance_dict"):
+        raise AttributeError(
+            f"{type(dataset).__name__} has no `instance_dict` -- build_fast_eval_subset "
+            "needs {class_or_tag_idx: [image_indices]} grouping (see get_instance_dict() "
+            "on VOC2012Hashing / MIRFlickrHashing for the expected shape)."
+        )
 
-    eligible_classes = [idx_list for idx_list in label_to_idx.values() if len(idx_list) >= min_per_class]
-    rng.shuffle(eligible_classes)
+    eligible_groups = [idx_list for idx_list in dataset.instance_dict.values() if len(idx_list) >= min_per_class]
+    rng.shuffle(eligible_groups)
 
     selected = []
-    for idx_list in eligible_classes:
+    seen = set()
+    for idx_list in eligible_groups:
         if len(selected) >= size:
             break
-        selected.extend(idx_list)
+        for idx in idx_list:
+            if idx not in seen:
+                seen.add(idx)
+                selected.append(idx)
     selected = selected[:size]
+
+    if not selected:
+        raise ValueError(
+            f"build_fast_eval_subset found no eligible groups (>= {min_per_class} members) "
+            f"in {type(dataset).__name__}.instance_dict -- fast_eval_freq should be disabled "
+            "(-1) for this dataset rather than silently evaluating on an empty subset."
+        )
 
     subset = make_subset(dataset, selected)
     if hasattr(subset, "_at_R"):
