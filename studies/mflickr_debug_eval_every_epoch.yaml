@@ -1,0 +1,60 @@
+study_name: mflickr_debug_eval_every_epoch
+
+# Debug run to catch the bit_balance=0 / tanh-saturation collapse as early as
+# possible: full test eval EVERY epoch (test_eval_freq=1), so bit_balance and
+# map are visible from epoch 1 instead of first at epoch 5. If bit_balance is
+# already ~0 at epoch 1, the collapse happens within the very first epoch of
+# training (points at initialization / first-steps gradient blow-up); if it
+# starts healthy and decays over the first few epochs, it's a progressive
+# drift. Either way this tells us which, fast.
+#
+# Same real config as the reference (ortho_weight=0.1, seed=333, basic_swt,
+# num_queries=4, quant_weight=0.1, nbits=64) -- nothing changed except the eval
+# frequency, so whatever this reproduces is the same phenomenon.
+#
+# NOTE: full-gallery eval (top_k=19581) every epoch is expensive (~2 min/epoch
+# from the logs). This run is for diagnosis, not for producing a final number
+# -- kill it as soon as the first 2-3 epochs have told you what you need.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2, real paper value
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 1                   # DEBUG: full test eval every epoch, bit_balance visible from epoch 1
+  experience.fast_eval_freq: -1                  # off -- we want the real test-split bit_balance, not the fast proxy
+  experience.save_model: 1                       # keep every epoch's checkpoint so diagnose_bn_collapse.py can inspect the earliest ones
+  experience.clip_grad: null
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single job, seed 333 -- matches the reference config exactly except eval freq.
+sweep:
+  experience.seed: [333]
