@@ -263,7 +263,34 @@ split's dataloader is ever empty. Verified against a standalone repro
 (`/tmp/verify_fast_eval_fix.py`) since torch isn't available in this sandbox
 to run the real modules directly.
 
-### 6.1 Pilot run: validate the policy before trusting it on all 6 studies
+### 6.1 Decision (2026-08-10): fast_eval is NOT used for epoch selection
+
+Correlation analysis on the healthy pilot rerun (log 21, seed=333) plus the
+collapsed pilot run (log 18) settled the open question from section 6.1 below:
+
+- `fast_maphashing` vs `test_maphashing`: corr = 0.44, and `fast_maphashing`'s
+  variance is ~6x smaller than `test_maphashing`'s (std 0.003 vs 0.019) — it
+  barely moves regardless of what the real signal does.
+- `fast_bitbalance` vs `test_bitbalance`: corr = 0.06 — no relationship.
+- Decisive case: in the collapsed run (log 18), `test_bitbalance`/`test_maphashing`
+  were fully frozen (0.0 / 0.7736, identical at epoch 5 and 10) while
+  `fast_maphashing` stayed ~0.95 throughout — fast_eval did not detect the
+  collapse at all. Likely cause: `build_fast_eval_subset`'s `min_per_class>=2`
+  sampling makes the self-retrieval task structurally easy regardless of true
+  embedding quality.
+
+**Consequence:** fast_eval stays on (`fast_eval_freq: 5`) purely as a
+divergence/NaN canary — cheap, still worth having — but is never used to pick
+the best epoch or as a stand-in for the real test signal. Epoch selection
+instead uses the offline batch-eval workflow already described above: train
+with `save_model: 5` (already the default across all 7 study YAMLs),
+`test_eval_freq: 50` (or `-1`, since the offline pass supersedes it) on the
+expensive training GPU, then run `evaluate.py` against every saved
+`epoch_*.ckpt` on a separate, cheaper GPU/session afterward to get a real
+per-epoch test mAP curve and pick the actual best epoch from that — not from
+`fast_eval`, and not by assuming the final epoch is best.
+
+### 6.2 Pilot run: validate the policy before trusting it on all 6 studies
 
 `studies/mflickr_pilot_eval_tracking.yaml` — single job (ortho_weight=0.1,
 seed=333, the real config), with `test_eval_freq=5` (full eval every 5 epochs,
