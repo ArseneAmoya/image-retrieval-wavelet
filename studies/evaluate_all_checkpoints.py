@@ -51,11 +51,28 @@ def resolve_log_dir(plan, log_dir_override=None):
 
 def find_run_dirs(plan, log_dir_override=None):
     log_dir = resolve_log_dir(plan, log_dir_override)
-    # Filtered by study_name prefix -- run_plan.py names every run dir
-    # "{study_name}_{overrides}", so this is safe even if log_dir is shared
-    # with runs from other, unrelated studies (e.g. a single Drive folder
-    # everything gets dumped into).
-    return sorted(log_dir.glob(f"{plan['study_name']}_*"))
+    prefix = f"{plan['study_name']}_"
+    # Recursive on purpose: hydra.run.dir is "{log_dir}/{experiment_name}/outputs"
+    # (config/default.yaml), and experience.log_dir is then re-resolved *again*
+    # relative to that already-nested cwd when checkpoints are saved -- so the
+    # real weights/ dir can end up nested under an extra
+    # "{run_name}/outputs/experiments_runs/{run_name}/weights" path instead of
+    # directly under "{log_dir}/{run_name}/weights". Don't assume a fixed depth:
+    # find every directory literally named "weights" whose immediate parent
+    # starts with the study prefix, dedupe, and use that as the run dir (still
+    # safe if log_dir is shared with unrelated studies -- the prefix check
+    # still applies, just at whatever depth the match occurs).
+    seen = set()
+    run_dirs = []
+    if log_dir.is_dir():
+        for weights_dir in log_dir.rglob("weights"):
+            run_dir = weights_dir.parent
+            if run_dir.name.startswith(prefix):
+                resolved = run_dir.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    run_dirs.append(run_dir)
+    return sorted(run_dirs, key=lambda p: p.name)
 
 
 def find_epoch_checkpoints(run_dir):
