@@ -102,8 +102,12 @@ def main():
     parser.add_argument("--data-dir", type=str, default=None)
     parser.add_argument("--k", type=int, default=19581)
     parser.add_argument("--distance-metric", type=str, default="hamming")
-    parser.add_argument("--metric", type=str, default="map_level0",
-                         help="Metric used to pick the best epoch per run (default matches experience.principal_metric)")
+    parser.add_argument("--metric", type=str, default="maphashing_level0",
+                         help="Metric used to pick the best epoch per run (default: maphashing_level0, the "
+                              "hashing-literature mAP@topk convention -- calculate_maphashing in "
+                              "accuracy_calculator.py -- as opposed to map_level0, the generic torchmetrics "
+                              "RetrievalMAP used as experience.principal_metric. The two occasionally disagree "
+                              "on which epoch is best; maphashing_level0 is what the paper should report.)")
     parser.add_argument("--csv", type=str, default=None, help="Optional path to write the full per-epoch table")
     args = parser.parse_args()
 
@@ -114,7 +118,7 @@ def main():
               f"{resolve_log_dir(plan, args.log_dir)}.")
         return
 
-    extra_cols = ["maphashing_level0", "bit_balance_level0", "worst_bit_balance_level0"]
+    extra_cols = ["map_level0", "bit_balance_level0", "worst_bit_balance_level0"]
     all_rows = []
 
     for run_dir in run_dirs:

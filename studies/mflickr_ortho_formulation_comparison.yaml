@@ -58,8 +58,17 @@ base_overrides:
   experience.dsch_train: false
   experience.log_dir: ./experiments_runs
 
-# Single seed each (this is a mechanism-diagnostic study, not a headline mAP
-# claim -- the headline gain's robustness is covered by mflickr_lph_vs_ortho_multiseed).
+# Single seed (this is a mechanism-diagnostic study, not a headline mAP claim
+# -- the headline gain's robustness is covered by mflickr_lph_vs_ortho_multiseed).
+# cross_attention_advanced is DELIBERATELY excluded from the sweep: at
+# ortho_weight=0.1, seed=333, it's the model's default fusion_config.type
+# (config/model/multidino_attention_hashing_ortho.yaml:26) with every other
+# override matching mflickr_lph_vs_ortho_multiseed's base_overrides exactly --
+# already trained there. This study now only trains the new arm
+# (cross_attention_bottleneck); use the existing checkpoint as the
+# "advanced"/reference arm for measure_attention_collapse.py and any
+# comparison:
+#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*ortho_weight=0.1*seed=333*/
 sweep:
-  model.kwargs.fusion_config.type: [cross_attention_advanced, cross_attention_bottleneck]
+  model.kwargs.fusion_config.type: [cross_attention_bottleneck]
   experience.seed: [333]

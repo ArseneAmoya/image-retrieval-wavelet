@@ -1,0 +1,60 @@
+study_name: mflickr_vitb_capacity_control
+
+# Second, more radical R3 capacity control alongside mflickr_wavelet_vs_raw4_control.
+# That study isolates the wavelet decomposition specifically, holding the whole
+# 4-branch fusion architecture fixed. This one asks a different, complementary
+# question: does the entire multi-branch + cross-attention fusion apparatus
+# contribute anything beyond raw parameter capacity, compared to a single
+# bigger backbone? DINOv2 ViT-S/14 is ~21M params, ViT-B/14 is ~86M -- close to
+# 4x (four unshared ViT-S branches in MBW-DINO total ~84M), so a single
+# DINOHashBaseline (config/model/dino_hashing.yaml) run with dino_backbone:
+# dinov2_vitb14 is an approximately parameter-matched single-backbone control.
+# No wavelet decomposition, no fusion head, no orthogonality regularizer --
+# just a plain image in, DINOv2 ViT-B out, hashed directly. Uses `transform:
+# basic` (single spatial domain: Resize/RandomCrop/RandomHorizontalFlip, no
+# ColorJitter, no aggressive RandomResizedCrop scale/ratio, no band stacking)
+# instead of basic_swt, since there's only one input image, not 4 bands.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: dino_hashing
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: matches the reference hashing setup exactly, capacity-matched backbone ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64              # = nbits, model already projects to nbits internally
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.dino_backbone: dinov2_vitb14     # ~86M params, ~= 4x dinov2_vits14 (~21M each x 4 branches in MBW-DINO)
+  model.kwargs.embed_dim: 768                   # ViT-B/14 CLS token dim (384 for ViT-S/14)
+  model.kwargs.binary_config.nbits: 64
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1              # never used for best_score/principal_metric (eval_split=test) -- pure overhead
+  experience.test_eval_freq: 50                # = max_iter: full top_k=19581 eval only at the final epoch
+  experience.fast_eval_freq: 5                  # cheap progress curve on a small subset instead
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single job, seed 333 (matches the reference) -- this is a capacity control,
+# not a headline claim, so no multi-seed repetition here (same convention as
+# mflickr_wavelet_vs_raw4_control and mflickr_ortho_formulation_comparison).
+sweep:
+  experience.seed: [333]

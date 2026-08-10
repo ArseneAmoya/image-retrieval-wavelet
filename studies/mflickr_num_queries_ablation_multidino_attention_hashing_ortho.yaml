@@ -52,5 +52,13 @@ base_overrides:
 
 # Single seed per N (matches the reference's seed=333) -- this is a sweep, not
 # a headline claim, so no multi-seed repetition here.
+# num_queries=4 is DELIBERATELY excluded: at ortho_weight=0.1, seed=333, every
+# other override matches mflickr_lph_vs_ortho_multiseed's base_overrides
+# exactly (fusion_config.type defaults to cross_attention_advanced in both).
+# sub_batch differs (48 here vs 96 there) but is a pure memory/gradient-
+# accumulation knob (main/engine/base_update.py's _split_into_microbatches)
+# that doesn't change the trained model. Reuse the existing checkpoint instead
+# of retraining:
+#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*ortho_weight=0.1*seed=333*/
 sweep:
-  model.kwargs.fusion_config.num_queries: [1, 2, 4, 8]
+  model.kwargs.fusion_config.num_queries: [1, 2, 8]

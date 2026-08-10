@@ -51,5 +51,13 @@ base_overrides:
 # Same grid as voc_lambda_2_ablation, single seed (this is a sensitivity sweep,
 # not the headline claim -- the headline gain's robustness is covered separately
 # by mflickr_lph_vs_ortho_multiseed, which does repeat 0.0 vs 0.1 over 3 seeds).
+# ortho_weight=0.0 and =0.1 at seed=333 are DELIBERATELY excluded from the sweep
+# below: every other override here is pinned identically to
+# mflickr_lph_vs_ortho_multiseed's base_overrides, and fusion_config.type
+# defaults to cross_attention_advanced in both -- so those two points are
+# byte-for-byte reruns of jobs already trained there. Reuse those checkpoints
+# for the curve/plot instead of retraining:
+#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*ortho_weight=0.0*seed=333*/
+#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*ortho_weight=0.1*seed=333*/
 sweep:
-  model.kwargs.fusion_config.ortho_weight: [0.0, 0.01, 0.1, 1.0, 10.0]
+  model.kwargs.fusion_config.ortho_weight: [0.01, 1.0, 10.0]

@@ -40,31 +40,51 @@ All new study YAMLs live in `studies/`, follow the exact schema of the existing
 VOC studies, and are pinned to the same real hyperparameters as
 `mflickr_lph_vs_ortho_multiseed.yaml` (`ortho_weight=0.1`, `num_queries=4`,
 `quant_weight=0.1`, `nbits=64`, `num_classes=38`, `data_dir=/content/data/mirflickr`).
-All six now use `transform: basic_swt` (not `voc_swt` — `voc_swt`'s ColorJitter
-was found to destabilize training) and `voc_raw4` for the raw-copies control
-arm. Both are dataset-agnostic despite the name (just Resize/Crop/(SWT or
-raw-copy), no ColorJitter, no VOC-specific step) and use identical
-Resize/RandomResizedCrop(default scale)/RandomHorizontalFlip steps, so they
-remain a valid parameter-matched pair. A third transform, `basic.yaml` (new),
-is for single-spatial-domain architectures (e.g. `DINOHashBaseline` /
-`config/model/dino_hashing.yaml`, one plain image in, no band stacking) — not
-used by any of the six studies below yet, since none of them run that
-architecture, but available if a plain single-DINO baseline study gets added
-later.
+All the fusion-based studies use `transform: basic_swt` (not `voc_swt` —
+`voc_swt`'s ColorJitter was found to destabilize training).
+
+**R3's capacity-matched control (2026-08-11): raw*4 dropped, replaced by a
+single ViT-B backbone.** `mflickr_wavelet_vs_raw4_control.yaml` (4 identical
+raw copies of the image through the same 4-branch architecture) was the
+original design, but the advisors rejected image duplication as a control
+design on principle -- the file is kept for reference but is no longer part
+of the plan. `mflickr_vitb_capacity_control.yaml` (new) replaces it: a single
+`DINOHashBaseline` (`config/model/dino_hashing.yaml`) run with
+`dino_backbone: dinov2_vitb14` (~86M params, vs ~21M x 4 = ~84M for the four
+unshared ViT-S branches in MBW-DINO) -- no duplication, no fusion head, one
+coherent backbone whose capacity is genuinely exercised end to end. Uses the
+new `transform: basic` (single spatial domain: Resize/RandomCrop/
+RandomHorizontalFlip, no ColorJitter, no aggressive RandomResizedCrop
+scale/ratio, no band stacking -- built for exactly this case).
 
 | study yaml | question | reviewer | jobs | new? |
 |---|---|---|---|---|
 | `mflickr_lph_vs_ortho_multiseed.yaml` | Is the ortho_weight 0→0.1 mAP gain statistically robust on MIRFLICKR? | R2 (stats rigor) | 6 (2×3 seeds) | already existed |
-| `mflickr_wavelet_vs_raw4_control.yaml` | Does the gain come from wavelet decomposition, or just from 4 parallel branches (capacity)? | R3 (param-matched control) | 1 | new |
-| `mflickr_ortho_formulation_comparison.yaml` | Does attention-space ortho (`cross_attention_bottleneck`) actually reduce LL dominance where param-space ortho (`cross_attention_advanced`) doesn't? | emerged from investigation | 2 | new |
-| `mflickr_lambda2_ablation_multidino_attention_hashing_ortho.yaml` | Sensitivity to `ortho_weight` ∈ {0, 0.01, 0.1, 1, 10} | R2 (sensitivity study) | 5 | new |
-| `mflickr_num_queries_ablation_multidino_attention_hashing_ortho.yaml` | Sensitivity to `num_queries` ∈ {1, 2, 4, 8} | R2 (sensitivity study) | 4 | new |
+| `mflickr_vitb_capacity_control.yaml` | Does the full multi-branch + fusion architecture beat a single, roughly parameter-matched ViT-B backbone with no wavelet decomposition, no fusion, no ortho? | R3 (param-matched control) | 1 | new (replaces `mflickr_wavelet_vs_raw4_control.yaml`, rejected by advisors) |
+| `mflickr_ortho_formulation_comparison.yaml` | Does attention-space ortho (`cross_attention_bottleneck`) actually reduce LL dominance where param-space ortho (`cross_attention_advanced`) doesn't? | emerged from investigation | 1 (was 2 -- see dedup note below) | new |
+| `mflickr_lambda2_ablation_multidino_attention_hashing_ortho.yaml` | Sensitivity to `ortho_weight` ∈ {0, 0.01, 0.1, 1, 10} | R2 (sensitivity study) | 3 (was 5 -- see dedup note below) | new |
+| `mflickr_num_queries_ablation_multidino_attention_hashing_ortho.yaml` | Sensitivity to `num_queries` ∈ {1, 2, 4, 8} | R2 (sensitivity study) | 3 (was 4 -- see dedup note below) | new |
 | `mflickr_single_band_ablation.yaml` | Standalone mAP of each SWT band alone (`SingleBandNet`, no fusion at all) — tests whether LL is intrinsically more informative (DINOv2 pretrained on natural images) independent of any attention mechanism | emerged from investigation; also a clean architecture-justification ablation | 4 | new |
 
-**Total: 22 training jobs**, all `max_iter=50`, on MIRFLICKR (the single-band jobs are
-cheaper individually — one DINOv2 backbone instead of four). Use your
-known per-job wall-clock from the VOC studies to budget this — architecture and
-batch size are identical, only the dataset differs.
+**Total: 18 training jobs** (down from a naive 22), all `max_iter=50`, on
+MIRFLICKR (the single-band jobs are cheaper individually — one DINOv2 backbone
+instead of four). Use your known per-job wall-clock from the VOC studies to
+budget this — architecture and batch size are identical, only the dataset
+differs.
+
+**Dedup note (2026-08-11):** `mflickr_lph_vs_ortho_multiseed`'s
+`ortho_weight=0.1, seed=333` job (`fusion_config.type` defaults to
+`cross_attention_advanced`) is, by construction, an exact config match for one
+grid point in each of `mflickr_lambda2_ablation` (`ortho_weight=0.1`),
+`mflickr_num_queries_ablation` (`num_queries=4`), and
+`mflickr_ortho_formulation_comparison` (`type=cross_attention_advanced`) --
+and `mflickr_lambda2_ablation`'s `ortho_weight=0.0` point matches
+`mflickr_lph_vs_ortho_multiseed`'s `ortho_weight=0.0, seed=333` job too. All
+four sweeps have been trimmed to exclude these already-trained points; reuse
+the existing `mflickr_lph_vs_ortho_multiseed` checkpoints for those data
+points in any curve, table, or diagnostic-script comparison instead of
+retraining. Each yaml has an inline comment with the exact checkpoint glob to
+reuse.
 
 Two read-only diagnostic scripts run against the resulting checkpoints, no GPU
 required for the first one:
@@ -105,8 +125,9 @@ required for the first one:
    entirely. If LL-alone clearly outperforms the other three bands alone, that's
    clean, direct justification for why attention favors it — and a good
    architecture-justification ablation R2 explicitly wants regardless.
-4. **`mflickr_wavelet_vs_raw4_control`** (1 job) — cheapest remaining, directly
-   answers R3's capacity-vs-wavelet concern.
+4. **`mflickr_vitb_capacity_control`** (1 job) — cheapest remaining, directly
+   answers R3's capacity concern with a single ViT-B backbone instead of image
+   duplication.
 5. **`mflickr_ortho_formulation_comparison`** (2 jobs) — run the diagnostic
    scripts against both checkpoints too. Read this one together with step 3: if
    LL is genuinely more informative, forcing attention-space orthogonality
@@ -152,6 +173,36 @@ Repeat the last two commands' pattern for the `mflickr_ortho_formulation_compari
 checkpoints once that study finishes, swapping in the `cross_attention_advanced`
 vs `cross_attention_bottleneck` runs.
 
+## 4.1 Result: `mflickr_lph_vs_ortho_multiseed` (2026-08-10)
+
+All 6 runs completed, `test_bitbalance` never collapsed (range ~0.16-0.70
+across all epochs of all 6 runs) and best-epoch vs final-epoch mAP gap is
+<=0.3pt for every run -- both the worker-seeding fix and the
+final-epoch-only reporting policy are validated by this study.
+
+Best-epoch mAP (`evaluate_all_checkpoints.py`, `--metric map_level0`), paired
+by seed:
+
+| seed | ortho=0.0 | ortho=0.1 | diff (0.1-0.0) |
+|---|---|---|---|
+| 111 | 0.8436 | 0.8464 | +0.0027 |
+| 222 | 0.8364 | 0.8299 | -0.0064 |
+| 333 | 0.8549 | 0.8636 | +0.0087 |
+
+mean +/- std: ortho=0.0 -> 0.8450 +/- 0.0094, ortho=0.1 -> 0.8466 +/- 0.0169.
+Paired diff: **+0.0017 +/- 0.0076** (best-epoch), +0.0022 +/- 0.0085
+(final-epoch). Sign flips at seed 222; std is ~4.5x the mean.
+
+**This is the R2-relevant verdict: with n=3 seeds, the ortho_weight 0->0.1
+gain on MIRFLICKR is not distinguishable from noise.** Per section 5 below,
+this means the "orthogonality helps retrieval" claim needs to be dropped or
+heavily hedged as the paper's headline result -- the honest framing is the
+mechanistic one (query-space vs attention-space orthogonality, section 1),
+not a performance claim. Training stability/reproducibility is a separate,
+genuinely positive result worth reporting on its own (the seeding + clip_grad
+fixes made a previously non-deterministic setup reproducible), but it doesn't
+rescue the mAP-gain claim.
+
 ## 5. Reading the results — how they change the paper's narrative
 
 - **If step 1's gain isn't robust (CI overlaps 0):** the "orthogonality helps
@@ -169,10 +220,10 @@ vs `cross_attention_bottleneck` runs.
   possibly affect the attention distribution. Worth leading the revised section
   with this, framed as a clarification of a common design ambiguity in
   cross-attention fusion, not just an ablation entry.
-- **If `wavelet_vs_raw4_control` shows the raw-4-copies arm recovers most of the
-  gap to full MBW-DINO:** the wavelet decomposition's real contribution is
-  smaller than claimed and the paper needs to say so explicitly (this is exactly
-  what R3 is testing for).
+- **If `mflickr_vitb_capacity_control` (single ViT-B, ~parameter-matched) comes
+  close to or beats full MBW-DINO:** the whole multi-branch + fusion design's
+  real contribution over raw capacity is smaller than claimed and the paper
+  needs to say so explicitly (this is exactly what R3 is testing for).
 - **If `mflickr_single_band_ablation` shows LL alone clearly beats LH/HL/HH
   alone:** you have direct, mechanism-independent evidence that LL is the more
   informative band — the honest explanation for attention concentrating there
