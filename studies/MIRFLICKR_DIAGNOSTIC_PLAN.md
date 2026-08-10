@@ -237,12 +237,20 @@ files you actually want on a separate cheap/spot instance afterward:
 ```bash
 # on the training GPU: nothing extra needed, save_model already keeps epoch_*.ckpt
 
-# later, on a cheaper GPU (e.g. a T4/L4 spot instance), batch-evaluate:
-ls experiments_runs/*/weights/epoch_50.ckpt > to_eval.txt
-python evaluate.py --config to_eval.txt --parse-file \
+# later, on a cheaper GPU (e.g. a T4/L4 spot instance), batch-evaluate every
+# saved epoch (not just the final one) and get the real best epoch per run:
+python studies/evaluate_all_checkpoints.py studies/mflickr_lph_vs_ortho_multiseed.yaml \
     --set test --bs 256 --k 19581 --distance-metric hamming \
-    --metric-dir results_final.txt
+    --csv results_lph_vs_ortho_per_epoch.csv
 ```
+
+`studies/evaluate_all_checkpoints.py` (new) walks every run directory of a
+study, evaluates each `weights/epoch_*.ckpt` via `evaluate.py`'s own
+`load_and_evaluate()`, and reports the best epoch per run by `--metric`
+(default `map_level0`) alongside the final epoch, flagging when they differ.
+This is the tool that actually implements the section 6.1 decision -- it
+replaces both fast_eval and the final-epoch assumption as the source of truth
+for epoch selection.
 
 `--bs` can go higher than the training batch size here since there's no
 gradient memory to share with; increasing `eval_bs` (already 200 in these
