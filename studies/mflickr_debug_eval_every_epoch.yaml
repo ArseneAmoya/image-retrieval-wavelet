@@ -42,7 +42,7 @@ base_overrides:
   experience.test_eval_freq: 1                   # DEBUG: full test eval every epoch, bit_balance visible from epoch 1
   experience.fast_eval_freq: -1                  # off -- we want the real test-split bit_balance, not the fast proxy
   experience.save_model: 1                       # keep every epoch's checkpoint so diagnose_bn_collapse.py can inspect the earliest ones
-  experience.clip_grad: null
+  experience.clip_grad: 5.0
   experience.evaluation.top_k: 19581
   experience.evaluation.distance_metric: hamming
 

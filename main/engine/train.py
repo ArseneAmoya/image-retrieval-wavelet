@@ -58,11 +58,20 @@ def train(
 
         # """""""""""""""""" Training Loop """"""""""""""""""""""""""
         sampler.reshuffle()
+        # worker_init_fn + generator: without these, DataLoader workers' random/numpy
+        # RNGs aren't tied to experience.seed at all (only torch's own per-worker RNG
+        # is auto-seeded by PyTorch, from the *global* default generator's state --
+        # which is fragile/order-dependent, not reliably reproducible across two
+        # separately-launched "same seed" runs). Combined with `experience.seed` and
+        # `e` so augmentation varies epoch to epoch within a run, but is identical
+        # epoch-for-epoch across two runs of the same seed.
         loader = DataLoader(
             train_dts,
             batch_sampler=sampler,
             num_workers=config.experience.num_workers,
             pin_memory=config.experience.pin_memory,
+            worker_init_fn=lib.seed_worker,
+            generator=lib.make_worker_generator(config.experience.seed * 1_000_003 + e),
         )
         logs = base_update(
             config=config,

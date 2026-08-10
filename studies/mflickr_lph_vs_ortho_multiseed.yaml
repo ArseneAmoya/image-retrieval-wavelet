@@ -27,7 +27,7 @@ base_overrides:
   experience.fast_eval_freq: 5                  # cheap progress curve on a small subset instead
   experience.fast_eval_size: 500
   experience.save_model: 5
-  experience.clip_grad: null
+  experience.clip_grad: 5.0
   experience.evaluation.top_k: 19581
   experience.evaluation.distance_metric: hamming
 
