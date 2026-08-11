@@ -14,6 +14,8 @@ import sys
 import torch
 import torch.nn.functional as F
 
+from ckpt_resolve import resolve_ckpt_pattern
+
 QUERY_KEY = "fusion_head.query_tokens"
 
 
@@ -52,7 +54,7 @@ def main():
     for i, ckpt_path in enumerate(args.ckpts):
         if i:
             print()
-        measure(ckpt_path)
+        measure(resolve_ckpt_pattern(ckpt_path))
 
 
 if __name__ == "__main__":

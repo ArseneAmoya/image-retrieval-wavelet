@@ -42,6 +42,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from main.getter import Getter  # noqa: E402
 import main.utils as lib  # noqa: E402
+from ckpt_resolve import resolve_ckpt_pattern  # noqa: E402
 
 BAND_NAMES = ["LL", "LH", "HL", "HH"]
 
@@ -74,7 +75,8 @@ class Capture:
 
 
 def load_model_and_data(ckpt_path, set_name, data_dir):
-    state = torch.load(lib.expand_path(ckpt_path), map_location="cpu", weights_only=False)
+    ckpt_path = resolve_ckpt_pattern(lib.expand_path(ckpt_path))
+    state = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cfg = state["config"]
 
     getter = Getter()
