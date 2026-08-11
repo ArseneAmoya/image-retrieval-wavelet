@@ -55,14 +55,26 @@ class Capture:
         self.band_embeds = []    # list of [num_bands][B, D] -> transposed at the end
 
     def attn_hook(self, module, input, output):
-        # nn.MultiheadAttention forward -> (attn_output, attn_weights); need_weights
-        # defaults to True and average_attn_weights defaults to True, so weights come
-        # back already averaged over heads, shape [B, L=num_queries, S=num_bands].
+        # Patched (see force_per_head_attn below) to call with need_weights=True,
+        # average_attn_weights=False -- fusion heads use num_heads=8
+        # (config/model/multidino_attention_hashing_ortho.yaml via
+        # main/models/multi_dino_attention.py's num_heads default), and the
+        # nn.MultiheadAttention default (average_attn_weights=True) averages
+        # across all 8 heads before returning, which can make genuinely
+        # per-head-specialized attention look artificially uniform. Shape here
+        # is [B, num_heads, L=num_queries, S=num_bands].
         attn_w = output[1]
         if attn_w is None:
             raise RuntimeError(
                 "attn_weights is None -- the installed nn.MultiheadAttention must be "
                 "called with need_weights=True (the default); check torch version."
+            )
+        if attn_w.dim() != 4:
+            raise RuntimeError(
+                f"Expected per-head attn_weights of shape [B, num_heads, L, S] (4D) -- "
+                f"got shape {tuple(attn_w.shape)}. force_per_head_attn's monkeypatch of "
+                f"average_attn_weights=False may not have taken effect; check the "
+                f"installed torch version's nn.MultiheadAttention signature."
             )
         self.attn_weights.append(attn_w.detach().cpu())
 
@@ -102,10 +114,27 @@ def load_model_and_data(ckpt_path, set_name, data_dir):
     return net, dts, ortho_weight, num_queries, state.get("epoch", "?")
 
 
+def force_per_head_attn(attn_module):
+    """Monkeypatch attn_module.forward so every call is made with
+    need_weights=True, average_attn_weights=False, regardless of what the
+    fusion head's own forward() passes. Returns a restore() callback.
+    """
+    original_forward = attn_module.forward
+
+    def patched_forward(*args, **kwargs):
+        kwargs["need_weights"] = True
+        kwargs["average_attn_weights"] = False
+        return original_forward(*args, **kwargs)
+
+    attn_module.forward = patched_forward
+    return lambda: setattr(attn_module, "forward", original_forward)
+
+
 def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
     net, dts, ortho_weight, num_queries, epoch = load_model_and_data(ckpt_path, set_name, data_dir)
 
     fusion_head = net.fusion_head if not hasattr(net, "module") else net.module.fusion_head
+    restore_attn = force_per_head_attn(fusion_head.attn)
     capture = Capture()
     handles = [fusion_head.attn.register_forward_hook(capture.attn_hook)]
     for i, proj in enumerate(fusion_head.projections):
@@ -125,8 +154,22 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
 
     for h in handles:
         h.remove()
+    restore_attn()
 
-    all_attn = torch.cat(capture.attn_weights, dim=0)  # [N, num_queries, num_bands]
+    all_attn_per_head = torch.cat(capture.attn_weights, dim=0)  # [N, num_heads, num_queries, num_bands]
+    n_heads = all_attn_per_head.shape[1]
+    mean_attn_per_head = all_attn_per_head.mean(dim=0)  # [num_heads, num_queries, num_bands]
+
+    # Do individual heads specialize on different bands, even if the
+    # head-average (what average_attn_weights=True would have returned) looks
+    # uniform? Per head, per-query LL share and entropy.
+    eps = 1e-12
+    per_head_entropy = -(mean_attn_per_head * (mean_attn_per_head + eps).log()).sum(dim=-1)  # [num_heads, num_queries]
+    per_head_ll_share = mean_attn_per_head[:, :, 0].mean(dim=-1)  # [num_heads], averaged over queries
+
+    # Head-averaged view, for continuity with what average_attn_weights=True
+    # would have reported (and to compare against it directly).
+    all_attn = all_attn_per_head.mean(dim=1)  # [N, num_queries, num_bands]
     mean_attn = all_attn.mean(dim=0)  # [num_queries, num_bands]
     n_q = mean_attn.shape[0]
 
@@ -156,12 +199,16 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "ortho_weight": ortho_weight,
         "num_queries": num_queries,
         "n_images": all_attn.shape[0],
+        "n_heads": n_heads,
         "mean_attn": mean_attn,
         "cos_matrix": cos_matrix,
         "mean_band_cos": off_diag.mean().item(),
         "query_cos": query_cos,
         "mean_query_cos": q_off_diag.mean().item(),
         "per_query_entropy": per_query_entropy,
+        "mean_attn_per_head": mean_attn_per_head,
+        "per_head_entropy": per_head_entropy,
+        "per_head_ll_share": per_head_ll_share,
     }
 
 
@@ -170,8 +217,22 @@ def print_report(results):
     for r in results:
         print("=" * 78)
         print(f"{r['label']}  (epoch={r['epoch']}, ortho_weight={r['ortho_weight']}, "
-              f"num_queries={r['num_queries']}, n_images={r['n_images']})")
+              f"num_queries={r['num_queries']}, n_heads={r['n_heads']}, n_images={r['n_images']})")
         print("-" * 78)
+        print("Per-head LL share and entropy (averaged over queries) -- checks whether")
+        print("individual heads specialize on different bands even if the head-averaged")
+        print("view below (what average_attn_weights=True, the nn.MultiheadAttention")
+        print("default, would have reported) looks uniform:")
+        for hi in range(r["mean_attn_per_head"].shape[0]):
+            ll = r["per_head_ll_share"][hi].item()
+            ent_mean = r["per_head_entropy"][hi].mean().item()
+            print(f"head{hi}   LL share={ll:.3f}   mean entropy={ent_mean:.3f} (max={torch.log(torch.tensor(4.0)).item():.3f})")
+        head_ll_shares = r["per_head_ll_share"]
+        print(f"-> LL share across heads: min={head_ll_shares.min().item():.3f}, "
+              f"max={head_ll_shares.max().item():.3f}, std={head_ll_shares.std().item():.4f} "
+              f"(near-zero std means heads really do behave alike, not just the average)")
+        print()
+        print("Head-averaged view (equivalent to average_attn_weights=True):")
         print("Attention mass: rows = query, cols = subband [LL, LH, HL, HH]")
         header = "        " + "  ".join(f"{b:>6}" for b in BAND_NAMES)
         print(header)
