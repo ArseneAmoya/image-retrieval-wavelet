@@ -256,9 +256,26 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
     # redundancy, independent of whether that pattern happens to peak on LL), or do
     # they differ from each other even while individually favoring LL? Measured on the
     # per-sample attention rows (not the batch-mean) so it isn't washed out by averaging.
-    q_norm = F.normalize(all_attn, p=2, dim=-1)  # [N, num_queries, num_bands]
-    query_cos = torch.einsum("nqd,nrd->qrn", q_norm, q_norm).mean(dim=-1)  # [num_queries, num_queries]
+    # IMPORTANT: compare the *deviations from uniform*, not the raw rows. Any two
+    # near-uniform distributions have cosine ~1.0 simply because both are dominated
+    # by the same constant component (1/num_bands) -- that says nothing about whether
+    # the queries differ. Subtracting the row mean isolates each query's actual
+    # preference pattern, which is the thing that could genuinely differ.
+    centered = all_attn - all_attn.mean(dim=-1, keepdim=True)  # [N, num_queries, num_bands]
+    c_norm = F.normalize(centered, p=2, dim=-1)
+    query_cos = torch.einsum("nqd,nrd->qrn", c_norm, c_norm).mean(dim=-1)  # [num_queries, num_queries]
     q_off_diag = query_cos[~torch.eye(n_q, dtype=torch.bool)]
+
+    # How big is that preference in absolute terms? A high centered cosine on a
+    # deviation of ~0.01 means "the queries agree on a preference that is itself
+    # negligible", which is a very different statement from real collapse.
+    deviation_magnitude = centered.abs().mean().item()
+    per_query_deviation = centered.abs().mean(dim=(0, 2))  # [num_queries]
+
+    # Raw (uncentered) version, kept only to show explicitly how misleading it is.
+    raw_cos = torch.einsum("nqd,nrd->qrn", F.normalize(all_attn, p=2, dim=-1),
+                            F.normalize(all_attn, p=2, dim=-1)).mean(dim=-1)
+    raw_off_diag = raw_cos[~torch.eye(n_q, dtype=torch.bool)]
 
     # Entropy of each query's mean attention distribution: log(4) = 1.386 is uniform
     # (no collapse), 0 is a one-hot spike on a single band (full collapse).
@@ -277,6 +294,9 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "mean_band_cos": off_diag.mean().item(),
         "query_cos": query_cos,
         "mean_query_cos": q_off_diag.mean().item(),
+        "mean_raw_query_cos": raw_off_diag.mean().item(),
+        "deviation_magnitude": deviation_magnitude,
+        "per_query_deviation": per_query_deviation,
         "per_query_entropy": per_query_entropy,
         "mean_attn_per_head": mean_attn_per_head,
         "per_head_entropy": per_head_entropy,
@@ -329,13 +349,20 @@ def print_report(results):
         print(f"-> mean mass on LL across all queries: {ll_share:.3f}  "
               f"(1/4 = 0.250 would be uniform)")
         print()
-        print("Inter-query redundancy: cosine similarity between queries' per-sample")
-        print("attention rows (not the batch mean) -- low off-diagonal means queries")
-        print("differ from each other even if each individually favors LL; high means")
-        print("real functional collapse (queries behave identically, not just LL-heavy).")
+        print("Inter-query redundancy, measured on per-sample attention rows AFTER")
+        print("subtracting each row's mean -- i.e. on the deviation from uniform, which")
+        print("is the only part that carries a preference. (Raw uncentered cosine is")
+        print("meaningless here: near-uniform rows all share the same constant")
+        print("component and trivially give ~1.0 regardless of their preferences.)")
         for qi, row in enumerate(r["query_cos"]):
             print(f"query{qi}  " + "  ".join(f"{v:6.3f}" for v in row.tolist()))
-        print(f"-> mean |off-diagonal| inter-query cosine similarity: {r['mean_query_cos']:.4f}")
+        print(f"-> mean |off-diagonal| CENTERED inter-query cosine: {r['mean_query_cos']:.4f}")
+        print(f"   (uncentered, for reference only: {r['mean_raw_query_cos']:.4f})")
+        print(f"-> mean |deviation from uniform| per attention entry: {r['deviation_magnitude']:.5f}")
+        print(f"   per query: " + ", ".join(f"{v:.5f}" for v in r["per_query_deviation"].tolist()))
+        print("   A high centered cosine on a deviation this small means the queries")
+        print("   agree on a preference that is itself negligible -- not the same claim")
+        print("   as functional collapse onto a strong shared pattern.")
         print()
         print("Per-band read-out diversity (KV projections, before attention):")
         print("cosine similarity matrix [LL, LH, HL, HH] x [LL, LH, HL, HH]")
