@@ -53,6 +53,20 @@ class Capture:
     def __init__(self):
         self.attn_weights = []   # list of [B, num_queries, num_bands]
         self.band_embeds = []    # list of [num_bands][B, D] -> transposed at the end
+        self.qk_inputs = []      # list of (query, key) as actually passed to self.attn
+
+    def attn_pre_hook(self, module, args, kwargs):
+        # CrossAttentionBottleneckHeadAdvanced.forward calls
+        # self.attn(query=q, key=kv, value=kv) with keyword args, so read kwargs
+        # first and fall back to positional. Needed to recompute the raw
+        # pre-softmax scores (see score_stats) -- if those scores are tiny,
+        # softmax returns a near-uniform distribution and the attention is
+        # effectively inactive, which is a real property of the trained model
+        # rather than a measurement artifact.
+        q = kwargs.get("query", args[0] if len(args) > 0 else None)
+        k = kwargs.get("key", args[1] if len(args) > 1 else None)
+        if q is not None and k is not None:
+            self.qk_inputs.append((q.detach().cpu(), k.detach().cpu()))
 
     def attn_hook(self, module, input, output):
         # Patched (see force_per_head_attn below) to call with need_weights=True,
@@ -114,6 +128,61 @@ def load_model_and_data(ckpt_path, set_name, data_dir):
     return net, dts, ortho_weight, num_queries, state.get("epoch", "?")
 
 
+def score_stats(attn_module, qk_inputs):
+    """Recompute the raw pre-softmax attention scores exactly as
+    nn.MultiheadAttention does internally: project q and k through in_proj,
+    split into heads, scale by 1/sqrt(head_dim), then q @ k^T.
+
+    The point is to distinguish two very different situations that both show
+    up as "uniform attention" downstream:
+      - scores have real spread but happen to average out -> attention is
+        doing something, the summary was just hiding it;
+      - scores are numerically tiny (|score| << 1) -> softmax over them is
+        mathematically forced toward uniform (softmax of near-equal logits),
+        i.e. the attention module is effectively inactive and the queries
+        cannot differentiate the bands at all.
+
+    Note the correct scaling here is 1/sqrt(head_dim) (what PyTorch applies),
+    NOT an arbitrary constant -- multiplying raw scores by an ad-hoc factor
+    will manufacture non-uniform attention that the trained model never
+    actually computes.
+    """
+    embed_dim = attn_module.embed_dim
+    num_heads = attn_module.num_heads
+    head_dim = embed_dim // num_heads
+    W = attn_module.in_proj_weight.detach().cpu()
+    b = attn_module.in_proj_bias
+    b = b.detach().cpu() if b is not None else torch.zeros(3 * embed_dim)
+
+    W_q, W_k = W[:embed_dim], W[embed_dim:2 * embed_dim]
+    b_q, b_k = b[:embed_dim], b[embed_dim:2 * embed_dim]
+
+    all_scores = []
+    for q, k in qk_inputs:
+        qp = F.linear(q, W_q, b_q)   # [B, L, D]
+        kp = F.linear(k, W_k, b_k)   # [B, S, D]
+        B, L, _ = qp.shape
+        S = kp.shape[1]
+        qp = qp.view(B, L, num_heads, head_dim).transpose(1, 2)   # [B, H, L, hd]
+        kp = kp.view(B, S, num_heads, head_dim).transpose(1, 2)   # [B, H, S, hd]
+        scores = torch.matmul(qp, kp.transpose(-2, -1)) / (head_dim ** 0.5)  # [B, H, L, S]
+        all_scores.append(scores)
+
+    scores = torch.cat(all_scores, dim=0)
+    # Spread *within* each softmax row is what actually determines whether the
+    # output is uniform -- a large constant offset shared by every band cancels
+    # out in softmax, so absolute magnitude alone isn't the right diagnostic.
+    row_spread = (scores.max(dim=-1).values - scores.min(dim=-1).values)
+    return {
+        "mean_abs": scores.abs().mean().item(),
+        "std": scores.std().item(),
+        "min": scores.min().item(),
+        "max": scores.max().item(),
+        "mean_row_spread": row_spread.mean().item(),
+        "max_row_spread": row_spread.max().item(),
+    }
+
+
 def force_per_head_attn(attn_module):
     """Monkeypatch attn_module.forward so every call is made with
     need_weights=True, average_attn_weights=False, regardless of what the
@@ -136,7 +205,10 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
     fusion_head = net.fusion_head if not hasattr(net, "module") else net.module.fusion_head
     restore_attn = force_per_head_attn(fusion_head.attn)
     capture = Capture()
-    handles = [fusion_head.attn.register_forward_hook(capture.attn_hook)]
+    handles = [
+        fusion_head.attn.register_forward_hook(capture.attn_hook),
+        fusion_head.attn.register_forward_pre_hook(capture.attn_pre_hook, with_kwargs=True),
+    ]
     for i, proj in enumerate(fusion_head.projections):
         handles.append(proj.register_forward_hook(capture.make_projection_hook(i)))
 
@@ -209,6 +281,8 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "mean_attn_per_head": mean_attn_per_head,
         "per_head_entropy": per_head_entropy,
         "per_head_ll_share": per_head_ll_share,
+        "score_stats": score_stats(fusion_head.attn, capture.qk_inputs),
+        "query_token_norm": fusion_head.query_tokens.detach().cpu().norm(dim=-1).flatten(),
     }
 
 
@@ -219,6 +293,18 @@ def print_report(results):
         print(f"{r['label']}  (epoch={r['epoch']}, ortho_weight={r['ortho_weight']}, "
               f"num_queries={r['num_queries']}, n_heads={r['n_heads']}, n_images={r['n_images']})")
         print("-" * 78)
+        ss = r["score_stats"]
+        print("Raw pre-softmax attention scores (recomputed exactly as")
+        print("nn.MultiheadAttention does: in_proj, split heads, scale by 1/sqrt(head_dim)):")
+        print(f"  mean|score|={ss['mean_abs']:.4f}  std={ss['std']:.4f}  "
+              f"range=[{ss['min']:.4f}, {ss['max']:.4f}]")
+        print(f"  within-row spread (max-min across the 4 bands, what softmax actually sees):")
+        print(f"    mean={ss['mean_row_spread']:.4f}  max={ss['max_row_spread']:.4f}")
+        print(f"  -> a within-row spread << 1 mathematically forces near-uniform softmax:")
+        print(f"     the attention module cannot differentiate the bands, regardless of ortho.")
+        qn = r["query_token_norm"]
+        print(f"  query_token L2 norms: " + ", ".join(f"{v:.4f}" for v in qn.tolist()))
+        print()
         print("Per-head LL share and entropy (averaged over queries) -- checks whether")
         print("individual heads specialize on different bands even if the head-averaged")
         print("view below (what average_attn_weights=True, the nn.MultiheadAttention")
