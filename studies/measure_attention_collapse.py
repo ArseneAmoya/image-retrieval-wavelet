@@ -183,6 +183,64 @@ def score_stats(attn_module, qk_inputs):
     }
 
 
+def projected_query_stats(attn_module, query_tokens):
+    """The missing link between measure_query_orthogonality.py and the attention rows.
+
+    Three distinct objects live in this chain, and conflating them is exactly what
+    made the original "orthogonality prevents attention collapse" claim unfalsifiable:
+      1. q_i                  -- the raw query tokens; what compute_ortho_loss()
+                                 constrains (Gram of the L2-normalized q_i vs I).
+      2. W_q @ q_i + b_q      -- the projected queries actually used to compute
+                                 attention scores. THIS function measures these.
+      3. softmax(Q @ K^T/sqrt(d)) -- the attention distributions.
+
+    Orthogonality at level 1 does not imply distinguishability at level 2: b_q is
+    shared by every query, and compute_ortho_loss normalizes q_i, so it constrains
+    directions only and is completely blind to ||q_i||. If ||W_q @ q_i|| << ||b_q||,
+    all projected queries collapse onto b_q regardless of how orthogonal the raw
+    tokens are. The norm ratio reported here is the direct test of that.
+
+    Also reports per-head cosines, since attention is computed per head on
+    head_dim-sized slices, not on the full embed_dim vector.
+    """
+    embed_dim = attn_module.embed_dim
+    num_heads = attn_module.num_heads
+    head_dim = embed_dim // num_heads
+
+    W = attn_module.in_proj_weight.detach().cpu()
+    b = attn_module.in_proj_bias
+    b = b.detach().cpu() if b is not None else torch.zeros(3 * embed_dim)
+    W_q, b_q = W[:embed_dim], b[:embed_dim]
+
+    q = query_tokens.detach().cpu().squeeze(0)          # [num_queries, embed_dim]
+    wq = F.linear(q, W_q)                                # W_q @ q_i  (no bias)
+    proj = wq + b_q                                      # W_q @ q_i + b_q
+
+    n_q = proj.shape[0]
+    eye = ~torch.eye(n_q, dtype=torch.bool)
+
+    raw_cos = F.normalize(q, dim=-1) @ F.normalize(q, dim=-1).t()
+    proj_cos = F.normalize(proj, dim=-1) @ F.normalize(proj, dim=-1).t()
+
+    # Per-head: attention scores are computed on head_dim slices independently.
+    proj_heads = proj.view(n_q, num_heads, head_dim).transpose(0, 1)   # [H, n_q, hd]
+    ph_norm = F.normalize(proj_heads, dim=-1)
+    per_head_cos = torch.matmul(ph_norm, ph_norm.transpose(-2, -1))    # [H, n_q, n_q]
+    per_head_off = torch.stack([per_head_cos[h][eye].abs().mean() for h in range(num_heads)])
+
+    return {
+        "raw_cos": raw_cos,
+        "raw_off": raw_cos[eye].abs().mean().item(),
+        "proj_cos": proj_cos,
+        "proj_off": proj_cos[eye].abs().mean().item(),
+        "per_head_off": per_head_off,
+        "wq_norms": wq.norm(dim=-1),          # ||W_q @ q_i||, per query
+        "bq_norm": b_q.norm().item(),         # ||b_q||, shared
+        "proj_norms": proj.norm(dim=-1),
+        "q_norms": q.norm(dim=-1),
+    }
+
+
 def force_per_head_attn(attn_module):
     """Monkeypatch attn_module.forward so every call is made with
     need_weights=True, average_attn_weights=False, regardless of what the
@@ -228,9 +286,33 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         h.remove()
     restore_attn()
 
-    all_attn_per_head = torch.cat(capture.attn_weights, dim=0)  # [N, num_heads, num_queries, num_bands]
+    all_attn_per_head = torch.cat(capture.attn_weights, dim=0)  # [N, num_heads, num_queries, S]
     n_heads = all_attn_per_head.shape[1]
-    mean_attn_per_head = all_attn_per_head.mean(dim=0)  # [num_heads, num_queries, num_bands]
+    n_bands = len(fusion_head.projections)
+
+    # use_all_tokens handling: the fusion head either stacks one pooled token per
+    # band (kv = torch.stack(...) -> S = n_bands) or concatenates every token of
+    # every band (kv = torch.cat(...) -> S = n_bands * tokens_per_band). In the
+    # latter case each band owns a contiguous block of S//n_bands columns, so the
+    # per-band attention mass is the SUM over that block -- indexing column 0 as
+    # "LL" would silently report a single token's share instead of the band's.
+    S = all_attn_per_head.shape[-1]
+    if S != n_bands:
+        if S % n_bands != 0:
+            raise RuntimeError(
+                f"attention has {S} key positions, not divisible by {n_bands} bands -- "
+                f"cannot map columns back to bands. Check the fusion head's kv layout."
+            )
+        tokens_per_band = S // n_bands
+        print(f"  [use_all_tokens detected: {S} keys = {n_bands} bands x {tokens_per_band} "
+              f"tokens; summing each band's block]")
+        all_attn_per_head = all_attn_per_head.view(
+            *all_attn_per_head.shape[:-1], n_bands, tokens_per_band
+        ).sum(dim=-1)  # [N, num_heads, num_queries, n_bands]
+    else:
+        tokens_per_band = 1
+
+    mean_attn_per_head = all_attn_per_head.mean(dim=0)  # [num_heads, num_queries, n_bands]
 
     # Do individual heads specialize on different bands, even if the
     # head-average (what average_attn_weights=True would have returned) looks
@@ -245,12 +327,16 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
     mean_attn = all_attn.mean(dim=0)  # [num_queries, num_bands]
     n_q = mean_attn.shape[0]
 
-    band_stack = [torch.cat(embeds, dim=0) for embeds in capture.band_embeds]  # 4 x [N, D]
-    band_stack = torch.stack(band_stack, dim=0)  # [4, N, D]
+    band_stack = [torch.cat(embeds, dim=0) for embeds in capture.band_embeds]  # n_bands x [N, D] or [N, T, D]
+    # With use_all_tokens the projections emit [B, tokens, D] rather than [B, D];
+    # mean-pool the token axis so the per-band read-out comparison stays a single
+    # vector per image per band (same object being compared in both regimes).
+    band_stack = [b.mean(dim=1) if b.dim() == 3 else b for b in band_stack]
+    band_stack = torch.stack(band_stack, dim=0)  # [n_bands, N, D]
     band_norm = F.normalize(band_stack, p=2, dim=-1)
     # pairwise cosine similarity between bands, averaged over the batch dimension
-    cos_matrix = torch.einsum("and,bnd->abn", band_norm, band_norm).mean(dim=-1)  # [4, 4]
-    off_diag = cos_matrix[~torch.eye(4, dtype=torch.bool)]
+    cos_matrix = torch.einsum("and,bnd->abn", band_norm, band_norm).mean(dim=-1)  # [n_bands, n_bands]
+    off_diag = cos_matrix[~torch.eye(n_bands, dtype=torch.bool)]
 
     # Do queries just all collapse onto the *same* attention pattern (real functional
     # redundancy, independent of whether that pattern happens to peak on LL), or do
@@ -289,6 +375,8 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "num_queries": num_queries,
         "n_images": all_attn.shape[0],
         "n_heads": n_heads,
+        "n_bands": n_bands,
+        "tokens_per_band": tokens_per_band,
         "mean_attn": mean_attn,
         "cos_matrix": cos_matrix,
         "mean_band_cos": off_diag.mean().item(),
@@ -302,6 +390,7 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "per_head_entropy": per_head_entropy,
         "per_head_ll_share": per_head_ll_share,
         "score_stats": score_stats(fusion_head.attn, capture.qk_inputs),
+        "proj_q": projected_query_stats(fusion_head.attn, fusion_head.query_tokens),
         "query_token_norm": fusion_head.query_tokens.detach().cpu().norm(dim=-1).flatten(),
     }
 
@@ -311,7 +400,8 @@ def print_report(results):
     for r in results:
         print("=" * 78)
         print(f"{r['label']}  (epoch={r['epoch']}, ortho_weight={r['ortho_weight']}, "
-              f"num_queries={r['num_queries']}, n_heads={r['n_heads']}, n_images={r['n_images']})")
+              f"num_queries={r['num_queries']}, n_heads={r['n_heads']}, "
+              f"tokens_per_band={r['tokens_per_band']}, n_images={r['n_images']})")
         print("-" * 78)
         ss = r["score_stats"]
         print("Raw pre-softmax attention scores (recomputed exactly as")
@@ -324,6 +414,24 @@ def print_report(results):
         print(f"     the attention module cannot differentiate the bands, regardless of ortho.")
         qn = r["query_token_norm"]
         print(f"  query_token L2 norms: " + ", ".join(f"{v:.4f}" for v in qn.tolist()))
+        print()
+        pq = r["proj_q"]
+        print("The three levels of the chain, measured separately:")
+        print("  level 1  q_i (raw query tokens, what the ortho loss constrains)")
+        print(f"           mean |off-diag| cosine: {pq['raw_off']:.4f}   "
+              f"(0 = perfectly orthogonal)")
+        print(f"           ||q_i||: " + ", ".join(f"{v:.4f}" for v in pq["q_norms"].tolist()))
+        print("  level 2  W_q @ q_i + b_q (projected queries, what attention actually uses)")
+        print(f"           mean |off-diag| cosine: {pq['proj_off']:.4f}")
+        print(f"           per-head mean |off-diag| cosine: "
+              + ", ".join(f"{v:.3f}" for v in pq["per_head_off"].tolist()))
+        print(f"           ||W_q @ q_i||: " + ", ".join(f"{v:.4f}" for v in pq["wq_norms"].tolist()))
+        print(f"           ||b_q|| (shared by every query): {pq['bq_norm']:.4f}")
+        ratio = (pq["wq_norms"].mean().item() / pq["bq_norm"]) if pq["bq_norm"] > 0 else float("inf")
+        print(f"           -> mean ||W_q @ q_i|| / ||b_q|| = {ratio:.4f}")
+        print("              << 1 means the shared bias dominates and the projected")
+        print("              queries collapse onto b_q no matter how orthogonal q_i is.")
+        print("  level 3  softmax(Q @ K^T / sqrt(d)) -- the attention rows, reported below.")
         print()
         print("Per-head LL share and entropy (averaged over queries) -- checks whether")
         print("individual heads specialize on different bands even if the head-averaged")

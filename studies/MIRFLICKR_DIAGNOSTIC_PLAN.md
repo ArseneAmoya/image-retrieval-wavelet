@@ -203,6 +203,103 @@ genuinely positive result worth reporting on its own (the seeding + clip_grad
 fixes made a previously non-deterministic setup reproducible), but it doesn't
 rescue the mAP-gain claim.
 
+## 4.2 Result: attention diagnostics (2026-08-11) — there is no attention collapse
+
+Run on `mflickr_lph_vs_ortho_multiseed`'s seed=333 checkpoints (epoch 50, 320
+test images), ortho_weight 0.0 vs 0.1.
+
+**Query orthogonality (`measure_query_orthogonality.py`)** — behaves exactly as
+designed: ortho=0.0 gives mean |off-diagonal| 0.0424 (max 0.0999), i.e. the
+queries are *already* nearly orthogonal without any regularizer; ortho=0.1
+gives 0.0000. Confirms the earlier finding that there was little query
+collapse to prevent in the first place.
+
+**Attention distribution (`measure_attention_collapse.py`)** — no collapse, at
+either setting:
+
+| | ortho=0.0 | ortho=0.1 |
+|---|---|---|
+| attention share LL / LH / HL / HH | 0.258 / 0.252 / 0.247 / 0.242 | 0.258 / 0.250 / 0.250 / 0.243 |
+| per-query entropy | 1.386 = log(4) (max) | 1.386 = log(4) (max) |
+| LL share std across the 8 heads | 0.0035 | 0.0027 |
+| band read-out cosine (mean off-diag) | 0.7156 | 0.6819 |
+
+Entropy is at its theoretical maximum and heads do not specialize. **The
+premise of the paper's contribution -- that attention collapses onto LL and
+needs correcting -- does not hold on MIRFLICKR.** Together with the two other
+findings (no meaningful query collapse; no statistically significant mAP gain,
+section 4.1), the regularizer was addressing a problem that isn't there.
+
+**Why the original VOC figure showed total LL dominance:** that analysis
+applied `scores = raw_scores * 10.0` before the softmax, while
+`nn.MultiheadAttention` scales by `1/sqrt(head_dim) = 1/sqrt(48)` -- a 69x
+inflation of the logits. Feeding the measured MIRFLICKR shares through that
+same 69x factor reproduces the published-style figure almost exactly
+(LL=0.875, LH=0.100, HL=0.019, HH=0.006, entropy 0.66 bits). Multiplying
+logits before a softmax is a temperature change, not a gain adjustment: it
+manufactures peakedness. The *direction* (LL mildly favored) is real; the
+*magnitude* is negligible.
+
+**Two methodology fixes made while establishing this** (both in
+`measure_attention_collapse.py`):
+- Per-head capture (`average_attn_weights=False`). The PyTorch default
+  averages over all 8 heads before returning, which could have hidden genuine
+  per-head specialization. It didn't -- heads agree -- but the check was
+  necessary.
+- Inter-query similarity is now computed on *mean-centered* attention rows.
+  Raw cosine between near-uniform distributions is ~1.0 by construction (the
+  shared 1/4 constant dominates): two queries with diametrically *opposite*
+  preferences still score 0.999. The original "inter-query cosine = 1.000 =>
+  functional collapse" reading was an artifact of that. Centered, the queries
+  do agree (~0.995) but on a deviation of only ~0.006 -- "they agree on a
+  negligible preference", not "they have collapsed onto a strong shared
+  pattern".
+- The script now also reports the three distinct levels that the original
+  claim conflated: (1) `q_i` raw query tokens (what the ortho loss
+  constrains), (2) `W_q @ q_i + b_q` projected queries (what attention
+  actually uses; `b_q` is shared across queries and `compute_ortho_loss`
+  normalizes `q_i`, so level 1 orthogonality does not imply level 2
+  distinguishability), (3) the attention rows themselves.
+
+**VOC re-measured with the corrected scaling (2026-08-11): same verdict, and
+stronger.** `voc_multidino_64bits_v2_ortho_01`, epoch 40, `use_all_tokens=False`
+(one token per band, same structural regime as MIRFLICKR): per-query entropy
+1.385-1.386 (max = log(4) = 1.386), LL share 0.265, LL-share std across the 8
+heads 0.0032. No attention collapse on VOC either -- the original figure was
+the 69x logit inflation, confirmed.
+
+What makes the VOC result *stronger* than MIRFLICKR's is the band read-out
+diversity, which differs sharply between the two datasets:
+
+| band read-out cosine | VOC (ortho=0.1) | MIRFLICKR (ortho=0.1) |
+|---|---|---|
+| LL vs the three detail bands | **0.139** | 0.489 |
+| detail bands among themselves (LH/HL/HH) | 0.781 | 0.875 |
+| global mean off-diagonal | 0.460 | 0.682 |
+
+On VOC, LL carries content nearly orthogonal to the detail bands (cosine
+0.12-0.18) -- there genuinely *is* something to differentiate -- and the
+attention still does not differentiate it. So the finding is not "attention is
+uniform because the inputs are interchangeable"; it is "attention is uniform
+even when the inputs are clearly distinct". The routing mechanism is inactive
+regardless of what it is given.
+
+Secondary observation, consistent across both datasets: LH/HL/HH are strongly
+redundant with each other (0.78-0.87) while LL stands apart. Four branches
+look like more than the decomposition needs -- direct motivation for
+`mflickr_single_band_ablation` and `mflickr_vitb_capacity_control`.
+
+**Still open:** seeds 111/222 not yet measured on MIRFLICKR (checkpoints
+exist; cheap). No VOC `ortho_weight=0` counterpart measured, so the VOC
+numbers above are single-arm.
+
+**Bigger question this raises:** uniform attention means the bottleneck is not
+routing anything, and the band read-out cosines show LH/HL/HH are largely
+redundant with each other (0.93 / 0.88 / 0.82-0.89). This suggests the fusion
+head contributes little -- which makes
+`mflickr_vitb_capacity_control` (section 2) the most decision-relevant study
+remaining, not a formality.
+
 ## 5. Reading the results — how they change the paper's narrative
 
 - **If step 1's gain isn't robust (CI overlaps 0):** the "orthogonality helps
