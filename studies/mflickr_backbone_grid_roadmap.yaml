@@ -1,0 +1,43 @@
+study_name: mflickr_backbone_grid_roadmap
+
+# Backbone grid, arm 3 of 3: ROADMAP (CalibrationLoss + SupAP), NO hashing.
+# This arm exists because the ViT-B hashing result was counter-intuitive: it separates
+# "how good is the backbone at this retrieval task" from "how well does it binarize".
+# If the backbone ordering here matches the hashing arms, the hashing pipeline is
+# faithful; if ViT-B looks strong here but not under hashing, the bottleneck is the
+# binarization, not the representation.
+#
+# Two things necessarily differ from the hashing arms and must not be copied across:
+#   - models are the *_cont configs (RetrievalNet, L2-normalized continuous output)
+#   - retrieval uses cosine distance, not hamming
+# Consequently maphashing/bit_balance are meaningless here -- read map_level0 only.
+base_overrides:
+  loss: roadmap
+  optimizer: basic
+  transform: basic_rrc
+  dataset: mflickr
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.evaluation.distance_metric: cosine
+
+sweep:
+  model: [baseline_vits_cont, baseline_vitb_cont, baseline_r50_cont]

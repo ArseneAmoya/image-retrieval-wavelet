@@ -1,0 +1,13 @@
+# @package _group_
+# Backbone-grid baseline: DINOv2 ViT-B/14 (~86M) + hashing head.
+# ~4x ViT-S, i.e. roughly the total parameter count of MBW-DINO's four unshared
+# ViT-S branches -- this is the capacity-matched arm.
+name: DINOHashBaseline
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  dino_backbone: 'dinov2_vitb14'
+  embed_dim: 768
+  binary_config:
+    nbits: 64
+  with_autocast: false

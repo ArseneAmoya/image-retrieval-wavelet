@@ -52,10 +52,32 @@ class DetailTesterNet(nn.Module):
 
 
 class SingleBandNet(nn.Module):
-    def __init__(self, detail_index=0, output_dim=384, is_hashing=False, **kwargs):
+    """Single DINOv2 backbone on one SWT sub-band.
+
+    When `is_hashing=True` the head is deliberately built to mirror
+    `MultiDinoHashing` (main/models/multi_dino_attention.py) exactly, because the
+    whole point of mflickr_single_band_ablation is that its mAP is directly
+    comparable to the full fusion model's. Two things have to match:
+
+    1. BatchNorm before the hash projection (`use_bn`, default True, same as
+       MultiDinoHashing's `use_bn: true`). BN centers each bit via batch statistics;
+       without it the bits drift off-center and bit_balance -- one of the metrics
+       this study reports -- is not measuring the same thing as in the reference.
+    2. **No tanh in the model.** `HashLoss.forward` (main/losses/hash_loss.py) already
+       applies `torch.tanh(embeddings)` itself. MultiDinoHashing therefore returns raw
+       logits during training. This class used to return `torch.tanh(out)`, which made
+       the effective activation `tanh(tanh(x))`: bounded by tanh(1) = 0.7616, so the
+       quantization term `mean(||emb| - 1|)` could never fall below ~0.238 and pushed
+       the weights up forever while the gradient was squashed twice.
+
+    The `is_hashing=False` path (plain L2-normalized embeddings) is unchanged.
+    """
+
+    def __init__(self, detail_index=0, output_dim=384, is_hashing=False, use_bn=True, **kwargs):
         super().__init__()
         self.detail_index = detail_index
         self.is_hashing = is_hashing
+        self.use_bn = use_bn if is_hashing else False
 
         self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
         embed_dim = self.backbone.embed_dim
@@ -63,9 +85,14 @@ class SingleBandNet(nn.Module):
         if output_dim == embed_dim and not is_hashing:
             self.head = nn.Identity()
         else:
-            self.head = nn.Linear(embed_dim, output_dim)
+            # bias=not use_bn matches MultiDinoHashing: BN's own shift makes the
+            # linear bias redundant (and BN would cancel it anyway).
+            self.head = nn.Linear(embed_dim, output_dim, bias=not self.use_bn)
             nn.init.normal_(self.head.weight, std=0.01)
-            nn.init.constant_(self.head.bias, 0)
+            if self.head.bias is not None:
+                nn.init.constant_(self.head.bias, 0)
+
+        self.bn = nn.BatchNorm1d(output_dim) if self.use_bn else nn.Identity()
 
     def forward(self, x):
         if x.dim() == 5:
@@ -78,9 +105,9 @@ class SingleBandNet(nn.Module):
         out = self.head(features)
 
         if self.is_hashing:
-            if self.training:
-                return torch.tanh(out)
-            else:
-                return torch.sign(out)
+            out = self.bn(out)
+            # Raw logits in training -- HashLoss applies the tanh. Mirrors
+            # MultiDinoHashing.forward's `return logits if self.training else sign`.
+            return out if self.training else torch.sign(out)
         else:
             return F.normalize(out, p=2, dim=1)

@@ -1,0 +1,52 @@
+study_name: mflickr_backbone_grid_hashloss
+
+# Backbone grid, arm 1 of 3: HashLoss.
+# Purpose: the mflickr_vitb_capacity_control result (ViT-B best-epoch maphashing
+# 0.8155 vs MBW-DINO 0.8373-0.8401 mean over 3 seeds) was surprising enough to be
+# worth confirming across backbones and across losses before it goes in the paper.
+# The three arms (mflickr_backbone_grid_hashloss / _dsch / _roadmap) are split into
+# separate files on purpose: each loss needs its own loss-specific kwargs, and the
+# ROADMAP arm additionally needs cosine instead of hamming retrieval, so a single
+# Hydra sweep over `loss` would produce invalid override combinations.
+#
+# transform: basic_rrc (NOT basic) so the augmentation matches basic_swt exactly --
+# same Resize / RandomResizedCrop / RandomHorizontalFlip, only the final SWT step
+# differs. The original vitb control used basic (plain RandomCrop), which is milder
+# and left the comparison open to an augmentation confound.
+base_overrides:
+  loss: hash_loss
+  optimizer: basic
+  transform: basic_rrc
+  dataset: mflickr
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.evaluation.distance_metric: hamming
+
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+
+# Comparison arm: MBW-DINO + hash_loss already exists as
+# mflickr_lph_vs_ortho_multiseed (ortho 0.0/0.1 x 3 seeds) -- do NOT retrain it here.
+sweep:
+  model: [baseline_vits_hash, baseline_vitb_hash, baseline_r50_hash]

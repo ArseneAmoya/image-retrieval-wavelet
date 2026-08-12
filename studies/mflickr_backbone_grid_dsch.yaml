@@ -1,0 +1,44 @@
+study_name: mflickr_backbone_grid_dsch
+
+# Backbone grid, arm 2 of 3: DSCH (SCHLoss).
+# apply_tanh: true is REQUIRED here. SCHLoss computes BI_BI = (k - B @ B.T)/2, the
+# Hamming-distance formula, which is only meaningful for codes in [-1, 1]. The three
+# baseline_*_hash models emit raw logits (HashLoss is what normally applies the tanh),
+# so without this flag the loss would operate on unbounded values and its bounds would
+# be meaningless. Default stays False so existing DSCH configs are unaffected --
+# see main/losses/dsch.py.
+base_overrides:
+  loss: dsch
+  optimizer: basic
+  transform: basic_rrc
+  dataset: mflickr
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.evaluation.distance_metric: hamming
+
+  loss.0.kwargs.n_bits: 64
+  loss.0.kwargs.alpha: 1
+  loss.0.kwargs.beta: 1
+  loss.0.kwargs.apply_tanh: true
+
+sweep:
+  model: [baseline_vits_hash, baseline_vitb_hash, baseline_r50_hash]

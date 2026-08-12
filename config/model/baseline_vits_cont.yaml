@@ -1,0 +1,14 @@
+# @package _group_
+# Continuous (no hashing) counterpart of baseline_vits_hash, for the ROADMAP arm.
+# RetrievalNet returns L2-normalized embeddings; retrieval uses cosine distance.
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: dino
+  dino_backbone: 'dinov2_vits14'
+  embed_dim: 384
+  norm_features: False
+  without_fc: True
+  with_autocast: False
+  pretrained: True

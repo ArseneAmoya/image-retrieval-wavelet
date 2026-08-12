@@ -1,0 +1,14 @@
+# @package _group_
+# Continuous (no hashing) counterpart of baseline_r50_hash, for the ROADMAP arm.
+# NOTE pretrained: True -- config/model/resnet50.yaml has pretrained: False, which
+# would make it a from-scratch baseline and not comparable to the pretrained DINO arms.
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: resnet50
+  embed_dim: 2048
+  norm_features: False
+  without_fc: True
+  with_autocast: False
+  pretrained: True

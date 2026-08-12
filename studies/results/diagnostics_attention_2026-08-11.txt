@@ -1,0 +1,162 @@
+Raw output of studies/measure_query_orthogonality.py and
+studies/measure_attention_collapse.py. Kept verbatim so the numbers quoted in
+MIRFLICKR_DIAGNOSTIC_PLAN.md sections 4.2 / 4.2.1 stay traceable.
+
+Caveat on the two MIRFLICKR blocks below: they were produced BEFORE the script
+was corrected, so their "Inter-query redundancy" figures are the *uncentered*
+cosine, which is ~1.0 for any pair of near-uniform distributions and therefore
+uninformative (two diametrically opposite preferences also score 0.999). They
+also lack the score_stats / three-level sections. The VOC block at the bottom
+is from the corrected script and is the one to cite. Re-running the two
+MIRFLICKR checkpoints through the current script is still pending.
+
+
+================================================================================
+measure_query_orthogonality.py -- MIRFLICKR, seed 333, epoch 50
+================================================================================
+
+checkpoint : mflickr_lph_vs_ortho_multiseed_experience.seed=333,model.kwargs.fusion_config.ortho_weight=0.0
+epoch      : 50
+gram matrix (L2-normalized queries):
+tensor([[1.000, 0.021, 0.100, 0.038],
+        [0.021, 1.000, 0.010, 0.026],
+        [0.100, 0.010, 1.000, 0.059],
+        [0.038, 0.026, 0.059, 1.000]])
+mean |off-diagonal| : 0.0424
+max  |off-diagonal| : 0.0999
+
+checkpoint : mflickr_lph_vs_ortho_multiseed_experience.seed=333,model.kwargs.fusion_config.ortho_weight=0.1
+epoch      : 50
+gram matrix (L2-normalized queries):
+tensor([[ 1.000,  0.000, -0.000, -0.000],
+        [ 0.000,  1.000, -0.000, -0.000],
+        [-0.000, -0.000,  1.000, -0.000],
+        [-0.000, -0.000, -0.000,  1.000]])
+mean |off-diagonal| : 0.0000
+max  |off-diagonal| : 0.0000
+
+-> the regularizer does exactly what it claims on the query tokens. Note the
+   ortho_weight=0.0 arm is ALREADY nearly orthogonal (0.042): there was little
+   "query collapse" to prevent in the first place.
+
+
+================================================================================
+measure_attention_collapse.py -- MIRFLICKR, seed 333, epoch 50, 320 test images
+(pre-correction script: uncentered inter-query cosine, no score_stats)
+================================================================================
+
+no_ortho  (epoch=50, ortho_weight=0.0, num_queries=4, n_heads=8, n_images=320)
+per-head LL share: 0.257 0.253 0.260 0.261 0.253 0.261 0.260 0.256
+  min=0.253 max=0.261 std=0.0035 ; every head entropy = 1.386 (max = log 4)
+attention mass (head-averaged), rows=query, cols=[LL, LH, HL, HH]
+  query0   0.259   0.252   0.246   0.242   entropy=1.386
+  query1   0.257   0.252   0.248   0.244   entropy=1.386
+  query2   0.259   0.252   0.247   0.241   entropy=1.386
+  query3   0.257   0.251   0.247   0.245   entropy=1.386
+  mean LL share = 0.258   (uniform would be 0.250)
+band read-out cosine [LL, LH, HL, HH]
+  LL   1.000   0.504   0.496   0.593
+  LH   0.504   1.000   0.932   0.882
+  HL   0.496   0.932   1.000   0.887
+  HH   0.593   0.882   0.887   1.000
+  mean |off-diagonal| = 0.7156
+
+ortho  (epoch=50, ortho_weight=0.1, num_queries=4, n_heads=8, n_images=320)
+per-head LL share: 0.257 0.254 0.259 0.260 0.253 0.260 0.260 0.257
+  min=0.253 max=0.260 std=0.0027 ; every head entropy = 1.386 (max = log 4)
+attention mass (head-averaged), rows=query, cols=[LL, LH, HL, HH]
+  query0   0.259   0.250   0.249   0.243   entropy=1.386
+  query1   0.257   0.250   0.250   0.243   entropy=1.386
+  query2   0.258   0.250   0.251   0.242   entropy=1.386
+  query3   0.257   0.249   0.249   0.245   entropy=1.386
+  mean LL share = 0.258   (uniform would be 0.250)
+band read-out cosine [LL, LH, HL, HH]
+  LL   1.000   0.486   0.448   0.533
+  LH   0.486   1.000   0.947   0.861
+  HL   0.448   0.947   1.000   0.816
+  HH   0.533   0.861   0.816   1.000
+  mean |off-diagonal| = 0.6819
+
+
+================================================================================
+measure_attention_collapse.py -- VOC, ortho_weight=0.1, epoch 40, 320 images
+(corrected script: per-head capture, score_stats, three levels, centered cosine)
+run: voc_multidino_64bits_v2_ortho_01_experi
+================================================================================
+
+voc_ortho01 (epoch=40, ortho_weight=0.1, num_queries=4, n_heads=8,
+             tokens_per_band=1, n_images=320)
+
+Raw pre-softmax attention scores (in_proj, split heads, scale 1/sqrt(head_dim)):
+  mean|score|=0.0805  std=0.0539  range=[-0.1911, 0.1652]
+  within-row spread (max-min across the 4 bands): mean=0.0952  max=0.3358
+  query_token L2 norms (raw parameter): 0.3999, 0.3775, 0.3996, 0.4047
+
+The three levels of the chain:
+  level 1  q_i (what the ortho loss constrains)
+           mean |off-diag| cosine: 0.0000     (perfectly orthogonal)
+           ||q_i||: 0.3999, 0.3775, 0.3996, 0.4047
+  level 2  W_q @ q_i + b_q (what attention actually uses)
+           mean |off-diag| cosine: 0.2124
+           per-head: 0.185 0.183 0.176 0.246 0.261 0.253 0.192 0.263
+           ||W_q @ q_i||: 0.3057, 0.2971, 0.3161, 0.3208
+           ||b_q||: 0.0278
+           -> mean ||W_q @ q_i|| / ||b_q|| = 11.13
+              (REFUTES the "shared bias dominates" hypothesis: the bias is
+               negligible and the projected queries stay distinct)
+  level 3  the attention rows, below
+
+per-head LL share: 0.265 0.265 0.258 0.267 0.268 0.266 0.265 0.268
+  min=0.258 max=0.268 std=0.0031 ; entropies 1.385-1.386 (max = log 4 = 1.386)
+attention mass (head-averaged), rows=query, cols=[LL, LH, HL, HH]
+  query0   0.261   0.248   0.245   0.246   entropy=1.386
+  query1   0.263   0.248   0.242   0.247   entropy=1.386
+  query2   0.267   0.246   0.241   0.246   entropy=1.385
+  query3   0.270   0.247   0.239   0.245   entropy=1.385
+  mean LL share = 0.265   (uniform would be 0.250)
+
+Inter-query redundancy, CENTERED (deviation from uniform):
+  query0   1.000   0.980   0.991   0.992
+  query1   0.980   1.000   0.993   0.997
+  query2   0.991   0.993   1.000   0.998
+  query3   0.992   0.997   0.998   1.000
+  mean |off-diagonal| CENTERED = 0.9918   (uncentered, for reference: 0.9999)
+  mean |deviation from uniform| per entry = 0.00761
+    per query: 0.00562, 0.00638, 0.00857, 0.00988
+  -> the queries agree on a preference that is itself negligible; this is NOT
+     "collapse onto a strong shared pattern".
+
+band read-out cosine [LL, LH, HL, HH]
+  LL   1.000   0.127   0.189   0.123
+  LH   0.127   1.000   0.749   0.842
+  HL   0.189   0.749   1.000   0.756
+  HH   0.123   0.842   0.756   1.000
+  mean |off-diagonal| = 0.4645
+  LL vs detail bands   = 0.139   (LL carries clearly distinct content)
+  detail bands between = 0.781   (LH/HL/HH largely redundant with each other)
+
+
+================================================================================
+Root cause (see MIRFLICKR_DIAGNOSTIC_PLAN.md 4.2.1)
+================================================================================
+
+query_tokens never left initialization scale:
+  norm at init (trunc_normal_ std=0.02, dim 384) = 0.3919
+  measured after 40 epochs                       = 0.3775 - 0.4047
+  growth ratio                                   = 1.009
+
+because compute_ortho_loss() normalizes Q (scale-invariant, zero pressure on
+the norm), AdamW weight_decay=0.0005 shrinks it, and lr=1e-5.
+
+Score spread 0.0952 -> softmax predicted LL=0.268 / others=0.244, measured
+LL=0.265 / 0.247 / 0.242 / 0.246. The model sits exactly where the arithmetic
+puts it.
+
+Required for real selectivity: spread 0.69 / 1.50 / 2.48 for a dominant band at
+40% / 60% / 80%, i.e. ||q|| of ~2.8 / ~6.2 / ~10.2 instead of 0.39.
+
+Why the original VOC figure showed total LL dominance: it applied
+scores = raw_scores * 10.0 while nn.MultiheadAttention scales by
+1/sqrt(head_dim) = 1/sqrt(48) -- a 69x logit inflation. Feeding the measured
+shares through that same factor reproduces the published-style figure
+(LL=0.875, LH=0.100, HL=0.019, HH=0.006, entropy 0.66 bits).

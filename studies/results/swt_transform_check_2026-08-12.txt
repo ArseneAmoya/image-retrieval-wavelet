@@ -1,0 +1,57 @@
+Raw output of studies/verify_swt_transform.py, run to check that the SWT
+pipeline really emits 4 distinct sub-bands in the layout the networks expect.
+Triggered by mflickr_single_band_ablation returning ~82% for every band.
+
+Verdict: the transform is correct. The tensor contract holds and the four
+sub-bands are genuinely distinct (mean off-diagonal cosine 0.038). Nothing to
+fix in the decomposition.
+
+Open point (NOT resolved by this check): there is no Normalize step in the SWT
+configs, and the detail bands arrive far below the input scale DINOv2 was
+pretrained on -- HH has std 0.0242 against ~1 for an ImageNet-normalized input,
+i.e. ~27x smaller. Whether that matters is a separate question about the
+patch_embed operating range (Conv2d with bias: if ||W*x|| << ||b|| every patch
+token collapses toward b), and has not been measured. Note this is NOT an
+argument for ImageNet normalization specifically -- sub-bands are not natural
+images -- but for checking whether the signal reaches the backbone at all.
+
+
+================================================================================
+image      : C:\These\data\car.jpg
+transform  : basic_swt.yaml [test]
+output     : shape=(3, 4, 224, 224)  dtype=torch.float32
+================================================================================
+
+--- tensor contract ---
+  [C=3, S=4, H=224, W=224]
+  OK  : C == 3 (RGB)
+  OK  : S == 4 sub-bands
+  OK  : spatial size 224x224 (backbones expect 224x224)
+  OK  : x[:, :, i, :, :] -> (1, 3, 224, 224) (must be [B, 3, H, W] for the backbone)
+  OK  : dtype float32
+  OK  : all values finite
+
+--- per-band statistics (over all 3 channels) ---
+band             min       max      mean       std
+LL (cA)       0.0000    2.0000    1.0064    0.6628
+LH (cH)      -0.9451    0.6686   -0.0000    0.1024
+HL (cV)      -0.6882    1.0000    0.0000    0.0611
+HH (cD)      -0.3725    0.3294    0.0000    0.0242
+
+  For reference, an ImageNet-normalized input spans roughly [-2.12, 2.64]
+  with mean~0 and std~1 per channel. The SWT configs contain no Normalize step,
+  so the values above are what DINOv2 actually receives.
+
+--- pairwise band difference ---
+cosine similarity between raw sub-band tensors:
+                 LL       LH       HL       HH
+LL           1.0000   0.0000   0.0000   0.0403
+LH           0.0000   1.0000  -0.1883  -0.0000
+HL           0.0000  -0.1883   0.9999   0.0000
+HH           0.0403  -0.0000   0.0000   1.0000
+  mean |off-diagonal| = 0.0381
+  -> the sub-bands are genuinely distinct tensors.
+
+Visual check (swt_check.png): LL reproduces the image; LH/HL/HH show edge
+structure when rescaled individually, but on a shared scale the detail bands
+are visibly faint and HH is close to flat.

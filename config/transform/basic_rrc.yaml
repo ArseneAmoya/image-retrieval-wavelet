@@ -1,0 +1,22 @@
+# Single-spatial-domain counterpart of basic_swt.yaml: byte-for-byte the same
+# Resize / RandomResizedCrop / RandomHorizontalFlip steps, with ToTensor replacing the
+# final SWTTransform. Exists so that single-backbone baselines can be compared against
+# MBW-DINO without an augmentation confound -- config/transform/basic.yaml uses a plain
+# RandomCrop (no scale/ratio jitter), which is deliberately milder and therefore NOT a
+# matched control. RandomResizedCrop's defaults (scale=(0.08, 1.0), ratio=(3/4, 4/3))
+# are used here precisely because basic_swt leaves them at their defaults too.
+train:
+  Resize:
+    size: 256
+  RandomResizedCrop:
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  ToTensor: {}
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  ToTensor: {}
