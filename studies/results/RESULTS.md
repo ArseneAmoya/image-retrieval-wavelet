@@ -6,10 +6,18 @@ interpretation and the experiment plan live in `../MIRFLICKR_DIAGNOSTIC_PLAN.md`
 
 | file | what it is |
 |---|---|
+| **`all_runs_metrics.csv`** | **one row per run: best epoch + final epoch, all four metrics, swept params parsed from the run name. Generated — never edit by hand.** |
+| `consolidate_metrics.py` | regenerates `all_runs_metrics.csv` from every `*_per_epoch.csv` here. Idempotent: drop a new study CSV in and rerun. |
+| `diagnostics_metrics.csv` | secondary/diagnostic scalars (attention shares, entropies, query norms, band statistics) in long format |
 | `lph_vs_ortho_multiseed_per_epoch.csv` | 6 runs (ortho 0.0/0.1 × seeds 111/222/333), every saved epoch, from `evaluate_all_checkpoints.py` |
 | `vitb_capacity_control_per_epoch.csv` | ViT-B capacity control, every saved epoch |
 | `diagnostics_attention_2026-08-11.txt` | verbatim `measure_query_orthogonality.py` + `measure_attention_collapse.py` output (MIRFLICKR + VOC) |
 | `swt_transform_check_2026-08-12.txt` | verbatim `verify_swt_transform.py` output |
+
+Workflow for new results: drop the study's `*_per_epoch.csv` here, run
+`python studies/results/consolidate_metrics.py`, and the summary table picks it
+up. Diagnostic scalars go into `diagnostics_metrics.csv` (long format, one
+metric per row, so new metrics never require changing the schema).
 
 All mAP figures below are `maphashing_level0` (the hashing-literature mAP@topk
 from `calculate_maphashing`), best epoch per run, `top_k=19581`, hamming.

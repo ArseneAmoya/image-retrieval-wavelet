@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
+from .hub_utils import load_dinov2
 
 class DINOHashBaseline(nn.Module):
     def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}, frozen=False, **kwargs):
         super().__init__()
 
-        self.backbone = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+        self.backbone = load_dinov2(dino_backbone)
 
         # Was: forward() called getattr(self.backbone, 'frozen', True), but nothing
         # ever set that attribute on the backbone -- the constructor arg below only

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
+from .hub_utils import load_dinov2
 
 class DetailTesterNet(nn.Module):
     def __init__(self, backbone_name='resnet50', detail_index=1, output_dim=64, **kwargs):
@@ -15,7 +16,7 @@ class DetailTesterNet(nn.Module):
         self.detail_index = detail_index
 
         if 'dinov2' in backbone_name:
-            self.backbone = torch.hub.load('facebookresearch/dinov2', backbone_name)
+            self.backbone = load_dinov2(backbone_name)
             dim = self.backbone.embed_dim
         else:
             self.backbone = timm.create_model(backbone_name, pretrained=True, num_classes=0)
@@ -79,7 +80,7 @@ class SingleBandNet(nn.Module):
         self.is_hashing = is_hashing
         self.use_bn = use_bn if is_hashing else False
 
-        self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+        self.backbone = load_dinov2('dinov2_vits14')
         embed_dim = self.backbone.embed_dim
 
         if output_dim == embed_dim and not is_hashing:

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .hub_utils import load_dinov2
 
 
 class BasicConv(nn.Module):
@@ -561,7 +562,7 @@ class MultiDinoAttention(nn.Module):
         self.backbones = nn.ModuleList()
         output_dims = []
         for bb_cfg in backbones_config:
-            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            model = load_dinov2(bb_cfg['name'])
             dim = model.embed_dim
             if bb_cfg.get('frozen', True):
                 for p in model.parameters(): p.requires_grad = False
@@ -584,7 +585,7 @@ class MultiDinoHashing(nn.Module):
         self.backbones = nn.ModuleList()
         output_dims = []
         for bb_cfg in backbones_config:
-            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            model = load_dinov2(bb_cfg['name'])
             dim = model.embed_dim
             if bb_cfg.get('frozen', True):
                 for p in model.parameters(): p.requires_grad = False
@@ -620,7 +621,7 @@ class MultiDinoHashingTF(nn.Module):
         self.backbones = nn.ModuleList()
         output_dims = []
         for bb_cfg in backbones_config:
-            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            model = load_dinov2(bb_cfg['name'])
             self.backbones.append(model)
             output_dims.append(model.embed_dim)
         if pretrained_paths is not None:
@@ -658,7 +659,7 @@ class SharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, **kwargs):
         super().__init__()
 
-        self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
+        self.shared_backbone = load_dinov2(backbone_config['name'])
 
         if backbone_config.get('frozen', True):
             for p in self.shared_backbone.parameters():
@@ -701,7 +702,7 @@ class PromptedSharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):
         super().__init__()
 
-        self.shared_backbone = torch.hub.load('facebookresearch/dinov2', backbone_config['name'])
+        self.shared_backbone = load_dinov2(backbone_config['name'])
         self.use_dsln = backbone_config.get('use_dsln', False)
         if self.use_dsln:
             self.shared_backbone = inject_domain_specific_layernorms(self.shared_backbone, num_domains=4)
@@ -815,7 +816,7 @@ class PretrainedMultiDinoHashing(nn.Module):
         self.backbones = nn.ModuleList()
         output_dims = []
         for bb_cfg in backbones_config:
-            model = torch.hub.load('facebookresearch/dinov2', bb_cfg['name'])
+            model = load_dinov2(bb_cfg['name'])
             for p in model.parameters(): p.requires_grad = False
             model.eval()
             self.backbones.append(model)

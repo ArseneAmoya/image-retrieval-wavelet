@@ -15,6 +15,7 @@ from .mtwavenet import FourBranchResNet, FourBranchResNet50, FourBranchResNet50F
 from .dino_models import DinoModel_ce, Multi_DinoModel
 from transformers import AutoModel
 from .hugging_face_models import HuggingFaceVisionWrapper
+from .hub_utils import load_dinov2
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -231,7 +232,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         base_model = None
         dino_backbone = kwargs.pop('dino_backbone', None)
         try:
-            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+            base_model = load_dinov2(dino_backbone)
         except RuntimeError:
             raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
 
@@ -248,7 +249,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         feature_dim = kwargs.pop('embed_dim', 768)
         dino_backbone = kwargs.pop('dino_backbone', None)
         try:
-            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone)
+            base_model = load_dinov2(dino_backbone)
         except RuntimeError:
             raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
 
@@ -261,7 +262,7 @@ def get_backbone(name, pretrained=True, **kwargs):
         feature_dim = kwargs.pop('embed_dim', 768)
         dino_backbone = kwargs.pop('dino_backbone', None)
         try:
-            base_model = torch.hub.load('facebookresearch/dinov2', dino_backbone) #base_model = torch.hub.load('../dinov3', dino_backbone, source='local', weights='c:\These\data\models\dinov3_vits16_pretrain_lvd1689m-08c60483.pth'))
+            base_model = load_dinov2(dino_backbone) #base_model = torch.hub.load('../dinov3', dino_backbone, source='local', weights='c:\These\data\models\dinov3_vits16_pretrain_lvd1689m-08c60483.pth'))
         except RuntimeError:
             raise ValueError(f"DINO backbone '{dino_backbone}' is not recognized or could not be loaded from torch.hub")
 
