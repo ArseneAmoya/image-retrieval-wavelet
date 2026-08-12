@@ -1,0 +1,91 @@
+study_name: mflickr_query_scale_decoupled
+
+# Tests the mechanism identified in MIRFLICKR_DIAGNOSTIC_PLAN.md section 4.2.1:
+# the attention bottleneck is inactive (per-query entropy = log(4), the maximum,
+# on both MIRFLICKR and VOC, at ortho_weight 0 and 0.1 alike) not because the
+# queries collapsed, but because they never grew past their initialization scale
+# (measured ||q|| ~ 0.40 vs 0.392 at init after 40 epochs). The orthogonality loss
+# normalizes Q before the Gram matrix, so it is scale-invariant and cannot push the
+# norm up, while AdamW weight_decay=0.0005 pushes it down.
+#
+# CrossAttentionBottleneckHeadDecoupled (new, added alongside -- NOT replacing --
+# CrossAttentionBottleneckHeadAdvanced) computes
+#     q_effective = query_scale * normalize(query_tokens)
+# so direction stays under the regularizer's control and magnitude gets its own
+# explicit knob. Since attention scores scale linearly with ||q||, query_scale is
+# exactly a learnable softmax temperature.
+#
+# The sweep spans the range the measurements predict to matter. With the baseline
+# ||q|| ~ 0.39 giving a within-row score spread of ~0.095, and spread growing
+# linearly with the norm:
+#   query_scale=2.0  -> spread ~0.5, mild selectivity (dominant band ~35%)
+#   query_scale=6.0  -> spread ~1.5, clearly selective (dominant band ~59%)
+#   query_scale=12.0 -> spread ~2.9, strongly selective / near one-hot (~86%)
+# query_scale is learnable, so these are starting points, not fixed values -- part
+# of what this study measures is whether training moves them and in which direction
+# (measure_attention_collapse.py prints the final value per checkpoint). Drift upward
+# from a low start means the model wants selectivity it previously could not reach;
+# drift downward from a high start means uniform routing is genuinely preferred.
+#
+# A query_scale=0.4 arm was dropped on purpose: it reproduces the current broken
+# regime (dominant band ~27%, i.e. uniform), and that control already exists as the
+# trained ortho_weight=0.1 / seed=333 run of mflickr_lph_vs_ortho_multiseed. Reuse
+# that checkpoint as the low-scale anchor of the curve instead of retraining it:
+#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*seed=333*ortho_weight=0.1*/
+#
+# The research question is deliberately open: making the attention selective is
+# expected (it is arithmetic), but whether selectivity HELPS retrieval is unknown.
+# A flat mAP across the sweep would itself be a real finding -- it would say the
+# multi-band routing the architecture is built around does not matter, which bears
+# directly on Reviewer #3's capacity concern.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_decoupled
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: matches mflickr_lph_vs_ortho_multiseed exactly, so results are
+  #     directly comparable to the ortho_weight=0.1 / seed=333 baseline ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2, same as the reference arm
+  model.kwargs.fusion_config.normalize_queries: true
+  model.kwargs.fusion_config.learn_query_scale: true
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5                  # divergence canary only, NOT used for epoch selection (section 6.1)
+  experience.fast_eval_size: 500
+  experience.save_model: 5                      # per-epoch checkpoints for evaluate_all_checkpoints.py
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single seed (333) per point, matching the reference. The comparison arm is the
+# existing mflickr_lph_vs_ortho_multiseed ortho_weight=0.1 / seed=333 run -- do NOT
+# retrain it here.
+sweep:
+  model.kwargs.fusion_config.query_scale_init: [2.0, 6.0, 12.0]

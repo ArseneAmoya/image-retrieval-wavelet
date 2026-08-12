@@ -332,6 +332,154 @@ class AttentionFusionHead(nn.Module):
         return self.norm2(x).squeeze(1)
 
 
+class CrossAttentionBottleneckHeadDecoupled(nn.Module):
+    """CrossAttentionBottleneckHeadAdvanced with query direction and query magnitude
+    decoupled. Everything else -- projections, attention, norms, MLP, out_proj, and
+    the orthogonality loss itself -- is byte-for-byte identical to the Advanced head,
+    so any measured difference is attributable to the decoupling alone.
+
+    Motivation (measured, see studies/MIRFLICKR_DIAGNOSTIC_PLAN.md section 4.2.1):
+    in the Advanced head the attention distribution is essentially uniform on both
+    MIRFLICKR and VOC (per-query entropy = log(4), the theoretical maximum), for
+    ortho_weight = 0 and 0.1 alike. The cause is not query collapse -- the projected
+    queries stay distinct (level-2 off-diagonal cosine ~0.21) and the shared bias is
+    negligible (||W_q @ q_i|| / ||b_q|| ~ 11). The cause is scale:
+
+      * attention scores are (W_q q)·(W_k k)/sqrt(head_dim), so they grow linearly
+        with ||q||;
+      * `compute_ortho_loss` L2-normalizes Q before the Gram matrix, so it is exactly
+        scale-invariant and exerts zero gradient pressure on ||q||;
+      * AdamW `weight_decay` (0.0005 in config/optimizer/basic.yaml) actively shrinks
+        ||q||, and lr is 1e-5.
+
+    Net effect: query_tokens never leave their initialization scale (measured norm
+    ~0.40 after 40 epochs vs 0.392 at init, a ratio of 1.009). The resulting
+    within-row score spread is ~0.095, and softmax over a spread that small is
+    mathematically forced to be near-uniform (predicted LL share 0.268 vs 0.265
+    measured). The bottleneck therefore routes nothing, regardless of orthogonality.
+
+    The fix here keeps the regularizer's job (direction) and gives magnitude its own
+    explicit, unregularized knob:
+
+        q_effective = query_scale * normalize(query_tokens)
+
+    Since scaling the query scales the pre-softmax scores by the same factor, a
+    learnable `query_scale` is exactly a learnable softmax temperature -- but
+    expressed in a way that needs no change to nn.MultiheadAttention. Setting
+    normalize_queries=False and learn_query_scale=False recovers the Advanced head's
+    behaviour up to the initial scale, which makes this class a strict superset.
+
+    Args:
+        query_scale_init: initial value of the scale. ||q|| ~ 0.39 gave a score spread
+            of ~0.095; spread scales linearly with it, and a spread of ~1.5 is needed
+            before one band captures ~60% of the mass. Sweep this.
+        normalize_queries: L2-normalize the query tokens inside forward(), so
+            `query_scale` is the *only* thing controlling magnitude.
+        learn_query_scale: make `query_scale` an nn.Parameter rather than a buffer.
+            Note it is still subject to AdamW weight_decay like any parameter; on a
+            scalar this is negligible next to its gradient, but it is why the
+            fixed-buffer option exists.
+    """
+
+    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1,
+                 sub_band_dropout_p=0.3, ortho_weight=0.1, margin=0.0, use_all_tokens=False,
+                 query_scale_init=4.0, normalize_queries=True, learn_query_scale=True):
+        super().__init__()
+        self.num_queries = num_queries
+        self.sub_band_dropout_p = sub_band_dropout_p
+        self.ortho_weight = ortho_weight
+        self.margin = margin
+        self.use_all_tokens = use_all_tokens
+        self.normalize_queries = normalize_queries
+
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity()
+            for dim in input_dims
+        ])
+
+        self.query_tokens = nn.Parameter(torch.randn(1, num_queries, embed_dim))
+        nn.init.trunc_normal_(self.query_tokens, std=0.02)
+
+        scale = torch.tensor(float(query_scale_init))
+        if learn_query_scale:
+            self.query_scale = nn.Parameter(scale)
+        else:
+            self.register_buffer('query_scale', scale)
+
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout)
+        )
+
+        self.out_proj = nn.Linear(num_queries * embed_dim, embed_dim)
+
+        self.last_ortho_loss = 0.0
+
+    def compute_ortho_loss(self):
+        """Identical to CrossAttentionBottleneckHeadAdvanced.compute_ortho_loss.
+
+        Deliberately computed on the *raw* query_tokens, not on the scaled ones, so
+        the regularizer is the exact same function of the exact same parameter as in
+        the Advanced head -- the only thing this class changes is what forward() feeds
+        to the attention.
+        """
+        Q = self.query_tokens.squeeze(0)
+        Q_norm = F.normalize(Q, p=2, dim=-1)
+        gram = torch.matmul(Q_norm, Q_norm.T)
+        identity = torch.eye(self.num_queries, device=Q.device)
+        raw_error = torch.norm(gram - identity, p='fro')
+        active_error = F.relu(raw_error - self.margin)
+        return self.ortho_weight * (active_error ** 2)
+
+    def effective_queries(self):
+        """The queries actually handed to the attention: direction (optionally
+        normalized, which is what the ortho loss constrains) times magnitude
+        (query_scale, which is what governs softmax sharpness). Exposed as a method so
+        studies/measure_attention_collapse.py can read it without re-deriving it.
+        """
+        q = self.query_tokens
+        if self.normalize_queries:
+            q = F.normalize(q, p=2, dim=-1)
+        return q * self.query_scale
+
+    def forward(self, features_list):
+        batch_size = features_list[0].shape[0]
+        device = features_list[0].device
+
+        kv_list = [proj(f) for proj, f in zip(self.projections, features_list)]
+
+        mask_ll = self.training and (torch.rand(1).item() < self.sub_band_dropout_p)
+        if mask_ll:
+            kv_list[0] = torch.zeros_like(kv_list[0])
+
+        if self.use_all_tokens:
+            kv = torch.cat(kv_list, dim=1)
+        else:
+            kv = torch.stack(kv_list, dim=1)
+
+        q = self.effective_queries().expand(batch_size, -1, -1)
+
+        attn_output, attn_weights = self.attn(query=q, key=kv, value=kv)
+
+        if self.training and self.ortho_weight > 0:
+            self.last_ortho_loss = self.compute_ortho_loss()
+        else:
+            self.last_ortho_loss = torch.tensor(0.0, device=device)
+
+        x = self.norm1(q + attn_output)
+        x = x + self.mlp(x)
+
+        x = x.view(batch_size, -1)
+        x = self.out_proj(x)
+
+        return self.norm2(x)
+
+
 def get_fusion_head(fusion_config, output_dims):
     fusion_type = fusion_config.get('type', 'standard')
     embed_dim = fusion_config['output_dim']
@@ -375,6 +523,24 @@ def get_fusion_head(fusion_config, output_dims):
             dropout=dropout,
             sub_band_dropout_p=sub_band_dropout_p,
             ortho_weight=ortho_weight
+        )
+
+    elif fusion_type == 'cross_attention_decoupled':
+        num_queries = fusion_config.get('num_queries', 4)
+        sub_band_dropout_p = fusion_config.get('sub_band_dropout_p', 0.3)
+        ortho_weight = fusion_config.get('ortho_weight', 0.1)
+        return CrossAttentionBottleneckHeadDecoupled(
+            output_dims,
+            embed_dim,
+            num_queries=num_queries,
+            num_heads=num_heads,
+            dropout=dropout,
+            sub_band_dropout_p=sub_band_dropout_p,
+            ortho_weight=ortho_weight,
+            use_all_tokens=fusion_config.get('use_all_tokens', False),
+            query_scale_init=fusion_config.get('query_scale_init', 4.0),
+            normalize_queries=fusion_config.get('normalize_queries', True),
+            learn_query_scale=fusion_config.get('learn_query_scale', True),
         )
 
     elif fusion_type in ['cbam', 'eca']:

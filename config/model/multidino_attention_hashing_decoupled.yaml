@@ -1,0 +1,45 @@
+# @package _group_
+# Identical to multidino_attention_hashing_ortho.yaml except for the fusion head:
+# 'cross_attention_decoupled' (CrossAttentionBottleneckHeadDecoupled) instead of
+# 'cross_attention_advanced'. That head separates query DIRECTION (what the
+# orthogonality loss constrains, since compute_ortho_loss L2-normalizes Q and is
+# therefore scale-invariant) from query MAGNITUDE (what actually governs how sharp
+# the attention softmax can be). See studies/MIRFLICKR_DIAGNOSTIC_PLAN.md 4.2.1.
+name: MultiDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbones_config:
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+
+  binary_config:
+    nbits: 64
+
+  use_bn: True
+
+  fusion_config:
+    use_all_tokens: False
+    type: 'cross_attention_decoupled'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+    num_queries: 4
+    sub_band_dropout_p: 0
+    ortho_weight: 0.01
+    # --- Decoupling knobs (the whole point of this config) ---
+    # q_effective = query_scale * normalize(query_tokens)
+    # Measured baseline: ||q|| ~ 0.39 -> score spread ~0.095 -> near-uniform softmax.
+    # Spread scales linearly with this value; ~1.5 is needed before one band takes
+    # ~60% of the attention mass. Swept in mflickr_query_scale_decoupled.yaml.
+    query_scale_init: 4.0
+    normalize_queries: True
+    learn_query_scale: True
+
+  with_autocast: true

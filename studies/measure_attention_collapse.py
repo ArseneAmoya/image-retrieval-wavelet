@@ -390,7 +390,18 @@ def run_diagnostic(label, ckpt_path, set_name, data_dir, n_batches, bs, nw):
         "per_head_entropy": per_head_entropy,
         "per_head_ll_share": per_head_ll_share,
         "score_stats": score_stats(fusion_head.attn, capture.qk_inputs),
-        "proj_q": projected_query_stats(fusion_head.attn, fusion_head.query_tokens),
+        # CrossAttentionBottleneckHeadDecoupled feeds query_scale * normalize(q) to
+        # the attention, not q itself -- measuring the raw parameter there would
+        # report the normalized norm (1.0) and completely miss the scale, which is
+        # the whole variable under test. Fall back to the raw tokens for every other
+        # head, where the two are the same object.
+        "proj_q": projected_query_stats(
+            fusion_head.attn,
+            fusion_head.effective_queries() if hasattr(fusion_head, "effective_queries")
+            else fusion_head.query_tokens,
+        ),
+        "query_scale": (fusion_head.query_scale.detach().cpu().item()
+                        if hasattr(fusion_head, "query_scale") else None),
         "query_token_norm": fusion_head.query_tokens.detach().cpu().norm(dim=-1).flatten(),
     }
 
@@ -413,7 +424,10 @@ def print_report(results):
         print(f"  -> a within-row spread << 1 mathematically forces near-uniform softmax:")
         print(f"     the attention module cannot differentiate the bands, regardless of ortho.")
         qn = r["query_token_norm"]
-        print(f"  query_token L2 norms: " + ", ".join(f"{v:.4f}" for v in qn.tolist()))
+        print(f"  query_token L2 norms (raw parameter): " + ", ".join(f"{v:.4f}" for v in qn.tolist()))
+        if r.get("query_scale") is not None:
+            print(f"  query_scale (decoupled head): {r['query_scale']:.4f}  -- effective "
+                  f"||q|| = this value when normalize_queries=True")
         print()
         pq = r["proj_q"]
         print("The three levels of the chain, measured separately:")

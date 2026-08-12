@@ -289,9 +289,65 @@ redundant with each other (0.78-0.87) while LL stands apart. Four branches
 look like more than the decomposition needs -- direct motivation for
 `mflickr_single_band_ablation` and `mflickr_vitb_capacity_control`.
 
+### 4.2.1 Root cause found: the queries never grow, so the softmax cannot sharpen
+
+Full three-level measurement on the VOC ortho=0.1 checkpoint settles *why* the
+attention is uniform. The earlier "the shared bias `b_q` dominates the
+projected queries" hypothesis is **refuted**: measured
+`||W_q @ q_i|| / ||b_q||` = 11.13, so the bias is negligible, and the queries
+remain distinct after projection (level-2 mean off-diagonal cosine 0.2124,
+per-head 0.18-0.26). Direction is not the problem.
+
+**Magnitude is.** The query tokens never left their initialization scale:
+
+| | value |
+|---|---|
+| norm at init (`trunc_normal_(std=0.02)`, dim 384) | 0.3919 |
+| measured after 40 epochs | 0.3999, 0.3775, 0.3996, 0.4047 |
+| growth ratio | **1.009** |
+
+Three converging reasons, all visible in the code:
+- `compute_ortho_loss()` applies `F.normalize(Q)` before the Gram matrix, so
+  the loss is **scale-invariant** -- it constrains direction and exerts
+  literally zero gradient pressure on `||q_i||`.
+- `config/optimizer/basic.yaml` uses AdamW with `weight_decay: 0.0005`, which
+  actively shrinks them.
+- `lr: 1e-5`, further annealed by CosineAnnealingLR.
+
+The consequence is arithmetic. Small `||q||` -> small scores (measured
+`mean|score|`=0.0805, within-row spread 0.0952) -> softmax of a spread that
+small is necessarily near-uniform. Predicted from the measured spread:
+LL=0.268, others=0.244. Measured: LL=0.265, LH=0.247, HL=0.242, HH=0.246. The
+model sits exactly where the math puts it.
+
+For genuinely selective attention the query norms would need to be 7-26x
+larger:
+
+| LL would capture | required within-row spread | required `||q||` |
+|---|---|---|
+| 40% | 0.69 | ~2.8 |
+| 60% | 1.50 | ~6.2 |
+| 80% | 2.48 | ~10.2 |
+
+**This is the defensible mechanistic contribution:** the orthogonality
+regularizer constrains the *direction* of the query tokens, while what
+actually governs attention selectivity is their *magnitude* -- a quantity
+nothing in the objective constrains and that weight decay reduces. That single
+fact explains, simultaneously, why the queries are perfectly orthogonal, why
+the attention stays uniform, and why the mAP gain is statistically nil. It is
+also a general design lesson about cross-attention bottlenecks, not a
+dataset-specific quirk.
+
+It is directly testable, and each test is a short run:
+- exclude `query_tokens` from weight decay (optimizer param group);
+- `F.normalize` the queries inside `forward()` and add a learned temperature
+  on the scores (decouples direction from sharpness explicitly);
+- initialize `query_tokens` at a larger scale and check whether attention
+  becomes selective and whether that helps or hurts mAP.
+
 **Still open:** seeds 111/222 not yet measured on MIRFLICKR (checkpoints
 exist; cheap). No VOC `ortho_weight=0` counterpart measured, so the VOC
-numbers above are single-arm.
+numbers above are single-arm. The three fixes above are untested.
 
 **Bigger question this raises:** uniform attention means the bottleneck is not
 routing anything, and the band read-out cosines show LH/HL/HH are largely
