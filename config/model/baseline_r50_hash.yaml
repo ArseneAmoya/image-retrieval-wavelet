@@ -13,3 +13,7 @@ kwargs:
   use_bn: true
   binary_config:
     nbits: 64
+  # Required: run.py reads config.model.kwargs.with_autocast unconditionally to
+  # decide whether to build a GradScaler. false matches the two DINO baselines,
+  # so the three arms train in the same precision regime.
+  with_autocast: false

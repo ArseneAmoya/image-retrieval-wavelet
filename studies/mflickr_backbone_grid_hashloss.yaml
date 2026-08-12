@@ -48,5 +48,17 @@ base_overrides:
 
 # Comparison arm: MBW-DINO + hash_loss already exists as
 # mflickr_lph_vs_ortho_multiseed (ortho 0.0/0.1 x 3 seeds) -- do NOT retrain it here.
+#
+# baseline_vitb_hash removed from the sweep (2026-08-12): it already completed under
+# this exact study, in the launch that later died on baseline_r50_hash's missing
+# with_autocast key -- Hydra runs the sweep in order, so jobs 0 (vits) and 1 (vitb)
+# finished first. Its results are in
+#   experiments_runs/mflickr_backbone_grid_hashloss_model=baseline_vitb_hash/
+# Re-add it to the list if that directory turns out to be incomplete.
+#
+# NB: do NOT substitute mflickr_vitb_capacity_control for this arm. That study used
+# `transform: basic` (plain RandomCrop) while this grid uses `basic_rrc`
+# (RandomResizedCrop, matching basic_swt) -- different augmentation strength, so the
+# two ViT-B numbers are not interchangeable.
 sweep:
-  model: [baseline_vits_hash, baseline_vitb_hash, baseline_r50_hash]
+  model: [baseline_vits_hash, baseline_r50_hash]
