@@ -356,6 +356,35 @@ head contributes little -- which makes
 `mflickr_vitb_capacity_control` (section 2) the most decision-relevant study
 remaining, not a formality.
 
+## 4.3 `mflickr_vitb_capacity_control` first attempt (2026-08-11): INVALID, bug found
+
+First run came out at ~79% mAP, far below MBW-DINO's ~84.5%. That number is not
+usable: `main/models/dino_baseline.py`'s `DINOHashBaseline.forward` called
+
+```python
+with torch.set_grad_enabled(not getattr(self.backbone, 'frozen', True)):
+```
+
+but nothing anywhere ever set `.frozen` on the backbone -- the constructor's
+`frozen` argument only flips `requires_grad`. The `getattr` therefore always
+fell through to its default `True`, so gradients were disabled on every
+forward and **the backbone stayed at its pretrained weights no matter what**.
+The run trained only the hash head (`Linear(768->64) + BatchNorm1d`) on frozen
+features, while MBW-DINO fine-tunes all four backbones (`frozen: False`). ~79%
+is exactly what a frozen ViT-B + linear head should give, so the comparison
+said nothing about capacity.
+
+Fixed by storing the flag on `self` and respecting the ambient grad mode
+(`torch.is_grad_enabled() and not self.frozen`, so it cannot re-enable grad
+inside `evaluate.py`'s `no_grad` block). `config/model/dino_hashing.yaml` sets
+no `frozen` key, so the default `False` now genuinely fine-tunes. **Re-run the
+study.**
+
+**Check before trusting any older baseline number:** if the accepted MBW-DINO
+paper's single-DINO baseline was produced with this same class, that baseline
+was a frozen-backbone number and the reported margin over it was inflated by
+the same mechanism. Worth verifying against the published tables.
+
 ## 5. Reading the results — how they change the paper's narrative
 
 - **If step 1's gain isn't robust (CI overlaps 0):** the "orthogonality helps

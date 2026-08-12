@@ -7,6 +7,17 @@ class DINOHashBaseline(nn.Module):
 
         self.backbone = torch.hub.load('facebookresearch/dinov2', dino_backbone)
 
+        # Was: forward() called getattr(self.backbone, 'frozen', True), but nothing
+        # ever set that attribute on the backbone -- the constructor arg below only
+        # touches requires_grad. The getattr therefore always fell through to its
+        # default True, so set_grad_enabled(not True) disabled gradients on EVERY
+        # forward and the backbone was frozen at its pretrained weights regardless of
+        # this flag. That silently turned any DINOHashBaseline run into a
+        # frozen-feature + linear-head baseline (e.g. mflickr_vitb_capacity_control,
+        # which is meant to be a fine-tuned parameter-matched control against a fully
+        # fine-tuned MBW-DINO). Store the flag on self instead.
+        self.frozen = frozen
+
         if frozen:
             for p in self.backbone.parameters():
                 p.requires_grad = False
@@ -20,7 +31,10 @@ class DINOHashBaseline(nn.Module):
         )
 
     def forward(self, x):
-        with torch.set_grad_enabled(not getattr(self.backbone, 'frozen', True)):
+        # `and torch.is_grad_enabled()` so this never *re-enables* grad inside an
+        # outer torch.no_grad() block (evaluate.py / compute_all_embeddings run under
+        # no_grad; re-enabling there would silently build a graph and waste memory).
+        with torch.set_grad_enabled(torch.is_grad_enabled() and not self.frozen):
             features = self.backbone(x)
 
         if isinstance(features, dict):
