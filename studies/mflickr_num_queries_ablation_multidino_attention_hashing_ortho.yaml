@@ -52,13 +52,21 @@ base_overrides:
 
 # Single seed per N (matches the reference's seed=333) -- this is a sweep, not
 # a headline claim, so no multi-seed repetition here.
-# num_queries=4 is DELIBERATELY excluded: at ortho_weight=0.1, seed=333, every
-# other override matches mflickr_lph_vs_ortho_multiseed's base_overrides
-# exactly (fusion_config.type defaults to cross_attention_advanced in both).
-# sub_batch differs (48 here vs 96 there) but is a pure memory/gradient-
-# accumulation knob (main/engine/base_update.py's _split_into_microbatches)
-# that doesn't change the trained model. Reuse the existing checkpoint instead
-# of retraining:
-#   experiments_runs/mflickr_lph_vs_ortho_multiseed_*ortho_weight=0.1*seed=333*/
+# WARNING (corrected 2026-08-13): this study runs at sub_batch=48 while the
+# num_queries=4 reference (mflickr_lph_vs_ortho_multiseed) runs at 96, and that is
+# NOT a neutral difference. With batch_size=96, sub_batch=96 takes the single-pass
+# path while 48 takes _gradient_cached_optimization; the loss is still full-batch,
+# but nn.BatchNorm1d (use_bn: true) then normalizes on 48 samples instead of 96 and
+# its running stats -- the ones eval mode uses for every reported metric -- receive
+# 4 noisier updates per step instead of 1.
+#
+# Practical consequence:
+#   - the 1 / 2 / 8 points below are internally consistent with each other (all at
+#     sub_batch=48), so the SHAPE of the sensitivity curve is trustworthy;
+#   - they are NOT paired-comparable with the num_queries=4 reference at 96.
+# To close the curve, add a num_queries=4 point AT sub_batch=48 rather than reusing
+# the reference checkpoint. For the headline "N=1 beats N=4" claim, use
+# mflickr_num_queries_1_multiseed.yaml instead, which runs N=1 at sub_batch=96 on
+# all three seeds so it pairs directly against the reference.
 sweep:
   model.kwargs.fusion_config.num_queries: [1, 2, 8]

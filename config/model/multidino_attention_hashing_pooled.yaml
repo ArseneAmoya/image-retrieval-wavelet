@@ -1,0 +1,38 @@
+# @package _group_
+# Identical to multidino_attention_hashing_ortho.yaml except for the fusion head:
+# 'cross_attention_pooled' (CrossAttentionBottleneckHeadPooled), which mean-pools the
+# query outputs instead of concatenating them. That makes out_proj Linear(384, 384) for
+# every num_queries, so the read-out's parameter count and compression ratio no longer
+# grow with N -- the confound suspected of driving the monotonic decrease measured in
+# mflickr_num_queries_ablation (0.8802 / 0.8652 / 0.8308 for N = 1 / 2 / 8).
+name: MultiDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbones_config:
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+
+  binary_config:
+    nbits: 64
+
+  use_bn: True
+
+  fusion_config:
+    use_all_tokens: False
+    type: 'cross_attention_pooled'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+    num_queries: 4
+    sub_band_dropout_p: 0
+    ortho_weight: 0.1
+    query_pool: 'mean'     # 'concat' reproduces the Advanced head exactly
+
+  with_autocast: false

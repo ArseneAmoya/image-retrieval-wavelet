@@ -1,0 +1,89 @@
+study_name: mflickr_num_queries_1_multiseed
+
+# Confirmation study for the single most promising result of the revision.
+#
+# mflickr_num_queries_ablation returned num_queries=1 at maphashing 0.8802 (seed 333)
+# against 0.8584 for the num_queries=4 reference at the SAME seed -- a paired gain of
+# +0.0218, i.e. 8x the orthogonality effect (+0.0028 +/- 0.0055) and comparable to the
+# whole MBW-DINO vs parameter-matched ViT-B gap (+0.0218 to +0.0429).
+#
+# Unlike the orthogonality claim, this one comes with an independently measured
+# mechanism: the four query tokens are functionally redundant (centered inter-query
+# attention cosine 0.9918 on a deviation of only 0.0076, see
+# MIRFLICKR_DIAGNOSTIC_PLAN.md 4.2), and the attention routes nothing (entropy at
+# log(4), the maximum). So num_queries=4 forces four near-identical 384-d vectors
+# through out_proj's 1536->384 bottleneck, with ~442k more parameters to fit on the
+# same data, for no informational gain. num_queries=1 removes exactly that.
+#
+# But a single seed is precisely the evidential situation that got the paper rejected.
+# This study adds seeds 111 and 222 (333 already exists in
+# mflickr_num_queries_ablation) so the claim can be reported as a paired mean +/- std
+# over 3 seeds, directly comparable to how mflickr_lph_vs_ortho_multiseed reports the
+# orthogonality effect. Everything else is pinned to that study's base_overrides so
+# the N=1 vs N=4 comparison is paired seed by seed.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_lph_vs_ortho_multiseed, except num_queries ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1     # the variable under test
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2, same as the reference arm
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5                  # divergence canary only (section 6.1)
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# All three seeds, INCLUDING 333 -- the existing num_queries=1 / seed=333 run from
+# mflickr_num_queries_ablation cannot be reused here.
+#
+# Why (corrected 2026-08-13): that study sets sub_batch=48 while every other study,
+# including the num_queries=4 reference, uses 96. With batch_size=96 that is not a
+# neutral memory knob:
+#   - sub_batch >= batch_size takes the single-pass path (no microbatching at all);
+#     sub_batch=48 takes _gradient_cached_optimization, which forwards each microbatch
+#     twice (pass 1 no_grad to cache embeddings, pass 2 with grad to backprop).
+#   - the loss is still computed on the full batch, so pairwise terms are unaffected;
+#   - BUT the model has nn.BatchNorm1d(nbits) with use_bn: true, and in train mode BN
+#     normalizes on the CURRENT microbatch. So it sees 48 samples instead of 96, and
+#     running_mean/running_var get 4 updates per step (2 passes x 2 microbatches)
+#     from noisier estimates instead of 1. Those running stats are exactly what eval
+#     mode uses, i.e. what every reported metric is computed from.
+# base_update.py itself flags the BN interaction in its sub_batch<2 error message.
+#
+# So a num_queries=1 run at sub_batch=48 is not paired-comparable with the
+# num_queries=4 reference at 96, and the +0.0218 measured that way mixes the
+# num_queries effect with a BN-statistics effect. Re-running seed 333 here at
+# sub_batch=96 makes all three seeds pair cleanly against
+# mflickr_lph_vs_ortho_multiseed's ortho_weight=0.1 arm.
+sweep:
+  experience.seed: [111, 222, 333]

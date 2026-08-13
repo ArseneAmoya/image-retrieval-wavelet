@@ -1,0 +1,95 @@
+study_name: mflickr_num_queries_pooled
+
+# Does mean-pooling the query outputs let N>1 catch up with N=1?
+#
+# mflickr_num_queries_ablation is monotonically decreasing in N (best-epoch maphashing
+# 0.8802 / 0.8652 / 0.8308 for N = 1 / 2 / 8, all at sub_batch=48 so the SHAPE is
+# trustworthy even though those numbers are not paired with the sub_batch=96 reference).
+# Two explanations, distinguished by this study:
+#
+#   (a) the queries are redundant, so extra ones only add noise. Measured support:
+#       centered inter-query attention cosine 0.9918 on a deviation of just 0.0076,
+#       and attention entropy at log(4), the maximum -- the queries do not differentiate
+#       the bands at all (RESULTS.md sections 2 and 4b).
+#   (b) the read-out is the problem: the Advanced head flattens the N query outputs into
+#       out_proj: Linear(N*384, 384). At N=8 that compresses 3072->384 with ~1.2M
+#       parameters; at N=1 it is a plain 384->384 map with no compression. Under this
+#       reading the extra queries are fine and the concatenation is what costs.
+#
+# CrossAttentionBottleneckHeadPooled replaces the flatten with x.mean(dim=1), so
+# out_proj is Linear(384, 384) for every N and the read-out stops scaling with N.
+#   - curve flattens  -> (b) was the cause; multiple queries are salvageable
+#   - curve still falls -> (a) was the cause; N=1 is the honest recommendation
+#
+# N=1 is architecturally identical under both read-outs (mean of one vector is that
+# vector, out_proj is 384->384 either way), so its value here should match the pooled
+# study's N=1 up to seed noise -- a built-in consistency check.
+#
+# sub_batch=96 here, matching mflickr_lph_vs_ortho_multiseed rather than the 48 of
+# mflickr_num_queries_ablation: BN normalizes over the microbatch, so 48 vs 96 changes
+# the trained model (see studies/audit_overrides.py). Everything in this study is
+# therefore paired-comparable with the reference.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_pooled
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_lph_vs_ortho_multiseed ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.fusion_config.query_pool: mean
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: verified neutral via studies/audit_overrides.py ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Staged on purpose: N=1 and N=4 first, N=2 and N=8 only if needed.
+#
+#   N=1 is the consistency check -- architecturally identical to the Advanced head at
+#       N=1, so it must land near mflickr_num_queries_ablation's 0.8802 (modulo the
+#       sub_batch 48 -> 96 change). If it does not, the new head is at fault and no
+#       other number from this study is worth reading.
+#   N=4 is the only point that pairs directly against the reference
+#       (mflickr_lph_vs_ortho_multiseed, ortho=0.1, seed 333, sub_batch=96 = 0.8584),
+#       so it isolates the effect of mean pooling at otherwise identical architecture.
+#
+# These two nearly answer the question on their own:
+#   N=4 pooled close to N=1  -> the concatenated read-out was the cost; multiple
+#                               queries are salvageable, and THEN N=2/8 are worth
+#                               running to trace the curve.
+#   N=4 pooled close to 0.8584 -> pooling changes nothing, the redundant queries
+#                               themselves are the cost, and N=2/8 would only
+#                               re-measure a decline already established.
+#
+# To extend afterwards, restore: [1, 2, 4, 8]
+sweep:
+  model.kwargs.fusion_config.num_queries: [1, 4]

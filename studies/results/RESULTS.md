@@ -114,6 +114,37 @@ The first attempt at this control returned ~79% and was invalid: `DINOHashBaseli
 kept its backbone frozen regardless of the `frozen` flag (`getattr(self.backbone,
 'frozen', True)` on an attribute that was never set). Fixed.
 
+## 4b. Forcing attention selectivity changes nothing
+
+`mflickr_query_scale_decoupled` (new `CrossAttentionBottleneckHeadDecoupled`,
+`q_effective = query_scale * normalize(query_tokens)`, seed 333, ortho=0.1):
+
+| query_scale_init | targeted regime | best-epoch maphashing |
+|---|---|---|
+| 2.0 | dominant band ~35% | 0.8364 |
+| 6.0 | ~59% | 0.8445 |
+| 12.0 | ~86% | 0.8324 |
+| — | reference (Advanced head, ortho=0.1, seed 333) | 0.8584 |
+| — | reference, mean over 3 seeds | 0.8401 ± 0.0174 |
+
+Spread across the whole sweep: **0.0121**, i.e. smaller than the reference's
+seed-to-seed std (0.0174), and non-monotonic — the most selective setting is
+the worst. Selectivity is not what the architecture was missing, and the
+uniform attention documented in section 2 was costing nothing.
+
+Read together with section 4 (MBW-DINO beats a parameter-matched ViT-B by
+2.2–4.3 points), the coherent reading is that the multi-band advantage comes
+from the decomposed **inputs** and an ensemble-like combination, not from any
+learned routing between bands. The cross-attention bottleneck is not doing the
+job it was designed for, at any magnitude.
+
+Not done, by decision (2026-08-12): the follow-up
+`measure_attention_collapse.py` pass on these three checkpoints, which would
+have confirmed that the attention actually did become selective and shown where
+the learnable `query_scale` drifted. Without it, "we gave the model selectivity
+and it rejected it" is the plausible reading but not a verified one — state it
+accordingly if it goes in the paper.
+
 ## 5. SWT transform: correct
 
 Contract holds (`[C=3, S=4, 224, 224]`, `x[:, :, i]` → `[B, 3, H, W]`), the four

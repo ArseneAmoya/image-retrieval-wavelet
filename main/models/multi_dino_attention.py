@@ -481,6 +481,124 @@ class CrossAttentionBottleneckHeadDecoupled(nn.Module):
         return self.norm2(x)
 
 
+class CrossAttentionBottleneckHeadPooled(nn.Module):
+    """CrossAttentionBottleneckHeadAdvanced with the query read-out swapped from
+    concatenation to mean pooling.
+
+    Motivation (measured -- see studies/results/RESULTS.md):
+    `mflickr_num_queries_ablation` is monotonically decreasing in the number of
+    queries: best-epoch maphashing 0.8802 / 0.8652 / 0.8308 for N = 1 / 2 / 8. More
+    queries is strictly worse. Two candidate explanations, and they call for different
+    fixes:
+
+      (a) the queries themselves are the problem -- they are functionally redundant
+          (centered inter-query attention cosine 0.9918 on a deviation of 0.0076), so
+          extra ones only add noise;
+      (b) the READ-OUT is the problem -- the Advanced head flattens the N query
+          outputs and pushes them through `out_proj: Linear(N*embed_dim, embed_dim)`.
+          At N=8 that is a 3072->384 compression with ~1.2M parameters fitted on the
+          same data, whereas N=1 is a plain 384->384 map with no compression at all.
+          Under this reading the queries are fine and the concatenation is what hurts.
+
+    Mean pooling separates the two: `x.mean(dim=1)` makes the read-out's parameter
+    count and compression ratio independent of N, so `out_proj` is always
+    Linear(embed_dim, embed_dim). If the N-curve flattens with this head, (b) was the
+    cause and multiple queries can be kept; if it still decreases, (a) was, and N=1 is
+    the honest recommendation.
+
+    Note N=1 is architecturally identical under both read-outs (mean of one vector is
+    that vector, and out_proj is 384->384 either way), which gives the two studies a
+    built-in consistency check at that point.
+
+    `query_pool='concat'` restores the Advanced head's behaviour exactly, so this class
+    is a strict superset and can host both arms of the comparison.
+    """
+
+    def __init__(self, input_dims, embed_dim=384, num_queries=4, num_heads=8, dropout=0.1,
+                 sub_band_dropout_p=0.3, ortho_weight=0.1, margin=0.0, use_all_tokens=False,
+                 query_pool='mean'):
+        super().__init__()
+        if query_pool not in ('mean', 'concat'):
+            raise ValueError(f"query_pool must be 'mean' or 'concat', got {query_pool!r}")
+        self.num_queries = num_queries
+        self.sub_band_dropout_p = sub_band_dropout_p
+        self.ortho_weight = ortho_weight
+        self.margin = margin
+        self.use_all_tokens = use_all_tokens
+        self.query_pool = query_pool
+
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity()
+            for dim in input_dims
+        ])
+
+        self.query_tokens = nn.Parameter(torch.randn(1, num_queries, embed_dim))
+        nn.init.trunc_normal_(self.query_tokens, std=0.02)
+
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout)
+        )
+
+        # The whole point: with mean pooling this is Linear(D, D) for every N.
+        in_dim = embed_dim if query_pool == 'mean' else num_queries * embed_dim
+        self.out_proj = nn.Linear(in_dim, embed_dim)
+
+        self.last_ortho_loss = 0.0
+
+    def compute_ortho_loss(self):
+        """Identical to CrossAttentionBottleneckHeadAdvanced.compute_ortho_loss."""
+        Q = self.query_tokens.squeeze(0)
+        Q_norm = F.normalize(Q, p=2, dim=-1)
+        gram = torch.matmul(Q_norm, Q_norm.T)
+        identity = torch.eye(self.num_queries, device=Q.device)
+        raw_error = torch.norm(gram - identity, p='fro')
+        active_error = F.relu(raw_error - self.margin)
+        return self.ortho_weight * (active_error ** 2)
+
+    def forward(self, features_list):
+        batch_size = features_list[0].shape[0]
+        device = features_list[0].device
+
+        kv_list = [proj(f) for proj, f in zip(self.projections, features_list)]
+
+        mask_ll = self.training and (torch.rand(1).item() < self.sub_band_dropout_p)
+        if mask_ll:
+            kv_list[0] = torch.zeros_like(kv_list[0])
+
+        if self.use_all_tokens:
+            kv = torch.cat(kv_list, dim=1)
+        else:
+            kv = torch.stack(kv_list, dim=1)
+
+        q = self.query_tokens.expand(batch_size, -1, -1)
+
+        attn_output, attn_weights = self.attn(query=q, key=kv, value=kv)
+
+        if self.training and self.ortho_weight > 0:
+            self.last_ortho_loss = self.compute_ortho_loss()
+        else:
+            self.last_ortho_loss = torch.tensor(0.0, device=device)
+
+        x = self.norm1(q + attn_output)
+        x = x + self.mlp(x)
+
+        # The only line that differs from the Advanced head.
+        if self.query_pool == 'mean':
+            x = x.mean(dim=1)
+        else:
+            x = x.view(batch_size, -1)
+
+        x = self.out_proj(x)
+
+        return self.norm2(x)
+
+
 def get_fusion_head(fusion_config, output_dims):
     fusion_type = fusion_config.get('type', 'standard')
     embed_dim = fusion_config['output_dim']
@@ -524,6 +642,22 @@ def get_fusion_head(fusion_config, output_dims):
             dropout=dropout,
             sub_band_dropout_p=sub_band_dropout_p,
             ortho_weight=ortho_weight
+        )
+
+    elif fusion_type == 'cross_attention_pooled':
+        num_queries = fusion_config.get('num_queries', 4)
+        sub_band_dropout_p = fusion_config.get('sub_band_dropout_p', 0.3)
+        ortho_weight = fusion_config.get('ortho_weight', 0.1)
+        return CrossAttentionBottleneckHeadPooled(
+            output_dims,
+            embed_dim,
+            num_queries=num_queries,
+            num_heads=num_heads,
+            dropout=dropout,
+            sub_band_dropout_p=sub_band_dropout_p,
+            ortho_weight=ortho_weight,
+            use_all_tokens=fusion_config.get('use_all_tokens', False),
+            query_pool=fusion_config.get('query_pool', 'mean'),
         )
 
     elif fusion_type == 'cross_attention_decoupled':
