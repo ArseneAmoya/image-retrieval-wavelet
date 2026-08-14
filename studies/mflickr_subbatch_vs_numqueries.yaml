@@ -1,0 +1,85 @@
+study_name: mflickr_subbatch_vs_numqueries
+
+# Two runs, chosen to complete a 2x2 grid whose other two cells already exist, using
+# the ORIGINAL concat head (cross_attention_advanced) throughout so the read-out is
+# not a third moving part.
+#
+# Existing cells (Advanced head, seed 333, best-epoch maphashing_level0):
+#   N=1, sub_batch=48  = 0.8802   mflickr_num_queries_ablation
+#   N=4, sub_batch=96  = 0.8584   mflickr_lph_vs_ortho_multiseed, ortho=0.1
+#   N=1, sub_batch=96  = 0.8454   mflickr_num_queries_pooled -- pooled and concat are
+#                                 architecturally identical at N=1 (mean of one vector
+#                                 is that vector, out_proj is 384->384 either way)
+# Missing, and run here:
+#   N=4, sub_batch=48  <- arm A
+#   N=1, sub_batch=96  <- arm B, with the concat head explicitly
+#
+# What each arm buys:
+#
+# Arm A (N=4, sub_batch=48) is the actual question: does sub_batch=48 lift N=4 above
+# its own sub_batch=96 value of 0.8584, and does it reach or pass the 0.8802 that N=1
+# reached at 48? If it does, the effect attributed to num_queries was mostly a
+# sub_batch effect all along.
+#
+# Arm B (N=1, sub_batch=96) is a reproducibility measurement disguised as a data point.
+# It is architecturally identical to the pooled study's N=1 (0.8454) with identical
+# config, so the difference between the two IS the run-to-run noise at fixed seed --
+# the number that decides whether any of the 1.3-4.1 point gaps in this project are
+# interpretable at all.
+#
+# Why sub_batch is not a neutral knob (it was mislabelled as one in earlier studies):
+# with batch_size=96, sub_batch=96 takes base_update.py's single-pass path while 48
+# takes _gradient_cached_optimization. The loss stays full-batch, but nn.BatchNorm1d
+# then normalizes over 48 samples instead of 96 -- this is Ghost Batch Normalization
+# (Hoffer, Hubara & Soudry, NeurIPS 2017), a known regularizer. A second, unintended
+# effect rides along: pass 1 runs under no_grad but still in train mode, so
+# running_mean/running_var are updated 4x per step (2 passes x 2 microbatches) from
+# noisier estimates, and those running stats are what eval mode uses. Any gain measured
+# here therefore mixes the published mechanism with that artifact, and separating them
+# would require an explicit Ghost-BN implementation before it could be claimed.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho   # ORIGINAL concat head
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_lph_vs_ortho_multiseed's ortho=0.1 arm ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Paired, NOT crossed: the two lists are read position by position, so this yields
+# exactly (N=4, sub_batch=48) and (N=1, sub_batch=96) -- not the four combinations a
+# normal `sweep` would produce.
+sweep_zip:
+  model.kwargs.fusion_config.num_queries: [4, 1]
+  experience.sub_batch: [48, 96]

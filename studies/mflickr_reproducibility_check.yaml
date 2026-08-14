@@ -1,0 +1,90 @@
+study_name: mflickr_reproducibility_check
+
+# Measures the one number every other comparison in this project is implicitly
+# assuming: the WITHIN-seed variance. Two runs, same config, same seed, nothing
+# different that touches training.
+#
+# Why it matters. Every paired claim we have rests on comparing two runs at seed 333:
+#   num_queries=1 vs 4          +0.0218
+#   MBW-DINO vs ViT-B           +0.0218 to +0.0429
+#   ortho 0.1 vs 0.0            +0.0090 (seed 333)
+# If rerunning an identical config at an identical seed already moves maphashing by,
+# say, 0.005, then the smallest of those is inside the noise floor and the others need
+# visibly wider error bars. We have measured BETWEEN-seed std (0.0174, from
+# mflickr_lph_vs_ortho_multiseed) but never within-seed anything.
+#
+# What we know today is not reassuring: the only same-config/same-seed pair on record
+# (the pilot, logs 18 and 21) gave a fully collapsed run (bit_balance exactly 0.0,
+# map frozen at 0.7736) and a healthy one (map 0.8501). That predates the worker
+# seeding fix (commit 0ca56ad), which was written to explain it -- and which has never
+# itself been validated. This study is that validation.
+#
+# The seeding currently in place (run.py:60-65) covers random, numpy, torch,
+# torch.cuda, plus cudnn.deterministic=True and cudnn.benchmark=False, and
+# main/engine/train.py adds worker_init_fn + a seeded generator for the DataLoader
+# workers. NOT set: torch.use_deterministic_algorithms(True). cudnn.deterministic only
+# constrains cuDNN convolution algorithms; atomicAdd-based kernels elsewhere in the
+# backward pass remain nondeterministic. So exact bit-equality is not expected -- the
+# question is the magnitude.
+#
+# Reading the result (compare best-epoch maphashing_level0 between the two runs):
+#   difference ~0            -> the pipeline is deterministic; every paired comparison
+#                               above stands as measured.
+#   difference <= ~0.002     -> acceptable; quote it as the noise floor whenever a
+#                               paired difference is reported.
+#   difference >  ~0.005     -> the +0.0090 ortho result at seed 333 is noise, and the
+#                               N=1 and ViT-B results need multiple seeds before any
+#                               of them can be stated as effects.
+#
+# The two arms differ ONLY in experience.eval_bs, which is the sweep axis purely
+# because Hydra needs distinct override_dirnames to write two directories. eval_bs
+# controls evaluation batching only: embeddings are computed per sample and BN runs in
+# eval mode off its running statistics, so it cannot change either the trained weights
+# or the computed metrics. Deliberately NOT used as the axis: num_workers, which looks
+# equally harmless but is not -- torch seeds each worker from base_seed + worker_id and
+# the sample-to-worker assignment depends on the worker count, so changing it changes
+# the augmentation RNG stream per sample.
+base_overrides:
+  # Config groups -- identical to mflickr_lph_vs_ortho_multiseed's ortho=0.1 arm
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Neutral axis, see the note above. 200 is the value used by every other study, so
+# arm A is additionally comparable to the existing reference run.
+sweep:
+  experience.eval_bs: [200, 208]

@@ -40,21 +40,50 @@ def format_override_value(value):
 def load_plan(plan_path):
     with open(plan_path, "r") as f:
         plan = yaml.safe_load(f)
-    for required in ("study_name", "base_overrides", "sweep"):
+    for required in ("study_name", "base_overrides"):
         if required not in plan:
             raise ValueError(f"Experiment plan {plan_path} is missing required key '{required}'")
+    if "sweep" not in plan and "sweep_zip" not in plan:
+        raise ValueError(f"Experiment plan {plan_path} needs either 'sweep' or 'sweep_zip'")
+    zip_lists = plan.get("sweep_zip") or {}
+    lengths = {k: len(v) for k, v in zip_lists.items()}
+    if len(set(lengths.values())) > 1:
+        raise ValueError(
+            f"All 'sweep_zip' lists must have the same length (they are paired position by "
+            f"position, not crossed). Got: {lengths}"
+        )
     return plan
 
 
-def build_command(plan, use_ray):
+def zip_combos(plan):
+    """`sweep` is a cartesian product; `sweep_zip` pairs its keys position by position.
+
+    Needed whenever two overrides must co-vary rather than be crossed -- e.g. comparing
+    exactly (num_queries=4, sub_batch=48) against (num_queries=1, sub_batch=96) without
+    also training the two off-diagonal combinations. Hydra's -m only ever products
+    comma-separated lists, so each zipped combination is dispatched as its own multirun
+    with single-valued lists; job naming via ${hydra:job.override_dirname} is unaffected.
+    """
+    zip_lists = plan.get("sweep_zip") or {}
+    if not zip_lists:
+        return [{}]
+    keys = list(zip_lists)
+    n = len(zip_lists[keys[0]])
+    return [{k: zip_lists[k][i] for k in keys} for i in range(n)]
+
+
+def build_command(plan, use_ray, zip_fixed=None):
     base_overrides = plan["base_overrides"]
-    sweep = plan["sweep"]
+    sweep = plan.get("sweep") or {}
+    zip_fixed = zip_fixed or {}
 
     base_args = [f"{k}={format_override_value(v)}" for k, v in base_overrides.items()]
+    # Zipped keys are passed as single-valued lists so they still appear in
+    # override_dirname (and therefore in the run's name) like any swept key.
     sweep_args = [
         f"{k}=" + ",".join(format_override_value(v) for v in values)
         for k, values in sweep.items()
-    ]
+    ] + [f"{k}={format_override_value(v)}" for k, v in zip_fixed.items()]
 
     # Only the swept keys should show up in each job's auto-generated name.
     exclude_keys = list(base_overrides.keys()) + ["experience.experiment_name"]
@@ -71,12 +100,15 @@ def build_command(plan, use_ray):
 def preview_job_names(plan):
     """Approximates Hydra's default override_dirname formatting (sorted key=value pairs,
     comma-joined) so you can sanity-check names before actually launching anything."""
-    sweep = plan["sweep"]
+    sweep = plan.get("sweep") or {}
     keys = sorted(sweep.keys())
     names = []
-    for combo in itertools.product(*(sweep[k] for k in keys)):
-        dirname = ",".join(f"{k}={format_override_value(v)}" for k, v in zip(keys, combo))
-        names.append(f"{plan['study_name']}_{dirname}")
+    for zf in zip_combos(plan):
+        for combo in itertools.product(*(sweep[k] for k in keys)) if keys else [()]:
+            pairs = dict(zip(keys, combo))
+            pairs.update(zf)
+            dirname = ",".join(f"{k}={format_override_value(pairs[k])}" for k in sorted(pairs))
+            names.append(f"{plan['study_name']}_{dirname}")
     return names
 
 
@@ -89,19 +121,22 @@ def main():
 
     plan = load_plan(args.plan)
     use_ray = args.ray or plan.get("use_ray", False)
-    command = build_command(plan, use_ray)
     names = preview_job_names(plan)
+    combos = zip_combos(plan)
+    commands = [build_command(plan, use_ray, zf) for zf in combos]
 
     print(f"Study '{plan['study_name']}': {len(names)} jobs")
     for name in names:
         print(f"  - {name}")
-    print("\nCommand:")
-    print(" ".join(command))
+    for i, command in enumerate(commands):
+        print(f"\nCommand{f' {i + 1}/{len(commands)}' if len(commands) > 1 else ''}:")
+        print(" ".join(command))
 
     if args.dry_run:
         return
 
-    subprocess.run(command, cwd=REPO_ROOT, check=True)
+    for command in commands:
+        subprocess.run(command, cwd=REPO_ROOT, check=True)
 
 
 if __name__ == "__main__":
