@@ -6,9 +6,7 @@ kwargs:
   # Liste de vos 4 branches (Ondelettes : LL, LH, HL, HH)
   backbone_config:
     name: 'dinov2_vits14'
-    frozen: False  # On gèle DINO pour laisser l'attention apprendre en premier
-
-
+    frozen: False  
   # Configuration du Hachage
   binary_config:
     nbits: 64  # Doit être identique à la Baseline pour comparer équitablement !
@@ -23,8 +21,8 @@ kwargs:
     # -- Nouveaux paramètres SOTA (Hybrid Regularization) --
     num_queries: 4                     # 4 experts pour séparer les 4 bandes
     sub_band_dropout_p: 0            # Force le réseau à explorer LH, HL, HH
-    ortho_weight: 0.01                  # Force la division du travail (sans exploser la loss)
+    ortho_weight: 0.1                  # Force la division du travail (sans exploser la loss)
   modelhooks:
     name: "SharedMBWDinoInstrumentor"
 
-  with_autocast: true
+  with_autocast: false

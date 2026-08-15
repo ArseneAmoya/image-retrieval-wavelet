@@ -1,0 +1,72 @@
+study_name: mflickr_num_queries_ablation
+
+# MIRFLICKR counterpart of voc_num_queries_ablation. Sensitivity study on
+# model.kwargs.fusion_config.num_queries -- Reviewer #2's request ("no
+# sensitivity study on the number of subbands ... these are central
+# hyperparameters"). Note: num_queries is decoupled from the number of
+# subbands (always 4, fixed by the SWT decomposition) -- it's the number of
+# learnable query tokens in the fusion bottleneck. Everything under
+# loss/model/optimizer/transform is pinned to the reference MIRFLICKR config
+# (mflickr_lph_vs_ortho_multiseed) exactly.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: shareddino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1              # never used for best_score/principal_metric (eval_split=test) -- pure overhead
+  experience.test_eval_freq: 50                # = max_iter: full top_k=19581 eval only at the final epoch
+  experience.fast_eval_freq: 5                  # cheap progress curve on a small subset instead
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 48
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Single seed per N (matches the reference's seed=333) -- this is a sweep, not
+# a headline claim, so no multi-seed repetition here.
+# WARNING (corrected 2026-08-13): this study runs at sub_batch=48 while the
+# num_queries=4 reference (mflickr_lph_vs_ortho_multiseed) runs at 96, and that is
+# NOT a neutral difference. With batch_size=96, sub_batch=96 takes the single-pass
+# path while 48 takes _gradient_cached_optimization; the loss is still full-batch,
+# but nn.BatchNorm1d (use_bn: true) then normalizes on 48 samples instead of 96 and
+# its running stats -- the ones eval mode uses for every reported metric -- receive
+# 4 noisier updates per step instead of 1.
+#
+# Practical consequence:
+#   - the 1 / 2 / 8 points below are internally consistent with each other (all at
+#     sub_batch=48), so the SHAPE of the sensitivity curve is trustworthy;
+#   - they are NOT paired-comparable with the num_queries=4 reference at 96.
+# To close the curve, add a num_queries=4 point AT sub_batch=48 rather than reusing
+# the reference checkpoint. For the headline "N=1 beats N=4" claim, use
+# mflickr_num_queries_1_multiseed.yaml instead, which runs N=1 at sub_batch=96 on
+# all three seeds so it pairs directly against the reference.
+sweep:
+  model.kwargs.fusion_config.num_queries: [1, 2, 4, 8]

@@ -1,0 +1,94 @@
+study_name: mflickr_ghostbn_width_test
+
+# ============================================================================
+# PREDICTION REGISTERED BEFORE LAUNCH -- do not edit after seeing the result.
+# ============================================================================
+#
+# HYPOTHESIS
+#   The sub_batch=48 benefit is Ghost Batch Normalization (Hoffer, Hubara & Soudry,
+#   NeurIPS 2017): BN computed over 48 samples instead of 96 acts as a regularizer.
+#   Its benefit shrinks as the read-out has more parameters to constrain -- out_proj is
+#   Linear(384, 384) at N=1 but Linear(1536, 384) at N=4 with the concat head.
+#
+# WHAT MOTIVATES IT (measured, concat head, seed 333, best-epoch maphashing_level0)
+#            sub_batch=48   sub_batch=96   effect of 48
+#     N=1        0.8802         0.8453        +0.0349
+#     N=4        0.8503         0.8584        -0.0081
+#   Ghost BN helps a lot at N=1 and slightly hurts at N=4. Under the hypothesis, the
+#   cause is out_proj's width, which co-varies with N in the concat head -- so the
+#   concat head cannot separate the two.
+#
+# THE INTERVENTION
+#   The pooled head (CrossAttentionBottleneckHeadPooled, query_pool='mean') makes
+#   out_proj Linear(384, 384) for EVERY N. It therefore decouples the number of queries
+#   from the read-out width -- exactly the two variables the hypothesis says are
+#   confounded. This study runs N=4 with that head at both sub_batch values.
+#
+# PREDICTION
+#   Reference point already measured: pooled, N=4, sub_batch=96 = 0.8172.
+#   - If the hypothesis holds, sub_batch=48 should help at N=4 roughly as much as it
+#     helps at N=1 with the narrow out_proj, i.e. land around 0.85 (+0.03 or so).
+#   - If it lands at or below ~0.82, i.e. flat or negative like the concat N=4 arm,
+#     the hypothesis is REFUTED: the driver is the number of queries itself, not the
+#     read-out width, and the Ghost-BN-times-width story must be dropped.
+#   Anything between ~0.83 and ~0.84 is inconclusive and should be reported as such
+#   rather than argued either way.
+#
+# WHAT THIS STUDY DOES *NOT* SETTLE
+#   Whether the mechanism is Ghost BN proper or the unintended artifact riding along
+#   with it: pass 1 of _gradient_cached_optimization runs under no_grad but still in
+#   train mode, so running_mean/running_var are updated 4x per step (2 passes x 2
+#   microbatches) from noisier estimates, and eval mode reads those running stats.
+#   Separating the two requires an explicit Ghost-BN implementation (BN over subgroups,
+#   single pass, one running-stat update per step). Until that is done, "Ghost BN" is
+#   the plausible label, not a verified one.
+#
+# Run-to-run noise at fixed seed was measured at 0.0001 (two independent launches of an
+# identical N=1 config gave 0.8453 and 0.8454), so differences of the size predicted
+# here are far outside the noise floor.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_pooled   # out_proj = Linear(384, 384) for every N
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_num_queries_pooled ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.fusion_config.query_pool: mean
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# Only sub_batch=48 is run: the sub_batch=96 counterpart already exists as
+# mflickr_num_queries_pooled_model.kwargs.fusion_config.num_queries=4 = 0.8172.
+sweep:
+  experience.sub_batch: [48]
