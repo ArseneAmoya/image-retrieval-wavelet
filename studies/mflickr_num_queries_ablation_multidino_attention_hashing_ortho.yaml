@@ -45,7 +45,7 @@ base_overrides:
   # --- Flexible: pure engineering/compute knobs, don't affect the trained model ---
   experience.num_workers: 10
   experience.eval_bs: 200
-  experience.sub_batch: 48
+  experience.sub_batch: 96
   experience.batch_map_proxy: false
   experience.hooks_configs.active: false
   experience.dsch_train: false
