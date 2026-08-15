@@ -10,7 +10,8 @@ kwargs:
   # Configuration du Hachage
   binary_config:
     nbits: 64  # Doit être identique à la Baseline pour comparer équitablement !
-    
+  use_bn: True
+
   # Configuration du Goulot d'Étranglement (SOTA)
   fusion_config:
     use_all_tokens: False
@@ -25,4 +26,4 @@ kwargs:
   modelhooks:
     name: "SharedMBWDinoInstrumentor"
 
-  with_autocast: false
+  with_autocast: true
