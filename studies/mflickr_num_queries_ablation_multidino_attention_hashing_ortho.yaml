@@ -25,7 +25,8 @@ base_overrides:
   loss.0.kwargs.quant_weight: 0.1               # lambda1
   loss.0.kwargs.scale: 15.0
   model.kwargs.binary_config.nbits: 64
-  model.kwargs.use_bn: true
+  model.kwargs.use_bn: false
+  model.kwargs.fusion_config.dropout: 0
   model.kwargs.fusion_config.use_all_tokens: false
   model.kwargs.fusion_config.sub_band_dropout_p: 0
   model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2
