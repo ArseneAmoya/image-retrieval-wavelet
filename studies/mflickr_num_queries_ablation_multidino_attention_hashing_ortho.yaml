@@ -70,4 +70,4 @@ base_overrides:
 # mflickr_num_queries_1_multiseed.yaml instead, which runs N=1 at sub_batch=96 on
 # all three seeds so it pairs directly against the reference.
 sweep:
-  model.kwargs.fusion_config.num_queries: [1, 2, 8]
+  model.kwargs.fusion_config.num_queries: [1, 2, 4, 8]
