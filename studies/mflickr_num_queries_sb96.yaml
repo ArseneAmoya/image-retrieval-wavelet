@@ -1,0 +1,66 @@
+study_name: mflickr_num_queries_sb96
+
+# Clean re-run of the num_queries sensitivity curve, sub_batch investigation
+# abandoned per explicit decision (2026-08-16): we stop trying to explain WHY
+# sub_batch=48 differs from 96 and instead just fix sub_batch=96=batch_size
+# everywhere from now on, so nn.BatchNorm1d always takes the single-pass path
+# (base_update.py) and every run in this project becomes paired-comparable
+# again without a footnote.
+#
+# This supersedes mflickr_num_queries_ablation (sub_batch=48, confounded) and
+# mflickr_num_queries_pooled's N=1/N=4 arms (different, pooled fusion head) as
+# the number to actually report for the num_queries sensitivity study R2 asked
+# for. num_queries=4, ortho_weight=0.1 here is architecturally identical to
+# mflickr_lph_vs_ortho_multiseed's seed=333 ortho=0.1 arm (0.8584) and should
+# reproduce it -- treat that as a free reproducibility check.
+#
+# Correction also applied here (previously silently drifted from the model
+# default): model.kwargs.fusion_config.dropout was overridden to 0 in the old
+# num_queries_ablation study. That override is REMOVED below, so this run uses
+# the model config's actual default (0.1, see
+# config/model/multidino_attention_hashing_ortho.yaml). use_bn and
+# sub_band_dropout_p were already at their defaults (True / 0) everywhere and
+# needed no fix.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_lph_vs_ortho_multiseed's ortho=0.1 arm ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96                     # fixed = batch_size, no Ghost BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep:
+  model.kwargs.fusion_config.num_queries: [1, 2, 4, 8]

@@ -1,0 +1,60 @@
+study_name: mflickr_wavelet_type_ablation
+
+# R2's other sensitivity request ("no sensitivity study on ... wavelet type").
+# Sweeps the mother wavelet used by SWTTransform (config/transform/basic_swt.yaml)
+# while holding everything else -- including level=1 -- at the reference config.
+# haar is the reference's current default and should reproduce
+# mflickr_lph_vs_ortho_multiseed's seed=333 ortho=0.1 arm (0.8584).
+#
+# db4 (Daubechies-4) and bior4.4 (biorthogonal, used in JPEG2000) are both valid
+# pywt.swt2 wavelets; SWT is undecimated so output shape stays [C,4,H,W] regardless
+# of filter length -- no fix_size interaction to worry about at level=1, 224x224.
+#
+# transform.train and transform.test must be swept together (same wavelet used at
+# train and test time), so this uses sweep_zip, not sweep -- a plain sweep would
+# cartesian-product the two keys into 9 jobs instead of the 3 wanted.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  # --- Protected: identical to mflickr_lph_vs_ortho_multiseed's ortho=0.1 arm ---
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 4
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96                     # fixed = batch_size, no Ghost BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep_zip:
+  transform.train.SWTTransform.wavelet: ['haar', 'db4', 'bior4.4']
+  transform.test.SWTTransform.wavelet: ['haar', 'db4', 'bior4.4']
