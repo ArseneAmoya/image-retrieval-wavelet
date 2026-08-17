@@ -64,6 +64,36 @@ def run(config, base_config=None, checkpoint_dir=None, splits=None):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    # Logged once per job so that a same-seed/same-overrides gap discovered later
+    # (e.g. reference run vs. a rerun weeks apart) can be traced to the actual
+    # environment instead of reconstructed after the fact. torch.hub.load resolves
+    # 'facebookresearch/dinov2:main' to a BRANCH, not a fixed commit -- two runs on
+    # different dates can silently fetch different code even with a pinned branch
+    # name, and neither PyTorch/CUDA/cuDNN versions nor the GPU model are otherwise
+    # recorded anywhere. This makes that class of drift diagnosable going forward.
+    try:
+        import subprocess
+        dinov2_cache = os.path.expanduser("~/.cache/torch/hub/facebookresearch_dinov2_main")
+        dinov2_commit = "unknown"
+        if os.path.isdir(dinov2_cache):
+            try:
+                dinov2_commit = subprocess.run(
+                    ["git", "-C", dinov2_cache, "rev-parse", "HEAD"],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout.strip() or "not a git checkout (zip download, commit unknown)"
+            except Exception:
+                dinov2_commit = "not a git checkout (zip download, commit unknown)"
+        lib.LOGGER.info(
+            "Environment: torch=%s cuda=%s cudnn=%s gpu=%s dinov2_cache_commit=%s",
+            torch.__version__,
+            torch.version.cuda,
+            torch.backends.cudnn.version(),
+            torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
+            dinov2_commit,
+        )
+    except Exception as env_log_err:  # never let environment logging break a run
+        lib.LOGGER.warning(f"Could not log environment info: {env_log_err!r}")
+
     getter = Getter()
 
     # """""""""""""""""" Create Data """"""""""""""""""""""""""

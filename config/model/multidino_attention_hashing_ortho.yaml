@@ -28,7 +28,14 @@ kwargs:
     num_heads: 8                       # Multi-têtes pour des relations complexes
     dropout: 0.1
     # -- Nouveaux paramètres SOTA (Hybrid Regularization) --
-    num_queries: 4                     # 4 experts pour séparer les 4 bandes
+    # num_queries default changed 4 -> 1 (2026-08-17): the "4 experts to separate the 4
+    # subbands" motivation is unsupported (attention never specializes by band, see
+    # RESULTS.md section 2/4b) and the sensitivity study (RESULTS.md section 5c) found
+    # N=1/4/8 statistically indistinguishable at sub_batch=96 (spread 0.0015, inside the
+    # measured same-seed noise floor). N=1 is kept as the new default because it's the
+    # cheapest: out_proj is Linear(384,384) instead of Linear(1536,384) at N=4. Not
+    # presented as a contribution -- see RESULTS.md section 5c's explicit scope decision.
+    num_queries: 1
     sub_band_dropout_p: 0            # Force le réseau à explorer LH, HL, HH
     ortho_weight: 0.01                  # Force la division du travail (sans exploser la loss)
 

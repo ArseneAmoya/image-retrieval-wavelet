@@ -1,0 +1,74 @@
+study_name: voc_final_headline
+
+# Final headline run for the revision, VOC 2012 arm. Bit lengths match the
+# rejected paper's own Table 1 exactly (32/64/96 for Pascal VOC 2012 -- read
+# directly from the submitted PDF). One seed, no evaluation of any kind
+# during training -- see mflickr_final_headline.yaml's header comment for the
+# full justification (same mechanism, verified once, applies identically
+# here).
+#
+# num_queries=1, not the paper's original default of 4 -- see
+# mflickr_final_headline.yaml.
+#
+# ASSUMPTION FLAGGED, please confirm: transform: basic_swt, NOT the
+# pre-existing voc_swt used by voc_lph_vs_ortho_multiseed.yaml (which is what
+# actually produced the paper's submitted VOC numbers). voc_swt has
+# ColorJitter(brightness/contrast/saturation=0.25); this project later found
+# ColorJitter destabilizes training, and the paper's own text (4.2) claims no
+# aggressive augmentation was used, which voc_swt's config contradicts.
+# basic_swt is the right choice for an internally-consistent, defensible
+# final number, but it is a deliberate deviation from whatever protocol
+# actually produced the submitted 98.20% (64 bits) -- flag if you'd rather
+# match the historical config exactly instead.
+#
+# dataset.kwargs.data_dir reuses voc_lph_vs_ortho_multiseed.yaml's value
+# (/content/voc) rather than voc.yaml's own default (/content/voc2012).
+#
+# CRITICAL wiring note: loss.0.kwargs.embedding_size must equal
+# model.kwargs.binary_config.nbits for every job -- see
+# mflickr_final_headline.yaml's header comment. Swept together via
+# sweep_zip.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: voc
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/voc
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 20
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 5717             # placeholder, unused (matches VOC's mAP@ALL database size)
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep_zip:
+  model.kwargs.binary_config.nbits: [32, 64, 96]
+  loss.0.kwargs.embedding_size: [32, 64, 96]

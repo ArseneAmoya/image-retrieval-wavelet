@@ -1,0 +1,84 @@
+study_name: coco_final_headline
+
+# Final headline run for the revision, MS COCO arm. Bit lengths match the
+# rejected paper's own Table 1 exactly (32/64 for MS COCO -- read directly
+# from the submitted PDF). One seed, no evaluation of any kind during
+# training -- see mflickr_final_headline.yaml's header comment for the full
+# justification.
+#
+# num_queries=1, not the paper's original default of 4 -- see
+# mflickr_final_headline.yaml.
+#
+# num_classes=80 confirmed by user. COCOHashing (main/datasets/flikr_coco.py)
+# infers num_classes from train.txt's column count at runtime, same as
+# MIRFlickrHashing -- this override just needs to match whatever's actually
+# in that file; 80 is the standard convention for this benchmark.
+#
+# dataset.kwargs.data_dir = /content/coco_images, confirmed from your Colab
+# download cell: train2014.zip/val2014.zip are unzipped directly into
+# /content/coco_images (giving .../train2014/ and .../val2014/ subfolders,
+# matching COCOHashing's expectation that train.txt's image paths already
+# include the subfolder -- see flikr_coco.py's comment), and
+# train.txt/test.txt/database.txt are copied into that same directory from
+# Drive's coco_txt/ folder right after. That copy step must run before this
+# study launches -- the run itself doesn't fetch or unzip anything.
+#
+# Evaluation strategy (per your instruction): COCO reports BOTH mAP@5000 and
+# mAP@ALL (= full retrieval-database size), unlike MIRFLICKR/VOC's single
+# top_k. Since no evaluation runs during training, this doesn't matter for
+# the training config below (experience.evaluation.top_k is a placeholder,
+# never read) -- it matters for the POST-HOC step: run
+# evaluate_all_checkpoints.py TWICE on the saved checkpoints once training is
+# done, once with --k 5000 and once with --k <COCO database size after
+# removing unlabeled images, per the paper's 4.1 protocol>. That second
+# number isn't known yet -- get it from the actual database.txt line count
+# once training's checkpoints exist, or tell me now if you already have it.
+#
+# CRITICAL wiring note: loss.0.kwargs.embedding_size must equal
+# model.kwargs.binary_config.nbits for every job -- see
+# mflickr_final_headline.yaml's header comment. Swept together via
+# sweep_zip.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: coco
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/coco_images
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 80
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 5000             # placeholder, unused -- real eval is post-hoc, @5000 AND @ALL
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep_zip:
+  model.kwargs.binary_config.nbits: [32, 64]
+  loss.0.kwargs.embedding_size: [32, 64]

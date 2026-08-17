@@ -11,6 +11,8 @@ interpretation and the experiment plan live in `../MIRFLICKR_DIAGNOSTIC_PLAN.md`
 | `diagnostics_metrics.csv` | secondary/diagnostic scalars (attention shares, entropies, query norms, band statistics) in long format |
 | `lph_vs_ortho_multiseed_per_epoch.csv` | 6 runs (ortho 0.0/0.1 × seeds 111/222/333), every saved epoch, from `evaluate_all_checkpoints.py` |
 | `vitb_capacity_control_per_epoch.csv` | ViT-B capacity control, every saved epoch |
+| `wavelet_type_ablation_per_epoch.csv` | 3 runs (haar/db4/bior4.4), seed 333, every saved epoch (section 5b) |
+| `num_queries_sb96_per_epoch.csv` | 4 runs (N=1/2/4/8), sub_batch=96 fixed, seed 333, every saved epoch (section 5c) |
 | `diagnostics_attention_2026-08-11.txt` | verbatim `measure_query_orthogonality.py` + `measure_attention_collapse.py` output (MIRFLICKR + VOC) |
 | `swt_transform_check_2026-08-12.txt` | verbatim `verify_swt_transform.py` output |
 
@@ -25,6 +27,179 @@ from `calculate_maphashing`), best epoch per run, `top_k=19581`, hamming.
 picks a different best epoch — the two disagree on 2 of the 6 multiseed runs.
 
 ---
+
+## 0. What's actually noisy here, and how to write around it
+
+Two different things get called "noise" in this project and they must not be
+conflated — one is real and small, the other is real and comparable in size to
+the effects we're reporting.
+
+**Within-seed reproducibility: CORRECTION (2026-08-17) — the ~0.0001 figure
+below does NOT generalize to the whole project.** It was measured on N=1
+(`mflickr_subbatch_vs_numqueries` arm B vs `mflickr_num_queries_pooled` N=1,
+0.8453 vs 0.8454) — architecturally the *simplest* point in the whole sweep,
+where the pooled and concat heads collapse to the same computation. Applying
+that number to every other config was an overgeneralization.
+
+Direct counter-evidence, same seed, same architecture, decisively NOT close:
+`mflickr_lph_vs_ortho_multiseed` (ortho=0.1, seed=333, num_queries=4,
+sub_batch=96, wavelet=haar by default) scored **0.8584**.
+`mflickr_wavelet_type_ablation`'s haar arm — audited as override-identical to
+that same config (section 5b) — scored **0.8337**. Same seed, same
+(audited) overrides, **0.0247 apart**. That is 14x the N=1 reproducibility
+figure and comparable to several effects reported in this document.
+
+Investigated in depth (2026-08-17) — six candidates, checked against the actual
+code rather than assumed:
+
+1. **The `hub_utils.py` pin itself — RULED OUT.** `torch.hub`'s own ref
+   resolution (`_parse_repo_info`), when no branch is given, opens
+   `github.com/.../tree/main/` specifically to check whether `main` exists and
+   uses it if so. dinov2 has a `main` branch, so the OLD unpinned call and the
+   NEW `facebookresearch/dinov2:main` pin resolve to the exact same ref. The
+   commit `c2469dc` change (2026-08-12) only removes an extra network
+   round-trip and adds `skip_validation` + retries — it does not change which
+   version of the code gets fetched. This was the leading suspect and it
+   doesn't hold up.
+2. **`main` is a branch, not a commit — REAL, but pre-existing and NOT caused
+   by the fix above.** Both the old and new code fetch whatever is at HEAD of
+   `facebookresearch/dinov2:main` into an empty Colab cache each fresh
+   session, pinned or not. If upstream pushed anything to `main` between the
+   two runs' dates, the model code (not the pretrained weights, which come
+   from a static URL) could genuinely differ. A web search for recent
+   activity on `dinov2/layers/attention.py`, `block.py`, `vision_transformer.py`
+   found no evidence of active development — Meta's attention on this repo has
+   largely moved to DINOv3 — so this is possible but not the likeliest cause.
+   Still worth closing permanently: see the fix below.
+3. **In-process sequential Hydra jobs vs. independent subprocesses — RULED
+   OUT.** The reference study is one `sweep` (6 jobs run sequentially inside a
+   single Python process via Hydra's default in-process sweeper); the wavelet
+   study uses `sweep_zip`, which `run_plan.py` dispatches as 3 separate
+   `subprocess.run` calls. This looked like a real structural difference, but
+   `run.py:59-65` reseeds `random`/`numpy`/`torch`/`torch.cuda` and resets
+   `cudnn.deterministic`/`benchmark` at the top of *every* job — in-process or
+   not, nothing carries over between jobs through those flags.
+4. **`PYTHONHASHSEED`-driven ordering — RULED OUT for MIRFLICKR.** Never
+   pinned anywhere in the repo, so it's randomized per-process by default —
+   real risk in general if any dataset code enumerates a `set()` for label
+   order. Checked `MIRFlickrHashing`: labels come from fixed-column
+   `train.txt`/`test.txt` files parsed in file order, `instance_dict` is a
+   `defaultdict` keyed by integer class index built by enumeration, not by any
+   hash-order-dependent structure. Not the cause here, though the same check
+   should be redone for any dataset that does build a vocabulary from a `set`.
+5. **Different GPU / driver / package versions across separate Colab
+   sessions — PLAUSIBLE, UNVERIFIABLE RETROACTIVELY.** Colab doesn't guarantee
+   the same GPU model between sessions, and nothing in this repo pins or logs
+   `torch`/CUDA/cuDNN versions. A different GPU can select different cuDNN
+   convolution kernels even under `deterministic=True` (the *set* of available
+   deterministic algorithms differs by architecture), and a different library
+   version can change numerics outright. No way to check this after the fact
+   for the two specific runs already done.
+6. **Genuine same-seed stochasticity at this architecture's scale — the
+   remaining, most likely candidate.** `torch.use_deterministic_algorithms(True)`
+   is not set, so atomicAdd-based backward kernels stay nondeterministic
+   regardless of `cudnn.deterministic`. At N=1 (the trivial config) this
+   compounds to ~0.0001 over 50 epochs; at N=4 with the full cross-attention +
+   ortho loss, far more surface area exists for it to compound through. The N=1
+   measurement may simply have picked the one config where it doesn't show.
+
+**Fix applied so this stops being unanswerable**: `run.py` now logs
+`torch`/CUDA/cuDNN versions, the GPU name, and the dinov2 hub cache's resolved
+commit (when available) once per job, at the point the seed is set. Every run
+from now on carries a checkable environment fingerprint; candidates 2 and 5
+above will be diagnosable in one grep instead of reconstructed after the fact.
+
+**Resolved by a natural triplicate (2026-08-17), without needing the planned
+rerun.** `mflickr_num_queries_sb96`'s N=4 arm is override-identical to the
+same reference config (ortho=0.1, seed=333, sub_batch=96, wavelet=haar
+default) and landed on a *third* value: **0.8459**. Three independent runs of
+the nominally same config now exist:
+
+| run | maphashing (best epoch) |
+|---|---|
+| `mflickr_lph_vs_ortho_multiseed` | 0.8584 |
+| `mflickr_wavelet_type_ablation` (haar arm) | 0.8337 |
+| `mflickr_num_queries_sb96` (N=4 arm) | 0.8459 |
+
+mean 0.8460, **std 0.0124, range 0.0247** (n=3). This doesn't distinguish
+which of candidates 2/5/6 is the mechanism (all three studies plausibly ran on
+different Colab sessions/dates, so environment drift and algorithmic
+nondeterminism are still both live) — but it settles the practical question:
+**same-seed reruns of this architecture are not meaningfully more
+reproducible than different-seed runs.** 0.0124 is close enough to the
+between-seed σ below that "seed" is not actually buying the reproducibility
+its presence in a config implies for N≥4. The originally-planned rerun is no
+longer needed to make this actionable.
+
+**Between-seed variance: σ ≈ 0.0174, and now corroborated by an independent
+same-seed measurement (0.0124, above) instead of resting on one study.** From
+the only properly multi-seeded study (`mflickr_lph_vs_ortho_multiseed`, 3
+seeds × 2 ortho settings): the ortho effect itself (+0.0028 ± 0.0055, n=3) is
+*not* distinguishable from this between-seed noise (section 1). Every other
+study in this log — num_queries, wavelet type, lambda2 — is single-seed, so a
+difference smaller than roughly **2σ ≈ 0.025–0.035** between two arms of a
+single-seed sweep cannot be told apart from "we happened to draw seed 333"
+without rerunning at other seeds. The wavelet-type spread (0.0197 between
+bior4.4 and db4, section 5b) sits inside that band — not resolved, needs more
+seeds if it's going to be more than a sensitivity curve in the paper.
+
+**What this means for the paper, given the compute budget is fixed and a
+paper has to go out regardless:**
+
+1. Say what each number actually is. A single-seed sweep is a *sensitivity
+   analysis* — it answers "is the method brittle to this choice", which is
+   what R2 literally asked for. It is not a significance-tested comparison.
+   Label it that way in the text and in table captions instead of implying
+   more precision than n=1 supports.
+2. Reserve "X beats Y" language for the one claim that has multi-seed
+   backing (orthogonality — and there the honest finding is *no significant
+   gain*, which is still a defensible, citable result: R3 asked whether ortho
+   regularization does what it's supposed to, and the mechanistic answer is
+   yes for the geometry, no measurable effect on mAP).
+3. For every single-seed number reported (wavelet type, num_queries,
+   lambda2), state the noise floor once, next to the table, as the reader's
+   yardstick — σ ≈ 0.012–0.017 (both same-seed reruns and different-seed runs
+   land in this band), so "differences below ~0.02–0.03 should be read as
+   directional, not conclusive." That one sentence pre-empts the reviewer
+   question instead of inviting it.
+4. Where a single-seed result changes the paper's actual claims (not just a
+   sensitivity curve) — e.g. if wavelet type ends up in the abstract — it
+   needs the 2-3 extra seeds before submission; where it's just "here's the
+   shape of the curve, the method isn't fragile," n=1 with the caveat above is
+   normal practice and matches what R2 asked for.
+5. **One canonical number for the default config, cited everywhere.** Three
+   different runs of "seed=333, ortho=0.1, num_queries=4, sub_batch=96" now
+   exist in this project (0.8584 / 0.8337 / 0.8459) because each ablation
+   independently reran the default arm as its own reference point. If two of
+   those land in two different paper tables, a reviewer *will* notice the
+   mismatch before section 0 explains it. Fix: pick one number for "the
+   default config" — the multi-seed mean from `mflickr_lph_vs_ortho_multiseed`
+   (0.8401, section 1) is the right choice, since it's already averaged over
+   seeds — and reuse that exact number as the reference row in every other
+   table (wavelet type, num_queries, lambda2). Do not silently swap in
+   whichever single-seed number a given ablation study happened to produce.
+
+**Paragraph to adapt for the paper's Experimental Setup / Reproducibility
+subsection**, pre-registered here so it can't be written post-hoc to fit
+whatever number comes out later:
+
+> All experiments use `cudnn.deterministic=True` and fixed seeds for Python,
+> NumPy and PyTorch. This does not guarantee bit-exact reproducibility: PyTorch
+> only fully removes GPU-side nondeterminism under
+> `torch.use_deterministic_algorithms(True)`, which we did not enable for
+> training-speed reasons, so atomicAdd-based backward kernels retain a small
+> amount of run-to-run variance. We measured this directly rather than
+> assuming it away: three independent runs of the default configuration
+> (seed=333) produced maphashing_level0 ∈ {0.8337, 0.8459, 0.8584}
+> (σ = 0.012), comparable to the between-seed standard deviation measured over
+> 3 seeds (σ = 0.017, Table X). We therefore report the default configuration
+> as a mean over 3 seeds throughout, and treat differences smaller than
+> ≈0.02–0.03 in single-seed sensitivity analyses (Sections Y, Z) as
+> directional rather than conclusive.
+
+This is why section 1's honest conclusion ("not distinguishable from noise")
+is itself useful ammunition: it shows the noise floor was measured, not
+assumed, which is the actual gap R2/R3 flagged in the original submission.
 
 ## 1. Orthogonality: no significant gain (R2)
 
@@ -153,6 +328,77 @@ sub-bands are genuinely distinct (mean cosine 0.038). Nothing to fix.
 Unresolved: no Normalize step, so the detail bands reach DINOv2 far below its
 pretraining scale — HH std 0.0242 vs ~1. Whether the patch embedding survives
 that has not been measured.
+
+## 5b. Wavelet type sensitivity (R2): bior4.4 > haar > db4
+
+`mflickr_wavelet_type_ablation`, seed 333, ortho=0.1, num_queries=4, sub_batch=96,
+level=1, best epoch:
+
+| wavelet | best-epoch maphashing | epoch | final (epoch 50) |
+|---|---|---|---|
+| bior4.4 | **0.8534** | 30 | 0.8478 |
+| haar (reference) | 0.8337 | 35 | 0.8215 |
+| db4 | 0.8286 | 50 | 0.8286 (= best, monotonic) |
+
+haar is the reference config, not the worst arm — db4 is. bior4.4 (JPEG2000's
+wavelet, longer filter support, smoother detail bands) beats it by +0.0197.
+Single seed; the same-seed noise floor for this exact architecture is now
+measured directly at σ ≈ 0.0124 (section 0), so this spread is inside the
+noise band and not yet distinguishable from it — needs more seeds before
+being read as a real ranking.
+
+haar's trajectory is also visibly noisier and less monotonic than the other
+two (bit_balance 0.43-0.60 vs bior4.4/db4's tighter 0.31-0.51), and its final
+epoch (0.8215) is its worst point in the last 15 epochs — the reverse of
+db4, whose final epoch is its best. Worth a second seed before reading
+anything into the ranking.
+
+## 5c. num_queries sensitivity, redone clean at sub_batch=96 (R2)
+
+`mflickr_num_queries_sb96`: same reference config, sub_batch fixed to 96 for
+every arm (no Ghost-BN-path confound), `fusion_config.dropout` restored to
+its model-default 0.1 (an earlier study had silently overridden it to 0 —
+fixed here, see the study's own header comment). Seed 333, ortho=0.1,
+best epoch:
+
+| num_queries | best-epoch maphashing | epoch |
+|---|---|---|
+| 1 | 0.8460 | 40 |
+| 2 | 0.8274 | 30 |
+| 4 | 0.8459 | 25 |
+| 8 | 0.8445 | 45 |
+
+This is a materially different picture from the earlier sub_batch=48 curve
+(`mflickr_num_queries_ablation`: N=1=0.8802 > N=2=0.8652 > N=4=0.8503 >
+N=8=0.8308, monotone decreasing). Here, N=1, N=4 and N=8 are statistically
+indistinguishable from each other (spread 0.0015, well inside the σ≈0.0124
+same-seed noise floor measured in section 0) — N=4 (0.8459) is effectively
+identical to N=1 (0.8460), not 3.5 points behind it. Only N=2 sits out
+(0.8274, ~18 points below the other three, ~1.5σ), and even that is
+suggestive rather than conclusive on n=1.
+
+**This confirms the suspicion raised when the sub_batch confound was first
+found**: most of the earlier "fewer queries is better" narrative was a
+sub_batch=48 (Ghost-BN-like) effect riding on top of num_queries, not a
+genuine property of the architecture. Once sub_batch is held at 96 throughout,
+num_queries looks close to flat from 1 to 8, with N=2 as the one point that
+doesn't fit — worth a rerun before deciding if that's real or noise.
+
+**Scope decision (2026-08-17): num_queries is not presented as a
+contribution.** Consistent with the data above and with section 4b
+(forcing attention selectivity with `query_scale` didn't help either) — there
+is no evidence anywhere in this project that the number of queries, or what
+they individually attend to, does anything functionally useful. `num_queries=4`
+was originally motivated as "4 experts to separate the 4 subbands"
+(`config/model/multidino_attention_hashing_ortho.yaml`'s own comment); that
+motivation is now unsupported on two independent fronts (attention never
+specializes by band, section 2; and N=1/4/8 perform equally, this section).
+The paper reports this as a **sensitivity/robustness result** — the method is
+insensitive to `num_queries`, which is itself a legitimate answer to R2 — and
+does not claim `num_queries=4` or any other value as a design choice earned
+by the ablation. If efficiency is worth a sentence: N=1 reaches the same mAP
+with a narrower `out_proj` (`Linear(384,384)` vs `Linear(1536,384)` at N=4),
+which is a defensible minor remark, not a contribution.
 
 ## 6. Method fixes made along the way
 

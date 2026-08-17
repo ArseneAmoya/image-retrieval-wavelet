@@ -1,0 +1,80 @@
+study_name: mflickr_final_headline
+
+# Final headline run for the revision, MIRFLICKR arm. Bit lengths match the
+# rejected paper's own Table 1 exactly (32/64/128 for MIRFLICKR-25K -- read
+# directly from the submitted PDF, not assumed). One seed, no evaluation of
+# any kind during training (train_eval_freq/test_eval_freq/fast_eval_freq all
+# -1 -- verified safe: main/engine/train.py resets `metrics = None` every
+# epoch and only overwrites it if at least one of those three is triggered;
+# single_experiment_runner.py already guards `if metrics is not None` before
+# reading it, so ending with metrics=None returns cleanly, no crash).
+#
+# num_queries=1, not the paper's original default of 4 -- explicit decision
+# (2026-08-17, see RESULTS.md section 5c): N=1/4/8 are statistically
+# indistinguishable at sub_batch=96, and N=1 is the cheaper `out_proj`.
+#
+# transform: basic_swt, not the historical voc_swt-style ColorJitter -- see
+# MIRFLICKR_DIAGNOSTIC_PLAN.md: ColorJitter was found to destabilize
+# training, and the paper's own text (4.2) claims "we strictly avoid
+# aggressive geometric augmentations", which basic_swt matches and voc_swt
+# does not.
+#
+# CRITICAL wiring note: loss.0.kwargs.embedding_size is HashLoss's proxy
+# dimension (main/losses/hash_loss.py: nn.Parameter(num_classes,
+# embedding_size)) and MUST equal model.kwargs.binary_config.nbits for every
+# job -- the yaml's own template comment says as much ("Sera écrasé ... pour
+# 16 et 32 bits"). Swept together via sweep_zip; do NOT split into two
+# independent `sweep` keys or Hydra will cartesian-product mismatched
+# (nbits, embedding_size) pairs that crash at model init.
+#
+# evaluation.top_k below is a placeholder (matches the existing MIRFLICKR
+# convention, 19581) -- it is never read, since no evaluation ever runs
+# during training. Real metrics come from evaluate_all_checkpoints.py after
+# training finishes, pointed at the rsynced checkpoints.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.quant_weight: 0.1               # lambda1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1  # lambda2
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+
+  # --- No evaluation at all during training, by explicit request ---
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581            # placeholder, unused (see note above)
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5                      # periodic, safety net against interruption
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96                      # = batch_size, no Ghost-BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+# rsync destination for the automatic post-job sync (run_plan.py --rsync-dest
+# or this key, either works; CLI flag wins if both given).
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep_zip:
+  model.kwargs.binary_config.nbits: [32, 64, 128]
+  loss.0.kwargs.embedding_size: [32, 64, 128]
