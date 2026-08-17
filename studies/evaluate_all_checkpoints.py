@@ -20,8 +20,18 @@ Usage:
 Run one study at a time. GPU required (same as evaluate.py). If a run has no
 weights/epoch_*.ckpt (e.g. save_model was off, or it hasn't reached its first
 save point yet), it's skipped with a warning rather than failing the batch.
+
+RESUME BEHAVIOUR (added after a power outage lost an in-progress batch, 2026-08-17):
+if --csv points at a file that already exists, its (run, epoch) pairs are loaded
+first and skipped -- no GPU time is spent re-evaluating a checkpoint already on
+record. Every new row is appended and flushed to disk immediately after that
+checkpoint's evaluation finishes, not buffered until the whole study is done, so a
+second interruption only ever costs the one checkpoint being evaluated when it
+happens. To resume an interrupted batch, re-run the exact same command (same
+--csv path) -- already-done work is skipped automatically, nothing extra to pass.
 """
 import argparse
+import csv
 import re
 import sys
 from pathlib import Path
@@ -108,7 +118,9 @@ def main():
                               "accuracy_calculator.py -- as opposed to map_level0, the generic torchmetrics "
                               "RetrievalMAP used as experience.principal_metric. The two occasionally disagree "
                               "on which epoch is best; maphashing_level0 is what the paper should report.)")
-    parser.add_argument("--csv", type=str, default=None, help="Optional path to write the full per-epoch table")
+    parser.add_argument("--csv", type=str, default=None, help="Path to write the full per-epoch table. If it "
+                         "already exists, its (run, epoch) rows are loaded and skipped -- this is also how you "
+                         "resume an interrupted batch, see the module docstring.")
     args = parser.parse_args()
 
     plan = load_plan(args.plan)
@@ -119,60 +131,92 @@ def main():
         return
 
     extra_cols = ["map_level0", "bit_balance_level0", "worst_bit_balance_level0"]
+    fieldnames = ["run", "epoch", args.metric] + [c for c in extra_cols if c != args.metric]
+
+    # Load whatever was already evaluated in a prior (possibly interrupted) run of
+    # this exact command, keyed by (run, epoch) so nothing gets re-evaluated.
+    done = {}
+    csv_exists = bool(args.csv) and Path(args.csv).exists()
+    if csv_exists:
+        with open(args.csv, newline="") as f:
+            for row in csv.DictReader(f):
+                for col in fieldnames:
+                    if col not in ("run", "epoch") and row.get(col) not in (None, ""):
+                        row[col] = float(row[col])
+                row["epoch"] = int(row["epoch"])
+                done[(row["run"], row["epoch"])] = row
+        print(f"Resuming from {args.csv}: {len(done)} checkpoint(s) already evaluated, will be skipped.")
+
+    csv_file = open(args.csv, "a" if csv_exists else "w", newline="") if args.csv else None
+    csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames) if csv_file else None
+    if csv_writer and not csv_exists:
+        csv_writer.writeheader()
+        csv_file.flush()
+
     all_rows = []
+    try:
+        for run_dir in run_dirs:
+            ckpts = find_epoch_checkpoints(run_dir)
+            if not ckpts:
+                print(f"skipping {run_dir.name}: no weights/epoch_*.ckpt found")
+                continue
 
-    for run_dir in run_dirs:
-        ckpts = find_epoch_checkpoints(run_dir)
-        if not ckpts:
-            print(f"skipping {run_dir.name}: no weights/epoch_*.ckpt found")
-            continue
+            print(f"\n=== {run_dir.name} ({len(ckpts)} checkpoints) ===")
+            run_rows = []
+            for epoch, ckpt_path in ckpts:
+                key = (run_dir.name, epoch)
+                if key in done:
+                    row = done[key]
+                    run_rows.append(row)
+                    print(f"  epoch {epoch:>3} -> already evaluated, skipping ({args.metric}="
+                          f"{row.get(args.metric)})")
+                    continue
 
-        print(f"\n=== {run_dir.name} ({len(ckpts)} checkpoints) ===")
-        run_rows = []
-        for epoch, ckpt_path in ckpts:
-            metrics = evaluate_module.load_and_evaluate(
-                path=str(ckpt_path),
-                set=args.set,
-                bs=args.bs,
-                nw=args.nw,
-                data_dir=args.data_dir,
-                k=args.k,
-                distance_metric=args.distance_metric,
-            )
-            split_metrics = metrics.get(args.set, {})
-            row = {"run": run_dir.name, "epoch": epoch}
-            row[args.metric] = split_metrics.get(args.metric)
-            for col in extra_cols:
-                if col != args.metric:
-                    row[col] = split_metrics.get(col)
-            run_rows.append(row)
-            print(f"  epoch {epoch:>3} -> " + ", ".join(
-                f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
-                for k, v in row.items() if k not in ("run", "epoch")
-            ))
+                metrics = evaluate_module.load_and_evaluate(
+                    path=str(ckpt_path),
+                    set=args.set,
+                    bs=args.bs,
+                    nw=args.nw,
+                    data_dir=args.data_dir,
+                    k=args.k,
+                    distance_metric=args.distance_metric,
+                )
+                split_metrics = metrics.get(args.set, {})
+                row = {"run": run_dir.name, "epoch": epoch}
+                row[args.metric] = split_metrics.get(args.metric)
+                for col in extra_cols:
+                    if col != args.metric:
+                        row[col] = split_metrics.get(col)
+                run_rows.append(row)
+                print(f"  epoch {epoch:>3} -> " + ", ".join(
+                    f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
+                    for k, v in row.items() if k not in ("run", "epoch")
+                ))
 
-        valid = [r for r in run_rows if r.get(args.metric) is not None]
-        if valid:
-            best = max(valid, key=lambda r: r[args.metric])
-            final = run_rows[-1]
-            print(f"  best epoch: {best['epoch']} ({args.metric}={best[args.metric]:.4f}) "
-                  f"| final epoch {final['epoch']}: {args.metric}={final.get(args.metric)}")
-            if best["epoch"] != final["epoch"]:
-                gap = best[args.metric] - (final.get(args.metric) or 0)
-                print(f"  NOTE: final epoch is NOT the best epoch (gap={gap:.4f}) -- "
-                      f"report the best-epoch number or revisit test_eval_freq.")
+                # Flushed immediately: a second interruption only loses the checkpoint
+                # currently being evaluated, never anything already printed above.
+                if csv_writer:
+                    csv_writer.writerow(row)
+                    csv_file.flush()
 
-        all_rows.extend(run_rows)
+            valid = [r for r in run_rows if r.get(args.metric) is not None]
+            if valid:
+                best = max(valid, key=lambda r: r[args.metric])
+                final = run_rows[-1]
+                print(f"  best epoch: {best['epoch']} ({args.metric}={best[args.metric]:.4f}) "
+                      f"| final epoch {final['epoch']}: {args.metric}={final.get(args.metric)}")
+                if best["epoch"] != final["epoch"]:
+                    gap = best[args.metric] - (final.get(args.metric) or 0)
+                    print(f"  NOTE: final epoch is NOT the best epoch (gap={gap:.4f}) -- "
+                          f"report the best-epoch number or revisit test_eval_freq.")
 
-    if args.csv and all_rows:
-        import csv
-        fieldnames = ["run", "epoch", args.metric] + [c for c in extra_cols if c != args.metric]
-        with open(args.csv, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for row in all_rows:
-                writer.writerow(row)
-        print(f"\nWrote {args.csv}")
+            all_rows.extend(run_rows)
+    finally:
+        if csv_file:
+            csv_file.close()
+
+    if args.csv:
+        print(f"\n{args.csv} is up to date ({len(all_rows)} rows across {len(run_dirs)} run(s)).")
 
 
 if __name__ == "__main__":

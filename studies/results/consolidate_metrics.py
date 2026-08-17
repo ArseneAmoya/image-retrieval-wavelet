@@ -33,6 +33,8 @@ PARAM_PATTERNS = {
     "query_scale_init": r"query_scale_init=([0-9.]+)",
     "fusion_type": r"fusion_config\.type=([a-z_]+)",
     "model": r"model=([a-z0-9_]+)",
+    "sub_batch": r"sub_batch=([0-9]+)",
+    "wavelet": r"SWTTransform\.wavelet=([a-z0-9.]+)",
 }
 
 METRIC_COLS = ["maphashing_level0", "map_level0", "bit_balance_level0", "worst_bit_balance_level0"]
