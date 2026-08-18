@@ -355,7 +355,23 @@ def get_accuracy_calculator(
     with_AP=True,
     **kwargs,
 ):
-    exclude = kwargs.pop('exclude', [])
+    # BUG FIXED 2026-08-18: this function used to build `exclude` from the
+    # caller's kwargs (+ with_AP/exclude_ranks logic) and log it, then
+    # construct CustomCalculator with a *different*, hardcoded exclude list
+    # below -- the computed `exclude` was dead code, silently discarded.
+    # Every caller-supplied `exclude=[...]` (e.g. evaluate.py's
+    # BASE_EXCLUDE_METRICS, or evaluate_multi_k's extra_exclude=['map']
+    # meant to avoid OOM on a near-full-database k) was therefore a no-op --
+    # this is why COCO's mAP@ALL pass (k=117218) still OOM'd on the knn step
+    # despite --exclude-metric map. Numbers already reported (maphashing_*,
+    # bit_balance_*, worst_bit_balance_*) are unaffected by this fix: none of
+    # those three require knn, and the ones that do (map, r_precision,
+    # mean_average_precision_at_r, rpr, pr, pr_rc, recall_classic, ...) were
+    # never read into any CSV -- they were computed and thrown away, wasting
+    # time/memory but not corrupting any saved value. This fix just makes
+    # `exclude` actually effective, so callers can rely on it going forward.
+    caller_exclude = kwargs.pop('exclude', [])
+    exclude = list(caller_exclude)
     if with_AP:
         exclude.extend(['NMI', 'AMI'])
     else:
@@ -364,14 +380,23 @@ def get_accuracy_calculator(
     if exclude_ranks:
         for r in exclude_ranks:
             exclude.append(f'recall_at_{r}')
+
+    # Historical base exclude list (previously hardcoded straight into the
+    # CustomCalculator call below) -- kept so every existing call site keeps
+    # excluding at least what it always effectively excluded... except it
+    # never actually did, see above. Kept anyway as the floor, merged with
+    # whatever the caller asked for.
+    base_exclude = [
+        "mean_reciprocal_rank", "precision_at_1", "recall_at_1", "recall_at_1000", "recall_at_100",
+        "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32",
+        "recall_at_4", "recall_at_8", "recall_at_2", "recall_at_10", "pr_rc_hashing",
+    ]
+    exclude = sorted(set(exclude) | set(base_exclude))
     lib.LOGGER.info(f"Excluding metrics: {exclude}")
-    lib.LOGGER.info(f"device : {torch.device('cpu')}")   
+    lib.LOGGER.info(f"device : {torch.device('cpu')}")
 
     return CustomCalculator(
-        exclude=['NMI', 'AMI', "mean_reciprocal_rank",
-                              "precision_at_1","recall_at_1", "recall_at_1000", "recall_at_100",
-                              "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
-                                "recall_at_2", "recall_at_10", "pr_rc_hashing"],
+        exclude=exclude,
         k=k,
         #device=torch.device("cpu"),
         **kwargs,

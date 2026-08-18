@@ -417,7 +417,7 @@ MIRFLICKR-25K (`--k 19581`, hamming, `maphashing_level0`, best epoch of {5,10,..
 
 64 bits slightly beats 128 bits here — inside the noise band established in section 0 (σ≈0.012-0.017), not a claim that more bits hurt.
 
-VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP@ALL only, per the paper's protocol for that dataset). COCO needs `--k 5000,117218` (mAP@5000 **and** mAP@ALL in one pass, via the new multi-k path in `evaluate_multi_k()` — see `main/engine/evaluate.py` — so the checkpoint's embeddings aren't recomputed twice). 117218 is `coco_database.txt`'s confirmed line count.
+VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP@ALL only, per the paper's protocol for that dataset). COCO needs `--k 5000,117218 --exclude-metric map` (mAP@5000 **and** mAP@ALL in one pass, via the multi-k path in `evaluate_multi_k()` — see `main/engine/evaluate.py` and section 6's `get_accuracy_calculator` fix below). 117218 is `coco_database.txt`'s confirmed line count.
 
 ## 6. Method fixes made along the way
 
@@ -427,6 +427,7 @@ VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP
 - `DINOHashBaseline` never fine-tuned its backbone (above).
 - `SingleBandNet` applied its own `tanh` on top of `HashLoss`'s (`tanh(tanh(x))`, bounded at 0.762, so the quantization term could never fall below 0.238) and had no BatchNorm, unlike the reference. Aligned.
 - `SCHLoss` assumes codes already in [-1, 1]; added an opt-in `apply_tanh` for raw-logit models (default off, existing configs untouched).
+- `get_accuracy_calculator` (`main/engine/accuracy_calculator.py`) computed an `exclude` list from the caller's kwargs, logged it, then built `CustomCalculator` with a different, hardcoded exclude list — the computed one was dead code. Every caller-requested exclusion (MRR, r_precision, mean_average_precision_at_r, rpr, pr, pr_rc, recall_classic, and — critically — `map`) was silently ignored everywhere in the project, so these metrics were always computed and thrown away. Harmless at MIRFLICKR/VOC scale (small `k`), but at COCO's `--k 117218` the shared `get_knn()` call these metrics require allocates a `(num_query, k)` tensor (2GB+) and OOM'd (2026-08-18). Fixed the passthrough; `evaluate_all_checkpoints.py --exclude-metric map` now actually skips the knn step for a near-full-database `k`. No previously-reported number is affected (maphashing_level0/bit_balance/worst_bit_balance never went through this path).
 
 ## 7. Open questions
 

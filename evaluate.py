@@ -13,19 +13,33 @@ import main.engine as eng
 # reported: MRR, plain recalls, etc). 'map' (-> map_level0, torchmetrics
 # RetrievalMAP) is deliberately NOT in here by default -- it's a useful
 # secondary check against maphashing_level0 (the metric actually reported in
-# the paper) -- but it's also the one metric here that goes through
-# CustomCalculator's requires_knn() path, which allocates a (num_query, k)
-# indices/distances tensor. At COCO's mAP@ALL scale (k=117218, 5000 queries)
-# that tensor alone is ~2GB+ and was the actual cause of the OOM crash during
-# the final-headline COCO eval (2026-08-18) -- maphashing_level0 itself does
-# NOT need this (calculate_maphashing sorts one query's distances against the
-# full gallery at a time, no batched (query x k) allocation). Pass
+# the paper) -- but it's also one of several metrics here that go through
+# CustomCalculator's requires_knn() path (shared across ALL currently-active
+# knn metrics: a single get_knn() call, shape (num_query, k) indices +
+# distances). At COCO's mAP@ALL scale (k=117218, 5000 queries) that
+# allocation alone is ~2GB+ and was the actual cause of the OOM crash during
+# the final-headline COCO eval (2026-08-18). maphashing_level0/bit_balance/
+# worst_bit_balance do NOT need this (they don't require knn at all). Pass
 # extra_exclude=['map'] for any k close to the database size to route around
-# this; leave it out for smaller k (e.g. MIRFLICKR's 19581, VOC's 5717) where
+# it; leave it out for smaller k (e.g. MIRFLICKR's 19581, VOC's 5717) where
 # it never caused a problem.
+#
+# NOTE (2026-08-18): get_accuracy_calculator() used to silently discard
+# whatever `exclude` list was passed to it (see main/engine/accuracy_
+# calculator.py's fix comment) -- every metric below was therefore ALWAYS
+# active regardless of this list, for every evaluation ever run in this
+# project. That never corrupted any *reported* number (maphashing_level0,
+# map_level0, bit_balance*, worst_bit_balance* -- the only ones actually read
+# into a CSV -- were computed correctly either way), just wasted time/memory
+# on metrics nothing reads. Now that the passthrough is fixed, this list is
+# finally effective, and 'mean_average_precision_at_r'/'pr'/'recall_classic'
+# (both knn-requiring, previously missing from this list because they didn't
+# matter when the list was a no-op) are added below for the same reason
+# 'map' needs extra_exclude at large k.
 BASE_EXCLUDE_METRICS = [
-    "mean_reciprocal_rank", "mean_average_precision",
-    "precision_at_1", "recall_at_1", "r_precision", 'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
+    "mean_reciprocal_rank", "mean_average_precision", "mean_average_precision_at_r",
+    "precision_at_1", "recall_at_1", "r_precision", 'rpr', 'pr', 'pr_rc', 'recall_classic',
+    "recall_at_1000", "recall_at_100",
     "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
     "recall_at_2", "recall_at_10",
 ]
