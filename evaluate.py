@@ -9,12 +9,35 @@ import main.utils as lib
 import main.engine as eng
 
 
+# Metrics excluded by default from every evaluation call in this file (never
+# reported: MRR, plain recalls, etc). 'map' (-> map_level0, torchmetrics
+# RetrievalMAP) is deliberately NOT in here by default -- it's a useful
+# secondary check against maphashing_level0 (the metric actually reported in
+# the paper) -- but it's also the one metric here that goes through
+# CustomCalculator's requires_knn() path, which allocates a (num_query, k)
+# indices/distances tensor. At COCO's mAP@ALL scale (k=117218, 5000 queries)
+# that tensor alone is ~2GB+ and was the actual cause of the OOM crash during
+# the final-headline COCO eval (2026-08-18) -- maphashing_level0 itself does
+# NOT need this (calculate_maphashing sorts one query's distances against the
+# full gallery at a time, no batched (query x k) allocation). Pass
+# extra_exclude=['map'] for any k close to the database size to route around
+# this; leave it out for smaller k (e.g. MIRFLICKR's 19581, VOC's 5717) where
+# it never caused a problem.
+BASE_EXCLUDE_METRICS = [
+    "mean_reciprocal_rank", "mean_average_precision",
+    "precision_at_1", "recall_at_1", "r_precision", 'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
+    "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
+    "recall_at_2", "recall_at_10",
+]
+
+
 def load_and_evaluate(
     path,
     set,
     bs,
     nw,
     data_dir=None,
+    extra_exclude=None,
     **kwargs
 ):
     lib.LOGGER.info(f"Evaluating : \033[92m{path}\033[0m")
@@ -52,10 +75,7 @@ def load_and_evaluate(
         epoch=state["epoch"],
         batch_size=bs,
         num_workers=nw,
-        exclude=["mean_reciprocal_rank", "mean_average_precision",
-                              "precision_at_1","recall_at_1","r_precision",'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
-                              "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
-                                "recall_at_2", "recall_at_10"],
+        exclude=BASE_EXCLUDE_METRICS + list(extra_exclude or []),
         k=kwargs.get('k', 5000),
         distance_metric=kwargs.get('distance_metric', 'cosine')
     )
@@ -77,6 +97,7 @@ def load_and_evaluate_multi_k(
     nw,
     data_dir=None,
     k_list=(5000,),
+    extra_exclude=None,
     **kwargs
 ):
     """
@@ -86,6 +107,12 @@ def load_and_evaluate_multi_k(
     embeddings. Use this instead of calling load_and_evaluate() once per k
     (e.g. for COCO's mAP@5000 + mAP@ALL, which need two different k's on the
     same checkpoint).
+
+    extra_exclude applies to every k in k_list (there's no per-k exclude
+    here -- if any k in the list is close to the database size, pass
+    extra_exclude=['map'], see BASE_EXCLUDE_METRICS' comment above. The small
+    k's in the same call lose the map_level0 diagnostic too, but
+    maphashing_level0 -- the metric actually reported -- is unaffected.)
 
     Returns {k: metrics_dict, ...} -- metrics_dict has the same shape
     load_and_evaluate() returns for a single k.
@@ -125,10 +152,7 @@ def load_and_evaluate_multi_k(
         epoch=state["epoch"],
         batch_size=bs,
         num_workers=nw,
-        exclude=["mean_reciprocal_rank", "mean_average_precision",
-                              "precision_at_1","recall_at_1","r_precision",'rpr', 'pr_rc', "recall_at_1000", "recall_at_100",
-                              "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
-                                "recall_at_2", "recall_at_10"],
+        exclude=BASE_EXCLUDE_METRICS + list(extra_exclude or []),
         k_list=k_list,
         distance_metric=kwargs.get('distance_metric', 'cosine'),
     )

@@ -126,6 +126,20 @@ def main():
                          help="k for the k-NN evaluation. Comma-separated for multiple k's evaluated off "
                               "the same embeddings in one pass (e.g. --k 5000,36735 for mAP@5000 + mAP@ALL) "
                               "-- see the module docstring's MULTI-K section.")
+    parser.add_argument("--epochs", type=str, default=None,
+                         help="Comma-separated epoch numbers to evaluate (e.g. --epochs 45,50). Default: "
+                              "every weights/epoch_*.ckpt found, as before. Use this to cut down eval time "
+                              "on a large/slow dataset (e.g. COCO at ~25min/checkpoint) when you only need "
+                              "the last few epochs, not the full curve.")
+    parser.add_argument("--exclude-metric", type=str, default=None,
+                         help="Comma-separated extra metric name(s) to exclude, on top of the base exclude "
+                              "list (mostly plain recalls/MRR, never reported). In particular, pass "
+                              "'--exclude-metric map' whenever any k in --k is close to the database size: "
+                              "map_level0 goes through CustomCalculator's knn path, which allocates a "
+                              "(num_query, k) tensor -- at COCO's mAP@ALL scale (k=117218, 5000 queries) "
+                              "that's 2GB+ and is what actually OOM'd during the 2026-08-18 COCO eval. "
+                              "maphashing_level0 (the metric actually reported) doesn't use that path and "
+                              "is unaffected by excluding 'map'.")
     parser.add_argument("--distance-metric", type=str, default="hamming")
     parser.add_argument("--metric", type=str, default="maphashing_level0",
                          help="Metric used to pick the best epoch per run (default: maphashing_level0, the "
@@ -146,6 +160,15 @@ def main():
         return
 
     k_list = [int(k.strip()) for k in args.k.split(",") if k.strip()]
+    wanted_epochs = (
+        {int(e.strip()) for e in args.epochs.split(",") if e.strip()} if args.epochs else None
+    )
+    extra_exclude = [m.strip() for m in args.exclude_metric.split(",") if m.strip()] if args.exclude_metric else []
+
+    if max(k_list) > 50000 and "map" not in extra_exclude:
+        print(f"WARNING: k={max(k_list)} is large -- if this is close to the full database size (mAP@ALL) "
+              f"this can OOM on map_level0's knn step. Consider re-running with --exclude-metric map "
+              f"(maphashing_level0, the metric actually reported, is unaffected).")
 
     extra_cols = ["map_level0", "bit_balance_level0", "worst_bit_balance_level0"]
     fieldnames = ["run", "epoch", "k", args.metric] + [c for c in extra_cols if c != args.metric]
@@ -175,8 +198,11 @@ def main():
     try:
         for run_dir in run_dirs:
             ckpts = find_epoch_checkpoints(run_dir)
+            if wanted_epochs is not None:
+                ckpts = [(e, p) for e, p in ckpts if e in wanted_epochs]
             if not ckpts:
-                print(f"skipping {run_dir.name}: no weights/epoch_*.ckpt found")
+                print(f"skipping {run_dir.name}: no weights/epoch_*.ckpt found"
+                      + (f" matching --epochs {sorted(wanted_epochs)}" if wanted_epochs is not None else ""))
                 continue
 
             print(f"\n=== {run_dir.name} ({len(ckpts)} checkpoints) x k={k_list} ===")
@@ -207,6 +233,7 @@ def main():
                     nw=args.nw,
                     data_dir=args.data_dir,
                     k_list=needed_ks,
+                    extra_exclude=extra_exclude,
                     distance_metric=args.distance_metric,
                 )
                 for k in needed_ks:

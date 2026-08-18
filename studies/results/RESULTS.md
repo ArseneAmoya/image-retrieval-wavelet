@@ -13,6 +13,9 @@ interpretation and the experiment plan live in `../MIRFLICKR_DIAGNOSTIC_PLAN.md`
 | `vitb_capacity_control_per_epoch.csv` | ViT-B capacity control, every saved epoch |
 | `wavelet_type_ablation_per_epoch.csv` | 3 runs (haar/db4/bior4.4), seed 333, every saved epoch (section 5b) |
 | `num_queries_sb96_per_epoch.csv` | 4 runs (N=1/2/4/8), sub_batch=96 fixed, seed 333, every saved epoch (section 5c) |
+| `mflickr_final_headline_per_epoch.csv` | MIRFLICKR final headline (32/64/128 bits), num_queries=1, seed 333, no eval during training, `--k 19581` (section 5d) |
+| `coco_database.txt` | COCO's `database.txt` as actually used for training — its line count (117,218) is the confirmed `--k` value for COCO's mAP@ALL pass |
+| `final_headline_training_curves.csv` | per-epoch `HashLoss`/`Ortho_Loss`/`total_loss` for all 8 final-headline jobs (mflickr×3, voc×3, coco×2), parsed from the raw Colab training log via `studies/parse_training_log.py` — kept for the thesis appendix's training curves |
 | `diagnostics_attention_2026-08-11.txt` | verbatim `measure_query_orthogonality.py` + `measure_attention_collapse.py` output (MIRFLICKR + VOC) |
 | `swt_transform_check_2026-08-12.txt` | verbatim `verify_swt_transform.py` output |
 
@@ -399,6 +402,22 @@ does not claim `num_queries=4` or any other value as a design choice earned
 by the ablation. If efficiency is worth a sentence: N=1 reaches the same mAP
 with a narrower `out_proj` (`Linear(384,384)` vs `Linear(1536,384)` at N=4),
 which is a defensible minor remark, not a contribution.
+
+## 5d. Final headline results (revision numbers for the paper's Table 1)
+
+One seed (333) per (dataset, nbits), `num_queries=1`, `ortho_weight=0.1`, `sub_batch=96`, `basic_swt`, zero evaluation during training (all eval is post-hoc via `evaluate_all_checkpoints.py`), matching the rejected paper's own bit-length protocol per dataset. See `mflickr_final_headline.yaml` / `voc_final_headline.yaml` / `coco_final_headline.yaml`.
+
+MIRFLICKR-25K (`--k 19581`, hamming, `maphashing_level0`, best epoch of {5,10,...,50}):
+
+| bits | best epoch | mAP |
+|---|---|---|
+| 32 | 35 | 0.8110 |
+| 64 | 40 | 0.8506 |
+| 128 | 30 | 0.8461 |
+
+64 bits slightly beats 128 bits here — inside the noise band established in section 0 (σ≈0.012-0.017), not a claim that more bits hurt.
+
+VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP@ALL only, per the paper's protocol for that dataset). COCO needs `--k 5000,117218` (mAP@5000 **and** mAP@ALL in one pass, via the new multi-k path in `evaluate_multi_k()` — see `main/engine/evaluate.py` — so the checkpoint's embeddings aren't recomputed twice). 117218 is `coco_database.txt`'s confirmed line count.
 
 ## 6. Method fixes made along the way
 
