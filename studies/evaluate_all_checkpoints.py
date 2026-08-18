@@ -22,13 +22,25 @@ weights/epoch_*.ckpt (e.g. save_model was off, or it hasn't reached its first
 save point yet), it's skipped with a warning rather than failing the batch.
 
 RESUME BEHAVIOUR (added after a power outage lost an in-progress batch, 2026-08-17):
-if --csv points at a file that already exists, its (run, epoch) pairs are loaded
+if --csv points at a file that already exists, its (run, epoch, k) rows are loaded
 first and skipped -- no GPU time is spent re-evaluating a checkpoint already on
 record. Every new row is appended and flushed to disk immediately after that
 checkpoint's evaluation finishes, not buffered until the whole study is done, so a
 second interruption only ever costs the one checkpoint being evaluated when it
 happens. To resume an interrupted batch, re-run the exact same command (same
 --csv path) -- already-done work is skipped automatically, nothing extra to pass.
+
+MULTI-K (added 2026-08-18, for COCO's mAP@5000-and-mAP@ALL protocol): --k
+accepts a comma-separated list, e.g. --k 5000,36735. Every k in the list is
+evaluated per checkpoint, but the (expensive) embedding forward pass runs only
+ONCE per checkpoint regardless of how many k's are requested -- see
+evaluate_multi_k() in main/engine/evaluate.py. The output CSV gains a "k"
+column; each (run, epoch, k) combination is one row, so mAP@5000 and mAP@ALL
+for the same checkpoint show up as two rows sharing the same run/epoch. Resume
+keys are (run, epoch, k), so a batch interrupted partway through a k_list still
+only recomputes the missing k's, not the ones already written -- though note
+the embeddings are still recomputed once per checkpoint in that case, since
+they aren't cached across process restarts.
 """
 import argparse
 import csv
@@ -110,7 +122,10 @@ def main():
     parser.add_argument("--bs", type=int, default=256)
     parser.add_argument("--nw", type=int, default=10)
     parser.add_argument("--data-dir", type=str, default=None)
-    parser.add_argument("--k", type=int, default=19581)
+    parser.add_argument("--k", type=str, default="19581",
+                         help="k for the k-NN evaluation. Comma-separated for multiple k's evaluated off "
+                              "the same embeddings in one pass (e.g. --k 5000,36735 for mAP@5000 + mAP@ALL) "
+                              "-- see the module docstring's MULTI-K section.")
     parser.add_argument("--distance-metric", type=str, default="hamming")
     parser.add_argument("--metric", type=str, default="maphashing_level0",
                          help="Metric used to pick the best epoch per run (default: maphashing_level0, the "
@@ -130,22 +145,25 @@ def main():
               f"{resolve_log_dir(plan, args.log_dir)}.")
         return
 
+    k_list = [int(k.strip()) for k in args.k.split(",") if k.strip()]
+
     extra_cols = ["map_level0", "bit_balance_level0", "worst_bit_balance_level0"]
-    fieldnames = ["run", "epoch", args.metric] + [c for c in extra_cols if c != args.metric]
+    fieldnames = ["run", "epoch", "k", args.metric] + [c for c in extra_cols if c != args.metric]
 
     # Load whatever was already evaluated in a prior (possibly interrupted) run of
-    # this exact command, keyed by (run, epoch) so nothing gets re-evaluated.
+    # this exact command, keyed by (run, epoch, k) so nothing gets re-evaluated.
     done = {}
     csv_exists = bool(args.csv) and Path(args.csv).exists()
     if csv_exists:
         with open(args.csv, newline="") as f:
             for row in csv.DictReader(f):
                 for col in fieldnames:
-                    if col not in ("run", "epoch") and row.get(col) not in (None, ""):
+                    if col not in ("run", "epoch", "k") and row.get(col) not in (None, ""):
                         row[col] = float(row[col])
                 row["epoch"] = int(row["epoch"])
-                done[(row["run"], row["epoch"])] = row
-        print(f"Resuming from {args.csv}: {len(done)} checkpoint(s) already evaluated, will be skipped.")
+                row["k"] = int(row["k"]) if row.get("k") not in (None, "") else k_list[0]
+                done[(row["run"], row["epoch"], row["k"])] = row
+        print(f"Resuming from {args.csv}: {len(done)} checkpoint/k row(s) already evaluated, will be skipped.")
 
     csv_file = open(args.csv, "a" if csv_exists else "w", newline="") if args.csv else None
     csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames) if csv_file else None
@@ -161,53 +179,66 @@ def main():
                 print(f"skipping {run_dir.name}: no weights/epoch_*.ckpt found")
                 continue
 
-            print(f"\n=== {run_dir.name} ({len(ckpts)} checkpoints) ===")
+            print(f"\n=== {run_dir.name} ({len(ckpts)} checkpoints) x k={k_list} ===")
             run_rows = []
             for epoch, ckpt_path in ckpts:
-                key = (run_dir.name, epoch)
-                if key in done:
-                    row = done[key]
-                    run_rows.append(row)
-                    print(f"  epoch {epoch:>3} -> already evaluated, skipping ({args.metric}="
-                          f"{row.get(args.metric)})")
+                needed_ks = [k for k in k_list if (run_dir.name, epoch, k) not in done]
+                if not needed_ks:
+                    for k in k_list:
+                        row = done[(run_dir.name, epoch, k)]
+                        run_rows.append(row)
+                        print(f"  epoch {epoch:>3} k={k:>6} -> already evaluated, skipping "
+                              f"({args.metric}={row.get(args.metric)})")
                     continue
 
-                metrics = evaluate_module.load_and_evaluate(
+                for k in k_list:
+                    if (run_dir.name, epoch, k) in done:
+                        row = done[(run_dir.name, epoch, k)]
+                        run_rows.append(row)
+                        print(f"  epoch {epoch:>3} k={k:>6} -> already evaluated, skipping "
+                              f"({args.metric}={row.get(args.metric)})")
+
+                # One embedding pass covers every k in needed_ks -- see
+                # evaluate_multi_k() in main/engine/evaluate.py.
+                results_by_k = evaluate_module.load_and_evaluate_multi_k(
                     path=str(ckpt_path),
                     set=args.set,
                     bs=args.bs,
                     nw=args.nw,
                     data_dir=args.data_dir,
-                    k=args.k,
+                    k_list=needed_ks,
                     distance_metric=args.distance_metric,
                 )
-                split_metrics = metrics.get(args.set, {})
-                row = {"run": run_dir.name, "epoch": epoch}
-                row[args.metric] = split_metrics.get(args.metric)
-                for col in extra_cols:
-                    if col != args.metric:
-                        row[col] = split_metrics.get(col)
-                run_rows.append(row)
-                print(f"  epoch {epoch:>3} -> " + ", ".join(
-                    f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
-                    for k, v in row.items() if k not in ("run", "epoch")
-                ))
+                for k in needed_ks:
+                    split_metrics = results_by_k.get(k, {}).get(args.set, {})
+                    row = {"run": run_dir.name, "epoch": epoch, "k": k}
+                    row[args.metric] = split_metrics.get(args.metric)
+                    for col in extra_cols:
+                        if col != args.metric:
+                            row[col] = split_metrics.get(col)
+                    run_rows.append(row)
+                    print(f"  epoch {epoch:>3} k={k:>6} -> " + ", ".join(
+                        f"{name}={v:.4f}" if isinstance(v, float) else f"{name}={v}"
+                        for name, v in row.items() if name not in ("run", "epoch", "k")
+                    ))
 
-                # Flushed immediately: a second interruption only loses the checkpoint
-                # currently being evaluated, never anything already printed above.
-                if csv_writer:
-                    csv_writer.writerow(row)
-                    csv_file.flush()
+                    # Flushed immediately: a second interruption only loses the checkpoint
+                    # currently being evaluated, never anything already printed above.
+                    if csv_writer:
+                        csv_writer.writerow(row)
+                        csv_file.flush()
 
-            valid = [r for r in run_rows if r.get(args.metric) is not None]
-            if valid:
+            for k in k_list:
+                valid = [r for r in run_rows if r.get("k") == k and r.get(args.metric) is not None]
+                if not valid:
+                    continue
                 best = max(valid, key=lambda r: r[args.metric])
-                final = run_rows[-1]
-                print(f"  best epoch: {best['epoch']} ({args.metric}={best[args.metric]:.4f}) "
+                final = [r for r in run_rows if r.get("k") == k][-1]
+                print(f"  [k={k}] best epoch: {best['epoch']} ({args.metric}={best[args.metric]:.4f}) "
                       f"| final epoch {final['epoch']}: {args.metric}={final.get(args.metric)}")
                 if best["epoch"] != final["epoch"]:
                     gap = best[args.metric] - (final.get(args.metric) or 0)
-                    print(f"  NOTE: final epoch is NOT the best epoch (gap={gap:.4f}) -- "
+                    print(f"  NOTE: final epoch is NOT the best epoch for k={k} (gap={gap:.4f}) -- "
                           f"report the best-epoch number or revisit test_eval_freq.")
 
             all_rows.extend(run_rows)

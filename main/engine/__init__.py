@@ -8,7 +8,7 @@ from .cross_validation_splits import (
     get_closed_set_splits,
     get_splits,
 )
-from .evaluate import evaluate, get_tester
+from .evaluate import evaluate, evaluate_multi_k, get_tester
 from .landmark_evaluation import landmark_evaluation
 from .make_subset import make_subset
 from .memory import XBM
@@ -28,6 +28,7 @@ __all__ = [
     'get_closed_set_splits',
     'get_splits',
     'evaluate',
+    'evaluate_multi_k',
     'get_tester',
     'landmark_evaluation',
     'make_subset',

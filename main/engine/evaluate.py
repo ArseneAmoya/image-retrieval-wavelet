@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 import torch
 from pytorch_metric_learning import testers
@@ -91,19 +92,11 @@ def get_tester(
 def get_data(batch):
     return batch["image"].cuda(), batch["label"]
 
-@lib.get_set_random_state
-def evaluate(
-    net,
-    train_dataset=None,
-    val_dataset=None,
-    test_dataset=None,
-    epoch=None,
-    tester=None,
-    custom_eval=None,
-    **kwargs
-):
+def _build_dataset_dict_and_splits(train_dataset, val_dataset, test_dataset, custom_eval):
+    """Factored out of evaluate() so evaluate_multi_k() builds the exact same
+    dataset_dict/splits_to_eval without duplicating (and risking drift from)
+    this branching logic."""
     at_R = 0
-
     dataset_dict = {}
     splits_to_eval = []
     if train_dataset is not None:
@@ -144,6 +137,24 @@ def evaluate(
         dataset_dict = custom_eval["dataset"]
         splits_to_eval = custom_eval["splits"]
 
+    return dataset_dict, splits_to_eval, at_R
+
+
+@lib.get_set_random_state
+def evaluate(
+    net,
+    train_dataset=None,
+    val_dataset=None,
+    test_dataset=None,
+    epoch=None,
+    tester=None,
+    custom_eval=None,
+    **kwargs
+):
+    dataset_dict, splits_to_eval, at_R = _build_dataset_dict_and_splits(
+        train_dataset, val_dataset, test_dataset, custom_eval,
+    )
+
     if tester is None:
         # next lines usefull when computing only the mAP@R and small recall values
         # if ('k' not in kwargs) and (at_R != 0):
@@ -156,3 +167,79 @@ def evaluate(
         trunk_model=net,
         splits_to_eval=splits_to_eval,
     )
+
+
+@lib.get_set_random_state
+def evaluate_multi_k(
+    net,
+    train_dataset=None,
+    val_dataset=None,
+    test_dataset=None,
+    epoch=None,
+    custom_eval=None,
+    k_list=(5000,),
+    **kwargs
+):
+    """
+    Same dataset_dict/splits_to_eval construction as evaluate(), but computes
+    embeddings (the expensive DINOv2 forward pass over the whole query+gallery
+    set) exactly ONCE and reuses them for every k in k_list, rebuilding only
+    the (cheap: knn + argsort over already-computed embeddings) accuracy
+    calculator per k.
+
+    Added 2026-08-18 for COCO's mAP@5000-and-mAP@ALL protocol: running
+    evaluate_all_checkpoints.py --k 5000 then --k <db_size> as two separate
+    invocations would re-embed the same checkpoint's full test+gallery set
+    twice for no reason. With this, one call to load_and_evaluate_multi_k
+    covers both.
+
+    Returns {k: {split_name: {metric_name: value, ...}, ...}, ...} -- one
+    full metrics dict per k, same shape load_and_evaluate()/evaluate() return
+    for a single k.
+    """
+    dataset_dict, splits_to_eval, _at_R = _build_dataset_dict_and_splits(
+        train_dataset, val_dataset, test_dataset, custom_eval,
+    )
+
+    k_list = list(k_list)
+    tester = get_tester(k=k_list[0], **kwargs)
+    trunk_model = net
+    embedder_model = torch.nn.Identity()
+    trunk_model.eval()
+    embedder_model.eval()
+
+    splits_to_eval, splits_to_compute_embeddings = tester.get_splits_to_compute_embeddings(
+        dataset_dict, splits_to_eval,
+    )
+    lib.LOGGER.info(f"Computing embeddings once, reused for k in {k_list}")
+    embeddings_and_labels = tester.get_all_embeddings_for_all_splits(
+        dataset_dict, trunk_model, embedder_model, splits_to_compute_embeddings, None,
+    )
+
+    # Rebuilding a whole tester per k just to steal its accuracy_calculator is
+    # wasteful-looking but is actually cheap (no GPU work, no forward pass)
+    # and guarantees this stays in sync with get_tester()'s own kwarg-splitting
+    # logic instead of duplicating it here.
+    calculators_by_k = {k: get_tester(k=k, **kwargs).accuracy_calculator for k in k_list}
+
+    results_by_k = {}
+    for k, calculator in calculators_by_k.items():
+        tester.accuracy_calculator = calculator
+        all_accuracies = defaultdict(dict)
+        for query_split_name, reference_split_names in splits_to_eval:
+            all_accuracies[query_split_name]["epoch"] = f"{epoch}"
+            tester.reference_split_names[query_split_name] = reference_split_names
+            tester.do_knn_and_accuracies(
+                all_accuracies[query_split_name],
+                embeddings_and_labels,
+                query_split_name,
+                reference_split_names,
+            )
+        results_by_k[k] = dict(all_accuracies)
+        lib.LOGGER.info(f"k={k} done: " + ", ".join(
+            f"{split}.{metric}={val:.4f}" if isinstance(val, float) else f"{split}.{metric}={val}"
+            for split, mtrc in all_accuracies.items() for metric, val in mtrc.items() if metric != "epoch"
+        ))
+
+    del embeddings_and_labels
+    return results_by_k
