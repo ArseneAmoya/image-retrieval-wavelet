@@ -1,0 +1,73 @@
+study_name: voc_wavelet_type_ablation_nq1
+
+# VOC counterpart of mflickr_wavelet_type_ablation_nq1.yaml (2026-08-19) --
+# same wavelet-type sensitivity question (R2), same num_queries=1/seed=333/
+# sub_batch=96/ortho_weight=0.1 operating point, run on the other dataset so
+# the wavelet-type finding isn't MIRFLICKR-only.
+#
+# db4/bior4.4 only, haar excluded for the same reason as the MIRFLICKR
+# rerun: haar is the transform default, so a haar arm here would be
+# override-identical to voc_final_headline's 64-bit arm (0.9922 best epoch,
+# RESULTS.md section 5d) already on record. Use that as the haar reference
+# point when reading db4/bior4.4 against it -- though note VOC's headline
+# curve has its own caveat (early-epoch instability at 32/96 bits, not seen
+# at 64 bits) worth keeping in mind if these two arms show something similar.
+#
+# nbits/embedding_size=64, matching both the MIRFLICKR wavelet study's choice
+# and voc_final_headline's 64-bit arm, so the haar cross-reference above is
+# apples-to-apples.
+#
+# transform: basic_swt, deliberately not voc_swt (which has ColorJitter,
+# flagged elsewhere in this project as destabilizing) -- same choice already
+# made for voc_final_headline.yaml, kept for consistency.
+#
+# Unlike voc_final_headline.yaml (zero eval during training, post-hoc only),
+# this follows the wavelet-ablation convention instead: test_eval_freq=50
+# (a single training-time checkpoint of the metric, not the real per-epoch
+# curve) + fast_eval as a divergence canary. The actual per-epoch numbers for
+# RESULTS.md still come from evaluate_all_checkpoints.py over the
+# save_model=5 checkpoints, same as every other sensitivity study here.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: voc
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/voc
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 20
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 5717
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96                     # fixed = batch_size, no Ghost BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep_zip:
+  transform.train.SWTTransform.wavelet: ['db4', 'bior4.4']
+  transform.test.SWTTransform.wavelet: ['db4', 'bior4.4']

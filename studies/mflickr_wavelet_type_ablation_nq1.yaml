@@ -1,0 +1,66 @@
+study_name: mflickr_wavelet_type_ablation_nq1
+
+# Rerun of mflickr_wavelet_type_ablation.yaml (R2's wavelet-type sensitivity
+# request), at num_queries=1 instead of 4 -- 2026-08-19. The original study
+# predates the project-wide num_queries default change (4 -> 1, see
+# config/model/multidino_attention_hashing_ortho.yaml and RESULTS.md section
+# 5c's scope decision: num_queries is not a contribution, N=1/4/8 perform
+# equally at sub_batch=96). Since all final-headline numbers (RESULTS.md
+# section 5d) use num_queries=1, the wavelet-type sensitivity curve should be
+# read at the same operating point for internal consistency in the paper --
+# the original arm ran at the now-nonstandard num_queries=4.
+#
+# Everything else identical to mflickr_wavelet_type_ablation.yaml: seed 333,
+# ortho_weight=0.1, sub_batch=96 (fixed, no Ghost-BN path), level=1,
+# db4/bior4.4 swept together via sweep_zip (train+test wavelet must match).
+# haar deliberately excluded from this rerun (2026-08-19): haar is the
+# transform default, so a haar arm at num_queries=1/seed=333/sub_batch=96 is
+# override-identical to mflickr_num_queries_sb96's N=1 arm (0.8460) already
+# on record -- rerunning it would just be a fourth same-seed reproducibility
+# sample (section 0), not new information about the wavelet-type question.
+# Use that 0.8460 as the haar reference point when reading db4/bior4.4
+# against it.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: 50
+  experience.fast_eval_freq: 5
+  experience.fast_eval_size: 500
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96                     # fixed = batch_size, no Ghost BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep_zip:
+  transform.train.SWTTransform.wavelet: ['db4', 'bior4.4']
+  transform.test.SWTTransform.wavelet: ['db4', 'bior4.4']

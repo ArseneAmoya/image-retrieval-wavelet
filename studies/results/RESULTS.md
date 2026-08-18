@@ -14,6 +14,8 @@ interpretation and the experiment plan live in `../MIRFLICKR_DIAGNOSTIC_PLAN.md`
 | `wavelet_type_ablation_per_epoch.csv` | 3 runs (haar/db4/bior4.4), seed 333, every saved epoch (section 5b) |
 | `num_queries_sb96_per_epoch.csv` | 4 runs (N=1/2/4/8), sub_batch=96 fixed, seed 333, every saved epoch (section 5c) |
 | `mflickr_final_headline_per_epoch.csv` | MIRFLICKR final headline (32/64/128 bits), num_queries=1, seed 333, no eval during training, `--k 19581` (section 5d) |
+| `voc_final_headline_per_epoch.csv` | VOC 2012 final headline (32/64/96 bits), every saved epoch, `--k 5717` (section 5d) |
+| `coco_final_headline_per_epoch.csv` | COCO final headline (32/64 bits), epochs 45+50 only, `--k 5000,117218` in one pass (mAP@5000 + mAP@ALL), `--exclude-metric map` (section 5d) |
 | `coco_database.txt` | COCO's `database.txt` as actually used for training — its line count (117,218) is the confirmed `--k` value for COCO's mAP@ALL pass |
 | `final_headline_training_curves.csv` | per-epoch `HashLoss`/`Ortho_Loss`/`total_loss` for all 8 final-headline jobs (mflickr×3, voc×3, coco×2), parsed from the raw Colab training log via `studies/parse_training_log.py` — kept for the thesis appendix's training curves |
 | `diagnostics_attention_2026-08-11.txt` | verbatim `measure_query_orthogonality.py` + `measure_attention_collapse.py` output (MIRFLICKR + VOC) |
@@ -417,7 +419,30 @@ MIRFLICKR-25K (`--k 19581`, hamming, `maphashing_level0`, best epoch of {5,10,..
 
 64 bits slightly beats 128 bits here — inside the noise band established in section 0 (σ≈0.012-0.017), not a claim that more bits hurt.
 
-VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP@ALL only, per the paper's protocol for that dataset). COCO needs `--k 5000,117218 --exclude-metric map` (mAP@5000 **and** mAP@ALL in one pass, via the multi-k path in `evaluate_multi_k()` — see `main/engine/evaluate.py` and section 6's `get_accuracy_calculator` fix below). 117218 is `coco_database.txt`'s confirmed line count.
+VOC 2012 (`--k 5717`, mAP@ALL, best epoch of {5,10,...,50}):
+
+| bits | best epoch | mAP | final epoch (50) | best − final |
+|---|---|---|---|---|
+| 32 | 10 | 0.9801 | 0.9475 | 0.0326 |
+| 64 | 45 | 0.9922 | 0.9913 | 0.0009 |
+| 96 | 5 | 0.9854 | 0.9600 | 0.0254 |
+
+**Caveat, worth resolving before this goes in the paper**: the 32-bit and 96-bit arms peak at epoch 10 and epoch 5 respectively, then drop and never fully recover (96-bit especially — its whole last 45 epochs sit below its epoch-5 value). Reporting the best-epoch number as-is means citing a very early, likely under-converged checkpoint as the headline result, which is a harder sell than 64-bit's pattern (best ≈ final, gap 0.0009, a normal converged curve). Two live explanations, not yet distinguished: (a) genuine early-training luck/noise (single seed, no multi-seed check here), or (b) real instability later in training — plausible given `basic_swt`'s augmentation differs from `voc_swt`'s (flagged in the study's own header) and VOC's small dataset (5,717 train) trains fast per epoch. Recommend rereading the full 50-epoch curve (`voc_final_headline_per_epoch.csv`) before citing 32/96-bit's numbers, or reporting the epoch-50 (converged) value instead of best-epoch for consistency with 64-bit.
+
+MS COCO (epochs 45 and 50 only, `--k 5000,117218` in one pass, `--exclude-metric map`, best of the two evaluated epochs):
+
+| bits | mAP@5000 | epoch | mAP@ALL | epoch |
+|---|---|---|---|---|
+| 32 | 0.9840 | 50 | 0.9742 | 45 |
+| 64 | 0.9910 | 50 | 0.9731 | 50 |
+
+**Sanity check done (2026-08-18), not a leak.** Verified directly on the actual `train.txt`/`test.txt`/`database.txt` (117,218/10,000/5,000 lines, exact-path set intersection):
+
+- `test ∩ database` = **0**. The query set never appears in the gallery — no trivial self-retrieval, which is the check that would actually invalidate mAP.
+- `train ∩ database` = **10,000 / 10,000** (all of it), labels byte-identical between the two files for every one of those paths. This looked like a leak at first glance, but it's the standard protocol in the deep hashing literature (DPSH/HashNet/CSQ-style): the database is a large fixed pool the trained hash function is asked to index, and it normally *contains* the training set — only the query set has to be held out. `train ⊆ database` is expected, not a bug.
+- What actually explains the high, cutoff-insensitive mAP: COCO's labels use an any-shared-class relevance rule (`label_comparison_fn`: `query_labels @ reference_labels.T > 0`), and the single most common category in `database.txt` alone covers **54.6%** of all 117,218 images (mean 2.9 active labels/image out of 80). With that much of the database "relevant" to a typical query under this definition, mAP saturates well before rank 5000, which is also why mAP@ALL barely drops from mAP@5000 — not because the database is redundant, but because the relevance criterion is very loose at COCO's label density. This is a known property of this style of multi-label benchmark (also true of NUS-WIDE), not specific to this run.
+
+**Scope decision (2026-08-18): no full best-epoch search for COCO.** Only epochs 45 and 50 were evaluated (chosen to cut eval time/OOM risk — section 6). Given mAP is already near-ceiling and essentially flat between these two late epochs (32-bit: 0.9840→ vs 0.9742 mAP@ALL at ep45 vs ep50 within 0.0002; 64-bit epoch 50 already the max of the two), the curve is converged in this range and an earlier-epoch search is not expected to change the reported number — unlike VOC's 32/96-bit arms (above), which peaked early and needed the full curve read. Report epoch 50 (or the per-bit best of {45,50} as in the table) as final.
 
 ## 6. Method fixes made along the way
 
@@ -428,6 +453,7 @@ VOC 2012 and MS COCO: not yet evaluated. VOC needs a single `--k 5717` pass (mAP
 - `SingleBandNet` applied its own `tanh` on top of `HashLoss`'s (`tanh(tanh(x))`, bounded at 0.762, so the quantization term could never fall below 0.238) and had no BatchNorm, unlike the reference. Aligned.
 - `SCHLoss` assumes codes already in [-1, 1]; added an opt-in `apply_tanh` for raw-logit models (default off, existing configs untouched).
 - `get_accuracy_calculator` (`main/engine/accuracy_calculator.py`) computed an `exclude` list from the caller's kwargs, logged it, then built `CustomCalculator` with a different, hardcoded exclude list — the computed one was dead code. Every caller-requested exclusion (MRR, r_precision, mean_average_precision_at_r, rpr, pr, pr_rc, and — critically — `map`) was silently ignored everywhere in the project, so these metrics were always computed and thrown away. Harmless at MIRFLICKR/VOC scale (small `k`), but at COCO's `--k 117218` the shared `get_knn()` call these metrics require allocates a `(num_query, k)` tensor (2GB+) and OOM'd (2026-08-18). Fixed the passthrough; `evaluate_all_checkpoints.py --exclude-metric map` now actually skips the knn step for a near-full-database `k`. (Tried adding `recall_classic` to the exclude list too, since it shows up in `CustomCalculator.requires_knn()` — but it isn't a real metric name, `check_primary_metrics()` rejects it, left out.) No previously-reported number is affected (maphashing_level0/bit_balance/worst_bit_balance never went through this path).
+- `consolidate_metrics.py` grouped rows by `run` name only. COCO's multi-k CSV (2026-08-18) has two rows per epoch sharing one run name (k=5000 and k=117218) — grouping by run alone merged them, and since `max()` picks the highest `maphashing_level0` regardless of `k`, the mAP@5000 row (always higher) silently won every time, discarding mAP@ALL from the summary. Fixed to group by `(run, k)`; `all_runs_metrics.csv` now has a `k` column and COCO correctly produces 4 rows (2 nbits x 2 k's) instead of 2.
 
 ## 7. Open questions
 

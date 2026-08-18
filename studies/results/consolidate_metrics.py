@@ -74,22 +74,28 @@ def main():
     rows = []
     for path in files:
         study = study_from_filename(path)
+        # Grouped by (run, k), not just run: evaluate_all_checkpoints.py's
+        # multi-k mode (2026-08-18) writes one row per (run, epoch, k) --
+        # e.g. COCO's mAP@5000 and mAP@ALL passes share the same run name.
+        # Grouping by run alone would merge those into one list and silently
+        # pick whichever k has the higher (easier, smaller-k) value as
+        # "best" every time, discarding the mAP@ALL numbers entirely.
         by_run = defaultdict(list)
         with open(path, newline="") as f:
             for r in csv.DictReader(f):
-                by_run[r["run"]].append(r)
+                by_run[(r["run"], r.get("k", ""))].append(r)
 
-        for run, recs in sorted(by_run.items()):
+        for (run, k), recs in sorted(by_run.items()):
             recs.sort(key=lambda r: int(r["epoch"]))
             scored = [r for r in recs if to_float(r.get(args.metric)) is not None]
             if not scored:
-                print(f"  {study} / {run}: no '{args.metric}' column, skipped")
+                print(f"  {study} / {run} (k={k}): no '{args.metric}' column, skipped")
                 continue
 
             best = max(scored, key=lambda r: to_float(r[args.metric]))
             final = recs[-1]
 
-            row = {"study": study, "run": run, "n_epochs_evaluated": len(recs)}
+            row = {"study": study, "run": run, "k": k, "n_epochs_evaluated": len(recs)}
             row.update(parse_params(run))
             row["best_epoch"] = best["epoch"]
             row["final_epoch"] = final["epoch"]
@@ -101,7 +107,7 @@ def main():
             row["best_minus_final"] = f"{bf - ff:.4f}" if (bf is not None and ff is not None) else ""
             rows.append(row)
 
-    fieldnames = (["study", "run"] + list(PARAM_PATTERNS)
+    fieldnames = (["study", "run", "k"] + list(PARAM_PATTERNS)
                   + ["n_epochs_evaluated", "best_epoch", "final_epoch", "best_minus_final"]
                   + [f"best_{c}" for c in METRIC_COLS]
                   + [f"final_{c}" for c in METRIC_COLS])
@@ -114,9 +120,9 @@ def main():
 
     print(f"Wrote {args.out}  ({len(rows)} runs from {len(files)} study file(s), best epoch by {args.metric})\n")
     w = max(len(r["run"]) for r in rows)
-    print(f"{'run':<{min(w, 70)}} {'best_ep':>8} {'best':>9} {'final':>9} {'b-f':>8}")
+    print(f"{'run':<{min(w, 70)}} {'k':>8} {'best_ep':>8} {'best':>9} {'final':>9} {'b-f':>8}")
     for r in rows:
-        print(f"{r['run'][:70]:<{min(w, 70)}} {r['best_epoch']:>8} "
+        print(f"{r['run'][:70]:<{min(w, 70)}} {r['k']:>8} {r['best_epoch']:>8} "
               f"{to_float(r[f'best_{args.metric}']):>9.4f} {to_float(r[f'final_{args.metric}']):>9.4f} "
               f"{r['best_minus_final']:>8}")
 
