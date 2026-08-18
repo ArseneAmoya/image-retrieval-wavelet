@@ -32,17 +32,22 @@ import main.engine as eng
 # map_level0, bit_balance*, worst_bit_balance* -- the only ones actually read
 # into a CSV -- were computed correctly either way), just wasted time/memory
 # on metrics nothing reads. Now that the passthrough is fixed, this list is
-# finally effective, and 'mean_average_precision_at_r'/'pr'/'recall_classic'
-# (both knn-requiring, previously missing from this list because they didn't
+# finally effective, and 'mean_average_precision_at_r'/'pr' (both
+# knn-requiring, previously missing from this list because they didn't
 # matter when the list was a no-op) are added below for the same reason
 # 'map' needs extra_exclude at large k.
 BASE_EXCLUDE_METRICS = [
     "mean_reciprocal_rank", "mean_average_precision", "mean_average_precision_at_r",
-    "precision_at_1", "recall_at_1", "r_precision", 'rpr', 'pr', 'pr_rc', 'recall_classic',
+    "precision_at_1", "recall_at_1", "r_precision", 'rpr', 'pr', 'pr_rc',
     "recall_at_1000", "recall_at_100",
     "recall_at_10", "recall_at_16", "recall_at_20", "recall_at_30", "recall_at_32", "recall_at_4", "recall_at_8",
     "recall_at_2", "recall_at_10",
 ]
+# NOTE: "recall_classic" appears in CustomCalculator.requires_knn()'s extra
+# list but has no corresponding calculate_recall_classic method -- it's not a
+# real metric name and check_primary_metrics() rejects it if you try to
+# exclude it (ValueError: not in the valid metric list). Left out here for
+# that reason; harmless either way since it's never actually computed.
 
 
 def load_and_evaluate(
