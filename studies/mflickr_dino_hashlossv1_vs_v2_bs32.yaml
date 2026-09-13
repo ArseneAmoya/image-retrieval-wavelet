@@ -1,0 +1,67 @@
+study_name: mflickr_dino_hashlossv1_vs_v2_bs32
+
+# HashLoss (V1) vs HashLossV2 on MIRFLICKR-25K, single DINOv2 ViT-S/14
+# hashing backbone (not the multi-branch wavelet model used in the
+# mflickr_final_headline study) -- batch_size=32, everything else held
+# fixed, so the only thing that differs between the two dispatched jobs is
+# the loss's proxy handling:
+#   V1: tanh(embeddings) -> F.normalize (both embeddings & proxies) -> cosine
+#       sim * scale -> BCE, + quant_loss on the embeddings themselves.
+#   V2: tanh(embeddings), tanh(proxies) -> raw dot product / embedding_size
+#       * scale -> BCE, + proxy_polarization on the proxies only (no
+#       embedding-level quantization term yet -- see earlier discussion:
+#       this makes the comparison not purely about proxy-init/normalization,
+#       V1 still gets a quantization assist V2 doesn't).
+#
+# transform: basic (NOT basic_swt) -- basic.yaml's own header comment
+# names DINOHashBaseline explicitly as its intended pairing (single plain
+# RGB image in; basic_swt/voc_raw4 stack into [C,4,H,W] for the wavelet
+# branches only, which this model doesn't take).
+#
+# dataset.kwargs.data_dir left at config/dataset/mflickr.yaml's own default
+# (../data/mirflickr) rather than mflickr_final_headline.yaml's Colab path
+# (/content/data/mirflickr) -- ADJUST to wherever MIRFLICKR actually lives
+# on this machine before running.
+#
+# CRITICAL wiring note (same as voc_final_headline.yaml / mflickr_final_headline.yaml):
+# loss.0.kwargs.embedding_size must equal model.kwargs.binary_config.nbits.
+# Both fixed at 64 here (single bit-length, not swept) since this run is
+# about comparing V1 vs V2, not bit-length ablation.
+base_overrides:
+  # Config groups
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14 -- swap to baseline_vitb_hash for ViT-B/14
+  transform: basic
+  dataset: mflickr
+
+  # dataset.kwargs.data_dir: ../data/mirflickr   # uncomment + edit if your local path differs
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581              # placeholder, matches MIRFLICKR convention
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32                        # = batch_size, no Ghost-BN path
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+sweep_zip:
+  loss: [hash_loss, hash_loss_v2]

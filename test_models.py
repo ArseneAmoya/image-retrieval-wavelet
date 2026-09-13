@@ -7,7 +7,7 @@ from torchinfo import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def test_transforms(transform_cfg_path='config/transform/cub.yaml'):
+def test_transforms(transform_cfg_path='config/transform/voc_swt.yaml'):
     transform_cfg = OmegaConf.load(transform_cfg_path)
 
     getter = Getter()
@@ -38,7 +38,7 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
 
     print("Input shape:", x_transformed.shape)  # Doit être [3, H, W]
 
-    model_configs = OmegaConf.load('config/model/resnet_hashing.yaml')
+    model_configs = OmegaConf.load('config/model/multidino_attention_hashing_ortho.yaml')
 
     getter = Getter()
     model = getter.get_model(model_configs).to(device)
@@ -60,7 +60,9 @@ def test_retrievalnet_with_wresnet(freeze_bn=False):
             print(f"type: {type(param)}")
             i += 1
 
-    model.train()
+    # eval(), not train(): this is a shape/output smoke test under no_grad, and
+    # BatchNorm1d can't compute batch statistics from a single sample in train mode.
+    model.eval()
     with torch.no_grad():
         output = model(x_transformed.unsqueeze(0))  # Shape [batch_size, 3, H, W]
 

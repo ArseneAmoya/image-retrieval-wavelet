@@ -1,0 +1,21 @@
+- name: HashLossV3
+  weight: 1.0
+  kwargs:
+    num_classes: 20       # 20 classes pour PASCAL VOC
+    embedding_size: 64
+        # Sera écrasé en ligne de commande pour 16 et 32 bits
+    scale: 2.0
+    proxy_polarization_weight: 0.05
+
+    freeze_centers: true   # hybrid init, centers fixed at init (compare vs hash_loss_v3_trainable.yaml)
+
+    # Produced once by: python -m scripts.compute_class_cooccurrence
+    #   --dataset VOC2012Hashing --data_dir <same as config/dataset/voc.yaml> \
+    #   --mode train --out data/voc_train_label_matrix.npy
+    label_matrix_path: data/voc_train_label_matrix.npy
+    semantic_embeddings_path: null   # not wired up yet — leave null for now
+    alpha: 0.5
+    init_seed: 42
+
+    # No optimizer block needed: freeze_centers=true means no trainable
+    # parameters, so HashLossV3 never builds a loss_optimizer.
