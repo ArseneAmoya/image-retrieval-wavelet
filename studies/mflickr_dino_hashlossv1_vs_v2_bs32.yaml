@@ -35,7 +35,7 @@ base_overrides:
   dataset: mflickr
 
   # dataset.kwargs.data_dir: ../data/mirflickr   # uncomment + edit if your local path differs
-
+  dataset.kwargs.data_dir: /content/data/mirflickr
   dataset.sampler.kwargs.batch_size: 32
   loss.0.kwargs.num_classes: 38
 
