@@ -6,6 +6,7 @@
         # Sera écrasé en ligne de commande pour 16 et 32 bits
     quant_weight: 0.1     # Le poids de la pénalité de binarisation
     scale: 15.0           # Le facteur d'échelle pour la similarité Cosinus
+    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics
 
     # La nouveauté : La configuration de l'optimiseur des Proxies
     optimizer:

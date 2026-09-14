@@ -6,6 +6,7 @@
         # Sera écrasé en ligne de commande pour 16/32/128 bits
     scale: 2.0
     proxy_polarization_weight: 0.05
+    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics
 
     optimizer:
       name: AdamW

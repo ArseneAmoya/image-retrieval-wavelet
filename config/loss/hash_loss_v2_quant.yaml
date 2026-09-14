@@ -7,6 +7,7 @@
     scale: 2.0
     proxy_polarization_weight: 0.05
     quant_weight: 0.1     # same value as HashLoss V1's quant_weight -- directly comparable
+    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics
 
     optimizer:
       name: AdamW
