@@ -103,6 +103,16 @@ def _single_pass_optimization(
                 losses.append(weight * loss)
 
             logs[crit.__class__.__name__] = loss.item()
+            # Every named sub-term the criterion chooses to expose (e.g.
+            # HashLoss: bce/quant; HashLossV2Quant: bit_bce/proxy_polarization/
+            # quant, plus diag_* proxy diagnostics when log_proxy_diagnostics
+            # is on) -- logged separately from the combined per-criterion
+            # total above so each term's own evolution is visible. Values may
+            # be detached tensors (loss terms) or plain floats
+            # (diagnostic_stats' output) -- handle both.
+            for comp_name, comp_value in getattr(crit, 'last_components', {}).items():
+                value = comp_value.item() if torch.is_tensor(comp_value) else comp_value
+                logs[f"{crit.__class__.__name__}_{comp_name}"] = value
             if memory:
                 if epoch >= config.memory.activate_after:
                     mem_loss = mem_loss.mean()
@@ -238,6 +248,9 @@ def _gradient_cached_optimization(
             loss = loss.mean()
             losses.append(weight * loss)
             logs[crit.__class__.__name__] = loss.item()
+            for comp_name, comp_value in getattr(crit, 'last_components', {}).items():
+                value = comp_value.item() if torch.is_tensor(comp_value) else comp_value
+                logs[f"{crit.__class__.__name__}_{comp_name}"] = value
 
             if memory and epoch >= config.memory.activate_after:
                 mem_loss = mem_loss.mean()

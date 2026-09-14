@@ -1,6 +1,10 @@
 # @package _group_
 experiment_name: ???
 log_dir: .
+# Per-epoch training-loss / eval-metric CSVs (main/engine/csv_logger.py), one
+# pair of files per experiment_name, kept separate from log_dir's checkpoints
+# and Hydra logs. Override per-study if you want them elsewhere.
+csv_log_dir: ./csv_metrics
 seed: 333
 resume: null
 maybe_resume: False

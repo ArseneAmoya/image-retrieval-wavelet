@@ -1,0 +1,64 @@
+study_name: mflickr_dino_hashlossv1_quant_ablation_bs32
+
+# Isolates whether HashLoss V1's quant_weight term specifically is what kept
+# it stable in mflickr_dino_hashlossv1_vs_v2_bs32.yaml (V1 vs V2: V1
+# maphashing_level0 82.75 vs V2's 79.07, V2's bit_balance_level0 collapsing
+# 63%->41% while V1 stayed flat ~50-53%) -- as opposed to V1's other
+# structural difference from V2 (tanh + F.normalize + cosine similarity,
+# vs V2's tanh-only + raw dot product).
+#
+# Both jobs use loss: hash_loss (V1's own architecture, unchanged) with
+# ONLY quant_weight swept -- 0.1 (== the value actually used in the earlier
+# comparison) vs 0.0 (quant term fully off). If the 0.0 run reproduces V2's
+# bit-collapse pattern (bit_balance dropping, maphashing crossing over and
+# crashing around epoch 15-20) despite still using F.normalize, that's
+# direct evidence the quant term itself -- not the normalization path -- is
+# what was stabilizing V1. If it does NOT collapse, F.normalize itself is
+# doing the stabilizing, not quant_weight, and the earlier causal read was
+# wrong.
+#
+# log_proxy_diagnostics: true on both jobs, plus every loss component
+# (bce, quant) now logged live via main/losses/hash_loss.py's
+# last_components -> main/engine/base_update.py -> TensorBoard (every key,
+# no filter) + main/engine/csv_logger.py's per-epoch CSVs.
+#
+# Same seed/backbone/batch_size=32/bits as the earlier two studies.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.scale: 15.0
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss.0.kwargs.quant_weight: [0.1, 0.0]

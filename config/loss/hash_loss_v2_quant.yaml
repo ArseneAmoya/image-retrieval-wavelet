@@ -1,0 +1,15 @@
+- name: HashLossV2Quant
+  weight: 1.0
+  kwargs:
+    num_classes: 38       # overridden per-dataset in study base_overrides (38 for MIRFLICKR, 20 for VOC)
+    embedding_size: 64
+        # Sera écrasé en ligne de commande pour 16/32/128 bits
+    scale: 2.0
+    proxy_polarization_weight: 0.05
+    quant_weight: 0.1     # same value as HashLoss V1's quant_weight -- directly comparable
+
+    optimizer:
+      name: AdamW
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0001

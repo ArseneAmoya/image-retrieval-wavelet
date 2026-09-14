@@ -1,0 +1,53 @@
+study_name: mflickr_dino_hashlossv1_vs_v2_vs_v2quant_bs32
+
+# Follow-up to mflickr_dino_hashlossv1_vs_v2_bs32.yaml, which found V1
+# beating V2 on maphashing_level0 (82.75 vs 79.07 final) via bit collapse
+# (bit_balance_level0 63%->41% for V2, flat ~50-53% for V1) -- traced to V2
+# having no embedding-level quantization/saturation pressure. This adds a
+# third job: HashLossV2Quant (V2 + the same fixed quant_weight=0.1 term as
+# V1's own quant_loss, exposed separately as *_quant in both TensorBoard and
+# the per-epoch CSVs -- see main/losses/hash_loss.py, main/engine/base_update.py,
+# main/engine/csv_logger.py) alongside re-runs of V1 and plain V2 for a
+# same-seed, same-everything three-way comparison.
+#
+# Everything else identical to the previous study: DINOv2 ViT-S/14,
+# batch_size=32, transform=basic, 64 bits, MIRFLICKR-25K.
+#
+# CRITICAL wiring note (same as before): loss.0.kwargs.embedding_size must
+# equal model.kwargs.binary_config.nbits.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14 -- swap to baseline_vitb_hash for ViT-B/14
+  transform: basic
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss: [hash_loss, hash_loss_v2, hash_loss_v2_quant]

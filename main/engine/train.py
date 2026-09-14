@@ -12,6 +12,7 @@ from .evaluate import evaluate
 from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
 from .DSCH.train import train_epoch
+from .csv_logger import EpochCSVLogger
 
 
 def train(
@@ -35,6 +36,13 @@ def train(
     lib.LOGGER.info(f"Training of model {config.experience.experiment_name} for {config.experience.max_iter} epochs with {config.experience.step_per_epoch} steps per epoch")
     best_score = 0.
     best_model = None
+
+    # Per-epoch CSV mirror of the training-loss / eval-metric curves, kept in
+    # its own folder (separate from experience.log_dir's checkpoints/Hydra
+    # logs) so it's easy to keep/diff/share on its own -- see csv_logger.py.
+    csv_log_dir = getattr(config.experience, "csv_log_dir", "./csv_metrics")
+    train_csv = EpochCSVLogger(csv_log_dir, config.experience.experiment_name, "_train")
+    eval_csv = EpochCSVLogger(csv_log_dir, config.experience.experiment_name, "_eval")
 
     batch_map_calculator, batch_map_metric = (None, None)
     if getattr(config.experience, "batch_map_proxy", False):
@@ -86,9 +94,15 @@ def train(
             batch_map_calculator=batch_map_calculator,
             batch_map_metric=batch_map_metric,
         )
+        # Every per-epoch training scalar (total_loss, each criterion's own
+        # combined total, and every last_components sub-term it exposes --
+        # bce/quant, bit_bce/proxy_polarization/quant, diag_* proxy
+        # diagnostics, ... -- see base_update.py) goes to TensorBoard, so any
+        # component any loss chooses to expose is visible without touching
+        # this file again.
         for key, value in logs.items():
-            if key.startswith("proxy_"):
-                writer.add_scalar(f"Train/{key}", value, e)
+            writer.add_scalar(f"Train/{key}", value, e)
+        train_csv.log({"epoch": e, **logs})
         # print(criterion)
         # print(optimizer)
         # print(scheduler)
@@ -203,6 +217,7 @@ def train(
                         continue
                     lib.LOGGER.info(f"{split} --> {k} : {np.around(v*100, decimals=2)}")
                     writer.add_scalar(f"{split.title()}/Evaluation/{k}", v, e)
+                eval_csv.log({"epoch": e, "split": split, **{k: v for k, v in mtrc.items() if k != 'epoch'}})
                 print()
 
         end_time = time()
