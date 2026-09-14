@@ -1,0 +1,63 @@
+study_name: mflickr_dino_hashlossv1_scale_ablation_bs32
+
+# Control #1 for the HashLossV2 collapse diagnosis (see
+# mflickr_dino_hashlossv2_diagnostic_bs32.yaml and the project doc
+# claude/hash-loss-v1-vs-v2-mflickr-results.md): V2's collapse was traced to
+# two compounding mechanisms -- (1) proxy_polarization has no inter-proxy
+# repulsion term, letting proxies fuse (min_proxy_hamming_distance -> 0
+# right at the epoch 15-20 crash), and (2) V2's scale=2.0 (vs V1's 15.0)
+# leaves bit_bce's gradient too weak (-12% over 50 epochs vs V1's -83%) to
+# provide the implicit separating pressure that keeps V1's proxies apart.
+#
+# V1 has NO proxy_polarization term at all, so dropping its scale to 2.0
+# tests mechanism (2) in ISOLATION, without mechanism (1)'s active fusion
+# pressure. Two readable outcomes:
+#   - V1 stays stable (no collapse, min_proxy_hamming_distance doesn't
+#     crash) but bce learns much less (~flat, like V2's bit_bce) -> weak
+#     scale alone slows/weakens classification learning but is NOT
+#     sufficient by itself to cause collapse; polarization's active pull is
+#     the necessary ingredient. Expected outcome.
+#   - V1 also collapses at scale=2.0 -> scale alone can be sufficient, no
+#     polarization needed; would weaken the polarization-fusion reading.
+#
+# Same seed/backbone/batch_size=32/bits/quant_weight=0.1 (known-stable) as
+# every other study in this line. log_proxy_diagnostics=true throughout.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss.0.kwargs.scale: [15.0, 2.0]
