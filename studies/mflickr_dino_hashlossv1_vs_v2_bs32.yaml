@@ -18,10 +18,9 @@ study_name: mflickr_dino_hashlossv1_vs_v2_bs32
 # RGB image in; basic_swt/voc_raw4 stack into [C,4,H,W] for the wavelet
 # branches only, which this model doesn't take).
 #
-# dataset.kwargs.data_dir left at config/dataset/mflickr.yaml's own default
-# (../data/mirflickr) rather than mflickr_final_headline.yaml's Colab path
-# (/content/data/mirflickr) -- ADJUST to wherever MIRFLICKR actually lives
-# on this machine before running.
+# dataset.kwargs.data_dir: /content/data/mirflickr -- same path as
+# config/dataset/mflickr.yaml's own default now (matches
+# mflickr_final_headline.yaml's convention too).
 #
 # CRITICAL wiring note (same as voc_final_headline.yaml / mflickr_final_headline.yaml):
 # loss.0.kwargs.embedding_size must equal model.kwargs.binary_config.nbits.
@@ -34,7 +33,6 @@ base_overrides:
   transform: basic
   dataset: mflickr
 
-  # dataset.kwargs.data_dir: ../data/mirflickr   # uncomment + edit if your local path differs
   dataset.kwargs.data_dir: /content/data/mirflickr
   dataset.sampler.kwargs.batch_size: 32
   loss.0.kwargs.num_classes: 38
