@@ -1,0 +1,84 @@
+study_name: mflickr_dino_hashlossv2_diagnostic_bs32
+
+# Diagnostic-only rerun of HashLossV2 ALONE (not a V1-vs-V2 comparison this
+# time) -- same seed/backbone/batch_size=32/bits as
+# mflickr_dino_hashlossv1_vs_v2_bs32.yaml, where V2 crossed over and
+# collapsed between epochs 15-20 (bit_balance_level0 63%->41%,
+# maphashing_level0 81.4->77.5).
+#
+# That original run had log_proxy_diagnostics=False (the diagnostics kwarg
+# didn't exist yet), so we have NO component/diagnostic curves from the
+# actual collapse window -- only the final bit_balance/maphashing numbers.
+# This rerun turns log_proxy_diagnostics on so we can watch, live, exactly
+# what happens mechanically around epochs 10-25:
+#
+#   - HashLossV2_bit_bce, HashLossV2_proxy_polarization: the two loss terms
+#     V2 actually optimizes.
+#   - HashLossV2_diag_mean_abs_embedding: how saturated (tanh -> +-1) the
+#     SAMPLE embeddings are.
+#   - HashLossV2_diag_min_proxy_hamming_distance: whether proxies are
+#     converging/fusing (Hamming distance -> 0) around the collapse window.
+#   - HashLossV2_diag_intra_class_variance: whether within-class embeddings
+#     are collapsing onto a single point.
+#
+# Working hypothesis being tested (nothing assumed, just read the curves):
+# V2 has no term anchoring embedding saturation (unlike V1's quant_loss or
+# HashLossV2Quant's added-back quant_loss -- see the quant ablation study,
+# which already showed quant_weight does NOT explain V1's stability, so
+# this is now specifically about V2's *architecture*, not the missing
+# quant term). proxy_polarization independently pushes proxies toward +-1
+# saturation over training. Since V2's logits are an UNNORMALIZED dot
+# product (h @ proxies_bounded.t()) / embedding_size * scale rather than a
+# cosine similarity, the effective logit scale is a moving target that
+# depends on how saturated embeddings AND proxies both are -- if proxies
+# saturate faster than embeddings do (no counter-pressure keeping the
+# embedding side saturated in lockstep), the implicit decision boundary
+# proxies define keeps shifting under the embeddings mid-training, which
+# could destabilize bit assignment right when proxy_polarization drops
+# fastest. Reading proxy_polarization's curve against
+# diag_mean_abs_embedding's curve directly tests this without needing any
+# new logged fields.
+#
+# Single job (loss fixed to hash_loss_v2, no sweep target) -- sweep_zip
+# kept as a single-element list purely to reuse the existing
+# run_plan.py/-m multirun dispatch path unchanged.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss_v2
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.scale: 2.0
+  loss.0.kwargs.proxy_polarization_weight: 0.05
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss: [hash_loss_v2]
