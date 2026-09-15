@@ -1,0 +1,65 @@
+study_name: mflickr_dino_hashlossv2_scale_sweep_bs32
+
+# Follow-up to mflickr_dino_hashlossv1_scale_ablation_bs32.yaml, which
+# isolated `scale` (not proxy_polarization) as the dominant, sufficient
+# cause of proxy fusion: V1 (no proxy_polarization term at all) collapsed
+# just as hard as V2 when scale=2.0, while scale=15.0 stayed stable
+# (final maphashing_level0 82.23 vs 77.20; min_proxy_hamming_distance
+# hit 0 by epoch ~27 at scale=2.0 vs staying separated at scale=15.0).
+#
+# scale=2.0 for V2 is already covered by mflickr_dino_hashlossv2_diagnostic_bs32.yaml
+# (collapsed: min_proxy_hamming_distance -> 0 by epoch ~19, maphashing_level0
+# plateaus ~79-80) -- no need to rerun it here.
+#
+# This sweeps HashLossV2's scale across [10.0, 15.0, 30.0, 50.0] (V2's own
+# architecture -- tanh-bounded proxies + raw dot product / embedding_size *
+# scale -- unchanged, proxy_polarization_weight left at its default 0.05)
+# to find where V2 stabilizes, and whether going too high overshoots into
+# a different failure mode (e.g. over-confident/saturating logits too
+# early, or an even faster proxy_polarization "cheap win" than bit_bce can
+# keep up with -- scale doesn't change proxy_polarization's own gradient,
+# so a much stronger bit_bce competing pressure at high scale could still
+# leave polarization's un-opposed per-proxy pull as a residual risk; watch
+# min_proxy_hamming_distance at every scale value, not just final mAP).
+#
+# Same seed/backbone/batch_size=32/bits as every other study in this line.
+# log_proxy_diagnostics=true throughout.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss_v2
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.proxy_polarization_weight: 0.05
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss.0.kwargs.scale: [10.0, 15.0, 30.0, 50.0]
