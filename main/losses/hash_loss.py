@@ -168,13 +168,21 @@ class HashLossV3(nn.Module):
     def __init__(self, num_classes=20, embedding_size=64, scale=2.0,
                  proxy_polarization_weight=0.05, freeze_centers=False,
                  label_matrix_path=None, semantic_embeddings_path=None,
-                 alpha=0.5, init_seed=None, **kwargs):
+                 alpha=0.5, init_seed=None, log_proxy_diagnostics=False, **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.embedding_size = embedding_size
         self.scale = scale
         self.proxy_polarization_weight = proxy_polarization_weight
         self.freeze_centers = freeze_centers
+        # Same convention as HashLoss/HashLossV2/HashLossV2Quant: gates both
+        # diagnostic_stats() (diag_* last_components) and, generically, the
+        # per-epoch raw proxy snapshot in main/engine/proxy_logger.py (which
+        # duck-types on `log_proxy_diagnostics` + a `proxies` attribute, not
+        # on the loss's class -- this was previously missing here, so V3 runs
+        # got neither diagnostic and no snapshot even with the flag set).
+        self.log_proxy_diagnostics = log_proxy_diagnostics
+        self.last_components = {}
 
         label_matrix = None
         if label_matrix_path is not None:
@@ -212,6 +220,14 @@ class HashLossV3(nn.Module):
         bit_bce = F.binary_cross_entropy_with_logits(logits, labels.float())
 
         proxy_polarization = torch.mean((proxies_bounded.abs() - 1.0) ** 2)
+
+        self.last_components = {
+            "bit_bce": bit_bce.detach(),
+            "proxy_polarization": proxy_polarization.detach(),
+        }
+        if self.log_proxy_diagnostics:
+            diag = diagnostic_stats(embeddings, self.proxies, labels)
+            self.last_components.update({f"diag_{k}": v for k, v in diag.items()})
 
         loss = bit_bce + self.proxy_polarization_weight * proxy_polarization
         return loss

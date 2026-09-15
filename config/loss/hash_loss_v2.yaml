@@ -5,8 +5,16 @@
     embedding_size: 64
         # Sera écrasé en ligne de commande pour 16/32/128 bits
     scale: 2.0
-    proxy_polarization_weight: 0.05
-    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics
+    # 0.0 since ablation #5 (mflickr_dino_hashlossv2_polarization_ablation_bs32,
+    # see claude/hash-loss-v1-vs-v2-mflickr-results.md): at scale=15 fixed,
+    # proxy_polarization_weight=0.05 vs 0.0 made no measurable difference to
+    # fusion timing (min_proxy_hamming_distance hits 0 in both, if anything
+    # slightly *earlier* with polarization on) or to any retrieval/training
+    # metric (all deltas <=0.4 points except worst_bit_balance_level0, which
+    # favored 0.0). Kept as an explicit override (not deleted) in case a
+    # later study wants to reintroduce it.
+    proxy_polarization_weight: 0.0
+    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics + a per-epoch raw proxy snapshot (main/engine/proxy_logger.py)
 
     optimizer:
       name: AdamW

@@ -13,6 +13,7 @@ from .landmark_evaluation import landmark_evaluation
 from . import checkpoint
 from .DSCH.train import train_epoch
 from .csv_logger import EpochCSVLogger
+from .proxy_logger import save_proxy_snapshot
 
 
 def train(
@@ -103,6 +104,10 @@ def train(
         for key, value in logs.items():
             writer.add_scalar(f"Train/{key}", value, e)
         train_csv.log({"epoch": e, **logs})
+        # Raw proxy snapshot, one .pt per epoch, for any loss run with
+        # log_proxy_diagnostics=True -- see proxy_logger.py for why (the
+        # full-model checkpoint below never includes the loss's proxies).
+        save_proxy_snapshot(csv_log_dir, config.experience.experiment_name, e, criterion)
         # print(criterion)
         # print(optimizer)
         # print(scheduler)

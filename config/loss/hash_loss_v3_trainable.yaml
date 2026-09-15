@@ -5,7 +5,13 @@
     embedding_size: 64
         # Sera écrasé en ligne de commande pour 16 et 32 bits
     scale: 2.0
-    proxy_polarization_weight: 0.05
+    # 0.0 by default project-wide since ablation #5 on HashLossV2 (mflickr,
+    # scale=15) found proxy_polarization neither prevents/delays proxy fusion
+    # nor changes any retrieval/training metric -- see
+    # claude/hash-loss-v1-vs-v2-mflickr-results.md. Not separately re-validated
+    # here at V3's own scale=2.0/VOC setup; override back to 0.05 if a V3-specific
+    # study wants to test it directly.
+    proxy_polarization_weight: 0.0
 
     freeze_centers: false   # hybrid init, centers still gradient-learned (compare vs hash_loss_v3_frozen.yaml)
 
@@ -16,6 +22,7 @@
     semantic_embeddings_path: null   # not wired up yet — leave null for now
     alpha: 0.5
     init_seed: 42
+    log_proxy_diagnostics: false   # set true to also log diag_* proxy/embedding diagnostics + a per-epoch raw proxy snapshot (main/engine/proxy_logger.py) -- now wired up for HashLossV3 too
 
     optimizer:
       name: AdamW
