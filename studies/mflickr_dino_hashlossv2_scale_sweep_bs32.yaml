@@ -62,4 +62,4 @@ base_overrides:
   experience.csv_log_dir: ./csv_metrics
 
 sweep_zip:
-  loss.0.kwargs.scale: [10.0, 15.0, 30.0, 50.0]
+  loss.0.kwargs.scale: [15.0, 30.0]
