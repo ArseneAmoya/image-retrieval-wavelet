@@ -36,7 +36,7 @@ base_overrides:
 
   dataset.sampler.kwargs.batch_size: 32
   loss.0.kwargs.num_classes: 38
-  loss.0.kwargs.scale: 2.0
+  loss.0.kwargs.scale: 15.0
   loss.0.kwargs.log_proxy_diagnostics: true
 
   model.kwargs.binary_config.nbits: 64
