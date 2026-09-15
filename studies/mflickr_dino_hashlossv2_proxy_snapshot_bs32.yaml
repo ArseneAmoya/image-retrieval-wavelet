@@ -1,0 +1,60 @@
+study_name: mflickr_dino_hashlossv2_proxy_snapshot_bs32
+
+# Not a new ablation question -- ablation #5 (mflickr_dino_hashlossv2_polarization_ablation_bs32)
+# already answered "does proxy_polarization matter?" (no: it neither prevents/delays fusion nor
+# changes any retrieval/training metric at scale=15, see
+# claude/hash-loss-v1-vs-v2-mflickr-results.md). No need to rerun that sweep.
+#
+# What's still missing is the raw proxy trajectory itself. main/engine/proxy_logger.py
+# (save_proxy_snapshot(), wired into main/engine/train.py) didn't exist yet when ablations
+# #2-#5 ran, so none of them have anything to reconstruct the "which proxies fuse, and does it
+# correlate with label co-occurrence" story from -- only diagnostic_stats()'s scalar
+# min_proxy_hamming_distance was ever logged, never which pair, never the full proxies tensor.
+#
+# This is a single confirmatory run of the now-settled config (V2, scale=15.0,
+# proxy_polarization_weight=0.0 -- both now also the defaults in config/loss/hash_loss_v2.yaml)
+# with log_proxy_diagnostics=true, so proxy_logger.py starts writing one .pt snapshot per epoch
+# to <csv_log_dir>/proxies/<experiment_name>/epoch_{NNN}.pt. That's what the pairwise
+# distance-matrix-over-time / label-co-occurrence analysis will be built from next.
+#
+# Single job, no sweep -- this isn't the rigorous final ablation (same "quick sanity check
+# along the way" spirit as the scale sweep), just the run that finally has proxy snapshots.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss_v2
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.scale: 15.0
+  loss.0.kwargs.proxy_polarization_weight: 0.0
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip: {}

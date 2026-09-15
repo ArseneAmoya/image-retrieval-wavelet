@@ -90,6 +90,47 @@ def compute_npmi_matrix(label_matrix, eps=1e-8):
     return np.clip(npmi, -1.0, 1.0)
 
 
+def compute_iou_matrix(label_matrix, eps=1e-8):
+    """
+    "Real" (literal) intersection-over-union between classes, from a
+    multi-hot label matrix -- as opposed to compute_npmi_matrix() above,
+    which measures statistical association (co-occur more/less than chance
+    given each class's own base rate), IoU measures plain set overlap of
+    which *images* each class is attached to, with no chance-correction.
+
+    Args:
+        label_matrix: (N, C) array-like, multi-hot (0/1).
+        eps: guards the 0/0 case for a class pair where neither ever appears.
+
+    Returns:
+        iou: (C, C) numpy array in [0, 1]. iou[i, i] = 1 by convention.
+            iou[i, j] = |images with both i and j| / |images with i or j|.
+
+    Two classes can have IoU near 0 (they almost never share images -- most
+    class pairs, since each image only carries a handful of the 38 tags)
+    while still having NPMI near +1 (whenever they DO co-occur, it's far
+    more than chance would predict for their rarity) -- the two signals
+    answer different questions and are both useful to have alongside the
+    proxy-fusion analysis: does a fused pair share a lot of images (IoU), or
+    just co-occur unusually often relative to how rare each one is (NPMI)?
+    """
+    Y = np.asarray(label_matrix, dtype=np.float64)
+    if Y.ndim != 2:
+        raise ValueError(f"label_matrix must be (N, C), got shape {Y.shape}")
+
+    co_occurrence = Y.T @ Y  # (C, C): both i and j present
+    marginal = np.diag(co_occurrence).copy()  # (C,): i present (any j)
+
+    union = marginal[:, None] + marginal[None, :] - co_occurrence
+    iou = np.divide(
+        co_occurrence, union,
+        out=np.zeros_like(co_occurrence),
+        where=union > eps,
+    )
+    np.fill_diagonal(iou, 1.0)
+    return iou
+
+
 def classical_mds(affinity, dim, eps=1e-8):
     """
     Classical (spectral) MDS: embed C points into `dim`-dimensional
