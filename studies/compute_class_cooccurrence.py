@@ -10,11 +10,13 @@ have to be precomputed once and pointed to by path.
 
 Usage (from the repo root, same environment as the rest of the pipeline):
 
-    python -m scripts.compute_class_cooccurrence \
+    python -m studies.compute_class_cooccurrence \
         --dataset VOC2012Hashing \
         --data_dir /content/voc2012 \
         --mode train \
         --out data/voc_train_label_matrix.npy
+
+(Moved here from scripts/ -- that folder isn't pushed to the Zindi remote.)
 
 The output is the raw (N, C) multi-hot label matrix, not the co-occurrence
 matrix itself — HashLossV3 computes NPMI from it at load time via
@@ -24,6 +26,7 @@ support other statistics if needed, at the cost of a few KB more disk space
 for VOC-sized C.
 """
 import argparse
+import inspect
 import os
 
 import numpy as np
@@ -55,7 +58,14 @@ def main():
     args = parser.parse_args()
 
     dataset_cls = getattr(datasets, args.dataset)
-    dts = dataset_cls(data_dir=args.data_dir, mode=args.mode, transform=None, download=False)
+    # `download` is VOC2012Hashing-specific (auto-downloads VOCdevkit if
+    # missing) -- not every dataset class declares it (e.g. MIRFlickrHashing
+    # doesn't, since MIRFLICKR has no auto-download path), so only pass it
+    # when the constructor actually accepts it rather than assuming every
+    # dataset shares VOC's signature.
+    ctor_params = inspect.signature(dataset_cls.__init__).parameters
+    extra_kwargs = {"download": False} if "download" in ctor_params else {}
+    dts = dataset_cls(data_dir=args.data_dir, mode=args.mode, transform=None, **extra_kwargs)
 
     labels = dts.labels
     if len(labels) == 0:
