@@ -1,0 +1,24 @@
+# @package _group_
+# CenterHashLoss : l'objectif partagé par CSQ et SHC -- BCE des codes vers un
+# centre binaire fixe par classe, plus un terme de quantification. Seule la
+# SOURCE des centres distingue les deux méthodes :
+#
+#   centers: hadamard                       -> CSQ (Yuan et al., CVPR 2020)
+#   centers: data/shc_centers_<...>.pt      -> SHC (Chen et al., ACM TOIS 2025)
+#
+# Le fichier de centres SHC se produit avec studies/generate_shc_centers.py.
+#
+# ATTENTION : embedding_size doit valoir exactement
+# model.kwargs.binary_config.nbits. Une incohérence lève une erreur de forme
+# (les centres ne s'alignent plus), donc elle est bruyante -- contrairement au
+# n_bits de SCHLoss, qui l'était avant le garde-fou ajouté dans dsch.py.
+- name: CenterHashLoss
+  weight: 1.0
+  kwargs:
+    num_classes: 38
+    embedding_size: 64
+    centers: hadamard
+    quant_weight: 0.0001      # le lambda de CSQ
+    multi_label: true         # règle multi-label publiée par CSQ (vote majoritaire par bit)
+    centers_seed: 0           # seede le tirage de secours utilisé quand 2*bits < num_classes
+    log_diagnostics: true     # journalise la géométrie des centres (détecte un SHC dégénéré en Hadamard)

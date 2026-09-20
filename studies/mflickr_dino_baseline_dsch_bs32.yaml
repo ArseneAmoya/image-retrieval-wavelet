@@ -1,0 +1,56 @@
+study_name: mflickr_dino_baseline_dsch_bs32
+
+# Phase 1, baseline 3/3 : DSCH (SCHLoss) sur DINOv2 nu.
+#
+# DEUX REGLAGES INDISPENSABLES, sans lesquels cette baseline est fausse :
+#
+#   apply_tanh: true  -- la formule BI_BI = (k - batch @ batch.T) / 2 n'est une
+#     distance de Hamming que si les valeurs sont dans [-1, 1]. DINOHashBaseline
+#     sort des logits bruts non bornes, donc sans tanh les bornes lambda_l /
+#     lambda_u n'ont aucun sens. Le defaut de la loss est false (pour ne pas
+#     changer le comportement des configs existantes) : il FAUT le surcharger.
+#
+#   n_bits: 64  -- doit valoir exactement model.kwargs.binary_config.nbits.
+#     C'est le seul endroit ou la longueur de code entre dans cette loss, et
+#     c'est un simple scalaire : une incoherence ne plantait pas, elle
+#     rescalait silencieusement toutes les distances cibles. Un garde-fou a
+#     depuis ete ajoute dans main/losses/dsch.py pour la rendre bruyante.
+base_overrides:
+  loss: dsch
+  loss.0.kwargs.n_bits: 64
+  loss.0.kwargs.apply_tanh: true
+  loss.0.kwargs.alpha: 1
+  loss.0.kwargs.beta: 1
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  experience.seed: [333, 334, 335]

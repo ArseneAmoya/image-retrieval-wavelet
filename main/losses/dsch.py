@@ -29,6 +29,17 @@ class SCHLoss(nn.Module):
         self.max_func = torch.nn.ReLU()
 
     def forward(self, batch, labels):
+        # `n_bits` is the only place the code length enters this loss, and it is a
+        # plain scalar in the bound formula below -- a value that disagrees with the
+        # model's actual output width does NOT raise, it just silently rescales every
+        # target distance. (CSQ/SHC-style losses crash on such a mismatch because the
+        # center matrix shape no longer lines up; this one would not.) So check it.
+        if batch.shape[1] != self.n_bits:
+            raise ValueError(
+                f"SCHLoss got {batch.shape[1]}-dimensional codes but n_bits="
+                f"{self.n_bits}. Set loss.kwargs.n_bits and "
+                f"model.kwargs.binary_config.nbits to the same value."
+            )
         if self.apply_tanh:
             batch = torch.tanh(batch)
         batch_size = labels.size(0)

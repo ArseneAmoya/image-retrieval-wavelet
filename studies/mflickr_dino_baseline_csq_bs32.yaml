@@ -1,0 +1,46 @@
+study_name: mflickr_dino_baseline_csq_bs32
+
+# Phase 1, baseline 1/3 : CSQ (Yuan et al., CVPR 2020) sur DINOv2 nu.
+#
+# CSQ = CenterHashLoss avec des centres issus d'une matrice de Hadamard. Les
+# centres sont fixes et tous exactement a nbits/2 de distance de Hamming les uns
+# des autres -- la sortie de la loss l'affiche au demarrage, min/moyenne/max
+# doivent etre identiques, sinon ce ne sont pas des centres Hadamard.
+#
+# Trois graines, car l'argument du papier est la precision : un ecart entre
+# methodes n'a de sens que rapporte a la variance inter-graines.
+base_overrides:
+  loss: center_hash
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  experience.seed: [333, 334, 335]

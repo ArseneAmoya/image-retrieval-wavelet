@@ -45,5 +45,11 @@ class DINOHashBaseline(nn.Module):
 
         if self.training:
             return logits
-        else:
-            return torch.sign(logits)
+
+        # torch.sign(0) returns 0, which is neither +1 nor -1. A zero entry silently
+        # corrupts accuracy_calculator.calc_hamming_dist -- 0.5 * (q - qB @ rB.t())
+        # is only a Hamming distance when every entry is +/-1 -- and it does so
+        # without raising. Exact zeros are vanishingly unlikely out of a BatchNorm in
+        # float32, but the guard costs nothing and makes the output contract real.
+        codes = torch.sign(logits)
+        return torch.where(codes == 0, torch.ones_like(codes), codes)

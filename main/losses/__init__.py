@@ -20,6 +20,7 @@ from .hashnet_loss import HashNetAdapter
 from .csq_loss import CSQAdapter
 from .hhf_loss import HHFAdapter
 from .dsch import SCHLoss
+from .center_hash_loss import CenterHashLoss
 
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     'CSQAdapter',
     'HHFAdapter'
     'SCHLoss',
+    'CenterHashLoss',
 ]

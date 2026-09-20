@@ -1,0 +1,90 @@
+study_name: mflickr_dino_hashlossv2_proxy_wd_ablation_bs32
+
+# Follow-up to the proxy-snapshot trajectory analysis (see
+# claude/hash-loss-v1-vs-v2-mflickr-results.md, "Proxy snapshot run analysis"
+# sections + the containment/co-occurrence analysis that followed it).
+#
+# What we now know:
+#   - Fusion strength (cos similarity between two proxies at epoch 50) is
+#     predicted almost deterministically by CLASS SIZE (per-class isolation
+#     vs n_images: Spearman rho=-0.93), not by real semantic similarity
+#     (NPMI/IoU correlation ~0 once class size is controlled for).
+#   - It is NOT "shared samples pull the small class toward the big class":
+#     pairs with HIGH co-occurrence (containment) actually separate more
+#     (e.g. baby/baby_r1, 100% contained in "people", end up near-orthogonal
+#     to it, cos~0.1), while pairs that NEVER co-occur fuse hardest
+#     (cos~0.95), independent of whether the small class shares anything
+#     with its neighbor at all (both-small/n_shared=0 vs both-small/n_shared>0
+#     give the same ~0.945 mean fusion).
+#   - Mechanistic read: a genuine co-occurrence relationship (positive or
+#     the lack of one used discriminatively) gives bit_bce an informative,
+#     consistent gradient direction to position two proxies distinctly.
+#     A pair with NO co-occurrence signal at all gets no such direction --
+#     its relative position is undetermined by the data, so it drifts under
+#     the one force that IS always active regardless of data: AdamW's
+#     weight_decay on the proxy optimizer (config/loss/hash_loss_v2.yaml's
+#     `optimizer.kwargs.weight_decay: 0.0001`), which constantly pulls every
+#     proxy's raw norm toward the origin -- and toward each other, since
+#     they're all being pulled toward the same point.
+#
+# This study tests the most direct, cheapest fix implied by that mechanism:
+# remove the undirected pull by zeroing the proxy optimizer's weight_decay,
+# leaving everything else (including the now-default
+# proxy_polarization_weight=0.0) unchanged. Two readable outcomes:
+#   - weight_decay=0.0 measurably reduces/delays fusion for the
+#     no-co-occurrence-signal pairs specifically (check via
+#     scripts/analyze_proxy_trajectories.py on this run's snapshots,
+#     cross-referenced with mflickr_class_pair_similarity_verified.csv's
+#     n_shared_images -- the "both small, n_shared=0" bucket should end up
+#     less fused than in the weight_decay=0.0001 baseline) -> weight decay
+#     is (part of) the undirected drift force, as hypothesized.
+#   - No change -> undirected drift has another source (e.g. shared gradient
+#     directions from the embedding distribution itself, independent of any
+#     explicit decay term), and the fix needs to target that instead (e.g.
+#     class-balanced sampling to boost rare classes' own gradient signal, or
+#     an informed proxy initialization such as HashLossV3's NPMI+MDS init).
+#
+# Same seed/backbone/batch_size=32/bits/scale=15.0 as the proxy-snapshot run.
+# log_proxy_diagnostics=true throughout, so this run also produces its own
+# fresh per-epoch proxy snapshots (both weight_decay arms) for direct
+# before/after comparison with the existing snapshot set.
+base_overrides:
+  optimizer: basic
+  model: dino_hashing            # DINOv2 ViT-S/14
+  transform: basic
+  dataset: mflickr
+  loss: hash_loss_v2
+
+  dataset.sampler.kwargs.batch_size: 32
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.scale: 15.0
+  loss.0.kwargs.proxy_polarization_weight: 0.0
+  loss.0.kwargs.log_proxy_diagnostics: true
+
+  model.kwargs.binary_config.nbits: 64
+  loss.0.kwargs.embedding_size: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  loss.0.kwargs.optimizer.kwargs.weight_decay: [0.0001, 0.0]

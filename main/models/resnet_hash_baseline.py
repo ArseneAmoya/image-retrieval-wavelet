@@ -18,7 +18,7 @@ class ResNetHashBaseline(nn.Module):
 
     So this class mirrors DINOHashBaseline exactly:
       backbone -> pooled feature vector -> Linear(embed_dim, nbits, bias=not use_bn)
-      -> BatchNorm1d(nbits) -> raw logits in training, sign() at eval.
+      -> BatchNorm1d(nbits) -> raw logits in training, sign() at eval (zeros mapped to +1).
     `HashLoss` applies the tanh; `SCHLoss` needs `apply_tanh: true` (see
     main/losses/dsch.py).
     """
@@ -67,4 +67,13 @@ class ResNetHashBaseline(nn.Module):
 
         logits = self.hash_head(features)
 
-        return logits if self.training else torch.sign(logits)
+        if self.training:
+            return logits
+
+        # torch.sign(0) returns 0, which is neither +1 nor -1. A zero entry silently
+        # corrupts accuracy_calculator.calc_hamming_dist -- 0.5 * (q - qB @ rB.t())
+        # is only a Hamming distance when every entry is +/-1 -- and it does so
+        # without raising. Exact zeros are vanishingly unlikely out of a BatchNorm in
+        # float32, but the guard costs nothing and makes the output contract real.
+        codes = torch.sign(logits)
+        return torch.where(codes == 0, torch.ones_like(codes), codes)
