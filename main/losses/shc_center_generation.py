@@ -12,7 +12,18 @@ L'étage est entièrement agnostique aux labels : il ne voit que la matrice de
 similarité inter-classes S (num_classes x num_classes) et le nombre de bits.
 Vérifié : zéro occurrence de "label"/"target" dans le fichier d'origine.
 
-MODIFICATION APPORTÉE : une seule, le device global (voir plus bas).
+MODIFICATIONS APPORTÉES : deux, aucune algorithmique.
+  1. Le device global (voir plus bas).
+  2. Compatibilité PyTorch >= 2.6 : l'étage met en cache ses centres initiaux
+     (MDS) avec torch.save sur un tableau numpy, puis les recharge avec
+     torch.load. Depuis PyTorch 2.6, torch.load a weights_only=True par défaut
+     et refuse les tableaux numpy : la DEUXIÈME exécution dans une même session
+     plantait (UnpicklingError), la première passant car le cache n'existait
+     pas encore. `weights_only=False` rétablit exactement le comportement
+     qu'avait le code des auteurs sous le PyTorch de l'époque. Le fichier
+     rechargé est celui que cette fonction vient d'écrire. Le calcul MDS étant
+     seedé (random/np.random à 40), le cache rechargé est identique à une
+     régénération.
 
 BUGS D'ORIGINE VOLONTAIREMENT CONSERVÉS, pour rester fidèle au code qui a
 produit les résultats publiés :
@@ -355,7 +366,9 @@ def GenerateSemanticHashCenters(args, S):
     S = S.to(args.device)
     if os.path.exists(f'./save/HashCenters/{args.dataset}_MDS_HashCenters_bit_{args.code_length}.pt'):
         print('==========MDS HashCenters has already generated==========')
-        H = torch.load(f'./save/HashCenters/{args.dataset}_MDS_HashCenters_bit_{args.code_length}.pt')
+        # --- MODIFIÉ (compatibilité PyTorch >= 2.6, voir l'en-tête) ---
+        H = torch.load(f'./save/HashCenters/{args.dataset}_MDS_HashCenters_bit_{args.code_length}.pt',
+                       weights_only=False)
     else:
         H = GetMinimalDistanceHashCenter(args)
     print('==========start to generate SHC HashCenters==========')

@@ -1,0 +1,32 @@
+# @package _group_
+# Phase 2, etape 1/N : decomposition multi-frequence SEULE, isolee de tout le
+# reste (pas de prompt tuning, pas de LayerNorm par domaine, pas de fusion
+# "SOTA" avec regularisation ortho -- ces facteurs viennent plus tard, un a la
+# fois, cf. shareddino_attention_hashing_ortho*.yaml pour la version deja
+# instrumentee/couplee, gardee de cote pour l'instant).
+#
+# SharedDinoHashing : UN SEUL backbone DINOv2 partage, les 4 sous-bandes
+# ondelette (LL/LH/HL/HH, cf. transform: basic_swt) passent dedans en un seul
+# forward (reshape batch*4), puis fusion -> hash head. C'est le "shareddino"
+# du projet, par opposition au multi-branche (MultiDinoHashing, backbones
+# separes par bande).
+#
+# fusion_config.type: standard -> StandardFusionHead (cross-attention a 1
+# requete apprise sur les 4 bandes), le fusion head le plus simple du fichier
+# main/models/multi_dino_attention.py -- pas de regularisation ortho, pas de
+# hook d'instrumentation, pour isoler l'effet de la decomposition seule.
+name: SharedDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: false
+  binary_config:
+    nbits: 64
+  fusion_config:
+    type: 'standard'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+  with_autocast: true

@@ -830,7 +830,16 @@ class SharedDinoHashing(nn.Module):
         logits = self.hash_fc(fused_embedding)
         logits = self.bn(logits)
 
-        return torch.tanh(logits) if self.training else torch.sign(logits)
+        # Was: torch.tanh(logits) in training. DINOHashBaseline (the model our
+        # validated losses were tuned against) returns raw logits in training --
+        # CenterHashLoss and SCHLoss(apply_tanh=true) both apply their own tanh
+        # internally, expecting an UNBOUNDED input. Pre-squashing here silently
+        # double-applies tanh: the quantization term in CenterHashLoss almost never
+        # saturates (tanh(tanh(z)) stays well inside (-1, 1) for any finite z), and
+        # SCHLoss's [-1, 1] Hamming-distance formula gets a needlessly shrunk input.
+        # Same class of bug as the autocast/BCE fix earlier in this session -- fixed
+        # the same way: match DINOHashBaseline's contract (raw logits, sign() at eval).
+        return logits if self.training else torch.sign(logits)
 
 class PromptedSharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):

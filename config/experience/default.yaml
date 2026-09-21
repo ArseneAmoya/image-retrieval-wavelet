@@ -25,7 +25,12 @@ fast_eval_size: 500
 eval_bs: 1000
 save_model: 10
 eval_split: test
-principal_metric: map_level0
+# maphashing_level0 (calculate_maphashing / calc_hamming_dist in accuracy_calculator.py) is
+# true binary-Hamming-distance mAP, distinct from the generic KNN-graph-based `map` family.
+# eval_split stays "test": MIRFlickrHashing maps mode='val' to the SAME test.txt as mode='test'
+# (main/datasets/flikr_coco.py), and run.py never builds a val_dts for these studies (split is
+# unset here), so there is no distinct held-out val data in this pipeline -- "val" == "test".
+principal_metric: maphashing_level0
 log_grad: False
 with_AP: True
 landmarks: False

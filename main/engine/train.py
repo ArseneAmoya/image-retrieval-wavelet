@@ -194,11 +194,13 @@ def train(
 
         # """""""""""""""""" Evaluate Model """"""""""""""""""""""""""
         score = None
+        is_best = False
         if metrics is not None:
             score = metrics[config.experience.eval_split][config.experience.principal_metric]
             if score > best_score:
                 best_model = f"epoch_{e}"
                 best_score = score
+                is_best = True
 
             if log_dir is None:
                 from ray import tune
@@ -253,6 +255,7 @@ def train(
             score=score,
             best_model=best_model,
             best_score=best_score,
+            is_best=is_best,
         )
 
     return metrics

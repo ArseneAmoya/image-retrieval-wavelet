@@ -1,0 +1,51 @@
+study_name: mflickr_shareddino_swt_shc_bs32
+
+# Phase 2, etape 1/N, 2/3 : SHC sur SharedDinoHashing + decomposition SWT
+# (LL/LH/HL/HH, haar, level=1) au lieu de DINOv2 nu (mflickr_dino_baseline_shc_bs32).
+# Reutilise les MEMES centres SHC valides en phase 1 (data/shc_centers_mflickr_64.pt,
+# run 3, valide par correlation de Spearman vs NPMI/IoU -- cf.
+# claude/shc-baseline-reproduction-notes.md) : les centres ne dependent que du
+# nombre de classes/bits, pas de l'architecture du reseau, donc pas besoin de les
+# regenerer pour ce run.
+#
+# ATTENTION MEMOIRE/TEMPS : voir mflickr_shareddino_swt_csq_bs32.yaml (meme
+# remarque -- backbone voit batch_size*4 images par step).
+#
+# Meme fix double-tanh que csq/dsch de cette phase -- voir
+# main/models/multi_dino_attention.py::SharedDinoHashing.
+base_overrides:
+  loss: center_hash
+  loss.0.kwargs.centers: data/shc_centers_mflickr_64.pt
+  optimizer: basic
+  model: shareddino_swt_standard
+  transform: basic_swt
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.backbone_config.name: dinov2_vits14
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Une seule graine : meme contrainte de temps que la phase 1.
+sweep_zip:
+  experience.seed: [333]

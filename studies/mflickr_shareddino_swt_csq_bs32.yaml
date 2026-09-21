@@ -1,0 +1,55 @@
+study_name: mflickr_shareddino_swt_csq_bs32
+
+# Phase 2, etape 1/N, 1/3 : CSQ sur SharedDinoHashing + decomposition SWT
+# (LL/LH/HL/HH, haar, level=1) au lieu de DINOv2 nu (mflickr_dino_baseline_csq_bs32).
+# Seule variable changee vs la baseline : l'entree est decomposee en 4 sous-bandes
+# et passe par un fusion head simple (StandardFusionHead, pas de regularisation,
+# pas de prompt tuning, pas de LayerNorm par domaine -- ces facteurs viennent aux
+# etapes suivantes de la roadmap, un a la fois).
+#
+# ATTENTION MEMOIRE/TEMPS : SharedDinoHashing fait un seul forward sur les 4
+# sous-bandes concatenees en batch (reshape batch*4) -- a batch_size nominal
+# egal (32), le backbone voit donc 128 images par step au lieu de 32. Epoch
+# plus lente/plus gourmande en memoire que la baseline (~4x), attendu et
+# assume pour comparer a nombre d'updates de gradient identique.
+#
+# Meme fix que la baseline : SharedDinoHashing.forward() a ete corrige pour
+# retourner des logits bruts en training (pas tanh(logits)) -- CenterHashLoss
+# applique deja son propre tanh en interne, un double-tanh aurait tue le terme
+# de quantization silencieusement (meme famille de bug que le fix autocast/BCE
+# de la baseline). Voir main/models/multi_dino_attention.py::SharedDinoHashing.
+base_overrides:
+  loss: center_hash
+  optimizer: basic
+  model: shareddino_swt_standard
+  transform: basic_swt
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.backbone_config.name: dinov2_vits14
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Une seule graine : meme contrainte de temps que la phase 1.
+sweep_zip:
+  experience.seed: [333]

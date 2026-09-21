@@ -1,0 +1,52 @@
+study_name: mflickr_shareddino_swt_dsch_bs32
+
+# Phase 2, etape 1/N, 3/3 : DSCH (SCHLoss) sur SharedDinoHashing + decomposition
+# SWT (LL/LH/HL/HH, haar, level=1) au lieu de DINOv2 nu (mflickr_dino_baseline_dsch_bs32).
+#
+# apply_tanh: true reste necessaire ici -- SharedDinoHashing, comme
+# DINOHashBaseline, sort desormais des logits bruts non bornes en training
+# (fix double-tanh applique, voir mflickr_shareddino_swt_csq_bs32.yaml et
+# main/models/multi_dino_attention.py::SharedDinoHashing). La formule
+# BI_BI = (k - batch @ batch.T) / 2 n'est une distance de Hamming que si les
+# valeurs sont dans [-1, 1].
+#
+# ATTENTION MEMOIRE/TEMPS : voir mflickr_shareddino_swt_csq_bs32.yaml.
+base_overrides:
+  loss: dsch
+  loss.0.kwargs.n_bits: 64
+  loss.0.kwargs.apply_tanh: true
+  loss.0.kwargs.alpha: 1
+  loss.0.kwargs.beta: 1
+  optimizer: basic
+  model: shareddino_swt_standard
+  transform: basic_swt
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.backbone_config.name: dinov2_vits14
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Une seule graine : meme contrainte de temps que la phase 1.
+sweep_zip:
+  experience.seed: [333]
