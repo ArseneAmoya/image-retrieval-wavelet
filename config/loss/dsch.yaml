@@ -1,7 +1,15 @@
 # @package _group_
+# apply_tanh doit FIGURER ici meme si sa valeur par defaut est celle de la
+# signature de SCHLoss : Hydra tourne en mode struct, donc
+# `loss.0.kwargs.apply_tanh=true` sur la ligne de commande echoue avec
+# "Key 'apply_tanh' is not in struct" tant que la cle est absente du YAML.
+# Le defaut reste false pour ne rien changer aux configs existantes ; les
+# etudes qui utilisent un modele a logits bruts (DINOHashBaseline) le
+# surchargent a true.
 - name: SCHLoss
   weight: 1.0
   kwargs:
     n_bits: 64
     alpha: 1
     beta: 1
+    apply_tanh: false

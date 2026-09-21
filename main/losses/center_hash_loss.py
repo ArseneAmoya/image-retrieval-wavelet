@@ -38,17 +38,56 @@ Differences from the ad-hoc `CSQAdapter` in csq_loss.py, all deliberate:
      This is what catches the silent failure where an externally supplied center
      file is identical to the Hadamard initialisation — i.e. where "SHC" is
      really just CSQ under another name.
+  5. The center term is written in its logits form,
+     `BCEWithLogits(2z, 0.5*(c+1))`, which is *identically* equal to CSQ's
+     `BCE(0.5*(tanh(z)+1), 0.5*(c+1))` because `0.5*(tanh(z)+1) == sigmoid(2z)`.
+     Same loss, same gradients; but `binary_cross_entropy` refuses to run under
+     autocast and raises outright, and once `tanh` saturates to exactly ±1
+     (which it does above |z|≈9 in fp32, and for most of a batch in fp16) the
+     plain form is silently wrong: PyTorch clamps `log` at -100, so the loss
+     stays finite but takes the wrong value and the gradient is exactly zero.
+     Measured on a saturated logit z=20, target 0: BCE returns 100.0 with
+     gradient 0.0, BCEWithLogits returns the correct 40.0 with gradient 2.0.
+     The logits form has neither problem.
+  6. A relative center path is resolved against the repo root as a fallback.
+     Hydra changes the working directory at job runtime, so `centers:
+     data/shc_centers_mflickr_64.pt` would otherwise be looked up inside the
+     job's output directory and fail.
 
 Multi-label handling is CSQ's own published rule, not an adaptation: the target
 for a sample is the bit-wise majority vote over the centers of its active
 classes, with ties broken by a fixed random vector.
 """
+import os
 import random
 
 import numpy as np
 import torch
 import torch.nn as nn
 from scipy.linalg import hadamard
+
+# <repo>/main/losses/center_hash_loss.py -> <repo>
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _resolve(path):
+    """Resolve a centers path, tolerating Hydra's job-time chdir.
+
+    Hydra (version_base="1.1") changes the working directory to the job's
+    output directory before the loss is built, so a path written relative to
+    the repo root in config/loss/center_hash.yaml would not be found. Try the
+    path as given first, then relative to the repo root.
+    """
+    if os.path.isabs(path) or os.path.exists(path):
+        return path
+    candidate = os.path.join(_REPO_ROOT, path)
+    if os.path.exists(candidate):
+        return candidate
+    raise FileNotFoundError(
+        f"centers file not found: tried {os.path.abspath(path)!r} (cwd, which "
+        f"Hydra may have changed) and {candidate!r} (repo root). Generate it "
+        f"with `python -m studies.generate_shc_centers`."
+    )
 
 
 def hadamard_centers(num_classes, bit, seed=None):
@@ -115,8 +154,9 @@ class CenterHashLoss(nn.Module):
             C = hadamard_centers(num_classes, embedding_size, seed=centers_seed)
             self.centers_source = "hadamard"
         elif isinstance(centers, str):
-            C = self._load_centers(centers)
-            self.centers_source = centers
+            # Resolve first, so the startup log names the file actually loaded.
+            self.centers_source = _resolve(centers)
+            C = self._load_centers(self.centers_source)
         else:
             C = torch.as_tensor(centers, dtype=torch.float32)
             self.centers_source = "tensor"
@@ -183,13 +223,32 @@ class CenterHashLoss(nn.Module):
         return 2 * (center_sum > 0).float() - 1
 
     def forward(self, embeddings, labels, **kwargs):
-        u = torch.tanh(embeddings)
         target = self.label2center(labels.float())
 
-        # BCE between the code and its center, both mapped from [-1, 1] to [0, 1].
-        center_loss = nn.functional.binary_cross_entropy(
-            0.5 * (u + 1), 0.5 * (target + 1)
+        # CSQ writes the center term as BCE(0.5*(tanh(z)+1), 0.5*(c+1)). That is
+        # *identically* BCEWithLogits(2z, 0.5*(c+1)), because
+        #     0.5*(tanh(z)+1) = 0.5*((e^z - e^-z)/(e^z + e^-z) + 1)
+        #                     = e^z/(e^z + e^-z) = 1/(1 + e^-2z) = sigmoid(2z).
+        # Same loss, same gradients. The logits form is used because the plain
+        # form fails twice under model.kwargs.with_autocast=True:
+        #   - torch.nn.functional.binary_cross_entropy refuses to autocast and
+        #     raises outright ("unsafe to autocast");
+        #   - once tanh saturates to exactly +/-1 (above |z| ~ 9 in fp32, and for
+        #     most of a batch in fp16), BCE is silently wrong rather than loud:
+        #     PyTorch clamps log at -100, so the value is finite but incorrect
+        #     and the gradient is exactly 0. On z=20 with target 0, BCE gives
+        #     100.0 / grad 0.0 where the true values are 40.0 / grad 2.0.
+        #     BCEWithLogits is computed in log-sum-exp form and gets both right.
+        # embeddings is cast to fp32 for the same saturation reason; the cast is
+        # differentiable, so autocast/GradScaler handle the backward pass as usual.
+        z = embeddings.float()
+        center_loss = nn.functional.binary_cross_entropy_with_logits(
+            2.0 * z, 0.5 * (target.float() + 1)
         )
+
+        # tanh is still what defines the code, so the quantization term and the
+        # diagnostics below are computed from it -- in fp32, same reason.
+        u = torch.tanh(z)
         quant_loss = (u.abs() - 1).pow(2).mean()
 
         self.last_components = {

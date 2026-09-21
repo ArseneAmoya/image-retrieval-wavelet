@@ -7,8 +7,6 @@ study_name: mflickr_dino_baseline_csq_bs32
 # des autres -- la sortie de la loss l'affiche au demarrage, min/moyenne/max
 # doivent etre identiques, sinon ce ne sont pas des centres Hadamard.
 #
-# Trois graines, car l'argument du papier est la precision : un ecart entre
-# methodes n'a de sens que rapporte a la variance inter-graines.
 base_overrides:
   loss: center_hash
   optimizer: basic
@@ -42,5 +40,9 @@ base_overrides:
   experience.log_dir: ./experiments_runs
   experience.csv_log_dir: ./csv_metrics
 
+# Une seule graine : le budget temps ne permet pas trois repetitions par
+# baseline. Consequence a assumer dans le papier -- sans variance
+# inter-graines, un ecart entre methodes ne peut pas etre qualifie de
+# significatif. A relancer sur 3 graines si le calendrier le permet.
 sweep_zip:
-  experience.seed: [333, 334, 335]
+  experience.seed: [333]
