@@ -1,8 +1,17 @@
 # @package _group_
 name: Cub200Indomain
 kwargs:
-  # Chemin vers le dossier racine où 'cifar-100-python' sera téléchargé/trouvé
-  data_dir: ../../data/cub200 
+  # Chemin absolu vers le dossier CUB_200_2011 (celui qui contient directement
+  # 'images/', 'classes.txt', etc.) sur l'instance Colab -- PAS un chemin relatif :
+  # le run original (cub_dino_384d, 5 avril 2026, cf. .hydra/overrides.yaml sur le
+  # Drive) l'a toujours passe en override CLI absolu (/content/CUB_200_2011), jamais
+  # via ce yaml. L'ancienne valeur ici ('../../data/cub200', relative) etait de toute
+  # facon fausse : hydra.run.dir = ${experience.log_dir}/${experience.experiment_name}/outputs
+  # place le cwd d'execution 3 niveaux sous la racine du repo, pas 2 -- '../../'
+  # remontait seulement jusqu'a experiments_runs/, jamais jusqu'a la racine.
+  # 22 sept. 2026 (Arsene) : le dataset est extrait sous /content/data/cub/CUB_200_2011
+  # sur cette instance Colab (pas /content/CUB_200_2011 comme le run d'origine).
+  data_dir: /content/data/cub/CUB_200_2011
   seed: 42 # Pour garantir que le split Train/Query/Gallery reste fixe
 
 sampler:
