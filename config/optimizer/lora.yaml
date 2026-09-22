@@ -1,0 +1,37 @@
+# Meme optimizer que la baseline full fine-tune (config/optimizer/basic.yaml),
+# MODULO un LR dedie pour les parametres LoRA (noms contenant 'lora_' --
+# lora_A/lora_B, cf. main/models/lora_utils.py::LoRALinear) via le hook
+# 'modules' deja existant dans get_optimizer (main/getter.py) -- aucun
+# changement de code necessaire, ce fichier ne fait qu'utiliser un mecanisme
+# deja en place (deja utilise ailleurs pour donner un LR distinct a un module
+# specifique).
+#
+# Pourquoi un LR different pour les matrices LoRA : lr=1e-5 (basic.yaml) a ete
+# choisi pour du FULL fine-tuning, ou les poids du backbone partent deja d'un
+# bon point pretraine et n'ont besoin que d'un ajustement fin. Les matrices
+# LoRA partent, elles, d'une init aleatoire/nulle (A kaiming, B=0) sans aucun
+# avantage "pretrained" -- a lr=1e-5 seul, 50 epochs risqueraient de ne
+# quasiment pas les faire bouger (resultat non interpretable comme test de
+# LoRA, plutot un backbone gele sans adaptation). lr=1e-4 (x10 vs le lr global)
+# est dans la fourchette usuelle pour des adaptateurs LoRA sur un ViT -- a
+# ajuster empiriquement si les courbes de loss montrent une sous/sur-
+# adaptation. hash_head garde le lr global (1e-5, groupe par defaut) --
+# c'est deja ce qui fonctionnait en phase 1/2 pour cette tete, on ne change
+# que ce qui est nouveau (LoRA) pour ne pas confondre les variables.
+- name: AdamW
+  params:
+  modules:
+    - name: lora_
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0005
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0005
+  scheduler_on_epoch:
+    name: CosineAnnealingLR
+    kwargs:
+      T_max: 50
+      eta_min: 0.0000001
+  scheduler_on_step:
+  scheduler_on_val:

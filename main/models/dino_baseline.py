@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 from .hub_utils import load_dinov2
+from .lora_utils import inject_lora
 
 class DINOHashBaseline(nn.Module):
-    def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}, frozen=False, **kwargs):
+    def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}, frozen=False, lora_config=None, **kwargs):
         super().__init__()
 
         self.backbone = load_dinov2(dino_backbone)
@@ -18,8 +19,29 @@ class DINOHashBaseline(nn.Module):
         # which is meant to be a fine-tuned parameter-matched control against a fully
         # fine-tuned MBW-DINO). Store the flag on self instead.
         self.frozen = frozen
+        self.lora_config = lora_config
 
-        if frozen:
+        if lora_config is not None and lora_config.get('enabled', True):
+            # LoRA freezes the backbone's own weights itself (inject_lora, below) but
+            # otherwise leaves it in train()/grad-enabled mode so the newly added
+            # lora_A/lora_B parameters can receive gradients. frozen=True additionally
+            # forces backbone.eval() and disables backbone.train() entirely (see the
+            # elif below) -- turning that on here would also freeze the LoRA
+            # adapters, defeating the point, so the two options are mutually
+            # exclusive rather than silently letting one override the other.
+            assert not frozen, (
+                "lora_config and frozen=True are mutually exclusive -- see the "
+                "comment above. Set frozen=False (the default) when using LoRA."
+            )
+            n_wrapped = inject_lora(
+                self.backbone,
+                scope=lora_config['scope'],
+                rank=lora_config['rank'],
+                alpha=lora_config.get('alpha'),
+                dropout=lora_config.get('dropout', 0.05),
+            )
+            self._lora_layers_wrapped = n_wrapped
+        elif frozen:
             for p in self.backbone.parameters():
                 p.requires_grad = False
             self.backbone.eval()
@@ -45,11 +67,5 @@ class DINOHashBaseline(nn.Module):
 
         if self.training:
             return logits
-
-        # torch.sign(0) returns 0, which is neither +1 nor -1. A zero entry silently
-        # corrupts accuracy_calculator.calc_hamming_dist -- 0.5 * (q - qB @ rB.t())
-        # is only a Hamming distance when every entry is +/-1 -- and it does so
-        # without raising. Exact zeros are vanishingly unlikely out of a BatchNorm in
-        # float32, but the guard costs nothing and makes the output contract real.
-        codes = torch.sign(logits)
-        return torch.where(codes == 0, torch.ones_like(codes), codes)
+        else:
+            return torch.sign(logits)

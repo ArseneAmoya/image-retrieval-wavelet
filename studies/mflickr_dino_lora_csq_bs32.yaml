@@ -1,0 +1,70 @@
+study_name: mflickr_dino_lora_csq_bs32
+
+# Piste LoRA sur le DINOv2 simple (pas shareddino) -- voir
+# claude/phase2-multifrequency-shareddino-plan.md, section "Piste future
+# envisagee : LoRA sur le backbone". Le backbone est actuellement fine-tune
+# en entier (frozen: false partout, phase 1 et 2) sur un dataset petit
+# (~18k train) -- pic tres precoce (epoch 5) suivi d'une degradation observee
+# sur presque tous les runs deja lances (CSQ/SHC baseline phase 1, CSQ
+# shareddino+SWT phase 2). LoRA gele le backbone et n'entraine que de petites
+# matrices bas-rang injectees dans les Linear qkv/proj (+ mlp.fc1/fc2 selon
+# scope) -- cf. main/models/lora_utils.py.
+#
+# Grille : rank in {4, 8, 16} x scope in {attn_only, attn_mlp} = 6 runs
+# (sweep cartesien -- 'sweep', pas 'sweep_zip'). alpha n'est PAS un axe
+# independant : le code utilise alpha = 2*rank par defaut, donc le scaling
+# alpha/rank reste constant (=2) sur tout le sweep de rank.
+#
+# Optimizer DEDIE (config/optimizer/lora.yaml, pas basic.yaml comme les
+# autres etudes) : meme lr global (1e-5, hash_head inclus) que la baseline
+# full fine-tune, MAIS lr=1e-4 specifiquement pour les parametres LoRA (init
+# aleatoire/nulle, pas d'avantage pretrained -- voir le commentaire dans
+# config/optimizer/lora.yaml).
+#
+# Meme protocole que les autres etudes sinon (comparabilite directe contre
+# mflickr_dino_baseline_csq_bs32, phase 1) : CSQ (center_hash, centres
+# Hadamard par defaut -- pas de loss.0.kwargs.centers ici, comme dans le
+# baseline CSQ), mflickr, batch_size 32, nbits 64, seed 333, 50 epochs.
+base_overrides:
+  loss: center_hash
+  optimizer: lora
+  model: dino_hashing_lora
+  transform: basic
+  dataset: mflickr
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 32
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien : 3 (rank) x 2 (scope) = 6 jobs, dispatches sequentiellement
+# par le sweeper Hydra par defaut (un seul GPU -- cf. run_plan.py).
+sweep:
+  model.kwargs.lora_config.rank: [4, 8, 16]
+  model.kwargs.lora_config.scope: [attn_only, attn_mlp]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

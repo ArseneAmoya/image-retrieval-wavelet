@@ -1,0 +1,29 @@
+# @package _group_
+#
+# LoRA sur DINOv2 nu (DINOHashBaseline) -- backbone gele + adaptateurs
+# bas-rang injectes dans les Linear qkv/proj (+ mlp.fc1/fc2 selon scope),
+# cf. main/models/lora_utils.py et main/models/dino_baseline.py. Comparable
+# point par point a config/model/dino_hashing.yaml (baseline phase 1, full
+# fine-tune), seule difference : lora_config (le reste -- dino_backbone,
+# embed_dim, binary_config, with_autocast -- est identique).
+#
+# rank et scope sont les deux axes du sweep
+# (studies/mflickr_dino_lora_csq_bs32.yaml, sweep cartesien rank x scope).
+# alpha n'est PAS renseigne ici : main/models/lora_utils.py::inject_lora
+# utilise alpha = 2*rank par defaut quand lora_config.alpha est absent, pour
+# garder un scaling alpha/rank constant (=2) a travers le sweep de rank.
+name: DINOHashBaseline
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  dino_backbone: 'dinov2_vits14'
+  embed_dim: 384
+  binary_config:
+    nbits: 64
+  frozen: false
+  lora_config:
+    enabled: true
+    rank: 8            # swept: 4, 8, 16 (studies/mflickr_dino_lora_csq_bs32.yaml)
+    scope: attn_only    # swept: attn_only, attn_mlp
+    dropout: 0.05
+  with_autocast: true
