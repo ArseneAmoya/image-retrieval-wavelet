@@ -1,0 +1,75 @@
+study_name: cub_dino_roadmap_basic_lora_bs32
+
+# Historique de ce fichier (nom de fichier garde pour continuite avec les
+# commandes deja communiquees, meme si study_name a change) :
+#   1. Bras de comparaison (optimizer=basic/cosine, full fine-tune, batch_size=96,
+#      max_iter=50) au fichier compagnon cub_dino_baseline_roadmap_bs96.yaml
+#      (optimizer=sop_deit, l'original MBW-DINO).
+#   2. 22 sept. 2026 : "diminuons le batch size a 32" + "j'espere que pour les
+#      deux runs tu les fais en lora avec sweep" -- ce fichier devient donc la
+#      version LoRA (sweep rank x scope) a batch_size 32 du bras basic/cosine,
+#      symetrique au fichier compagnon.
+#
+# Necessite le support LoRA ajoute a RetrievalNet.__init__ (main/models/net.py,
+# 22 sept. 2026) -- voir le commentaire detaille dans cub_dino_baseline_roadmap_bs96.yaml,
+# identique ici.
+#
+# Grille : rank in {4, 8, 16} x scope in {attn_only, attn_mlp} = 6 runs
+# (sweep cartesien).
+#
+# optimizer=lora (deja existant, config/optimizer/lora.yaml -- deja utilise
+# pour la piste LoRA MIRFLICKR) : c'est EXACTEMENT basic.yaml (AdamW lr=1e-5,
+# wd=5e-4, CosineAnnealingLR T_max=50, eta_min=1e-7) + lr=1e-4 dedie aux
+# parametres LoRA -- aucun nouveau fichier optimizer necessaire ici,
+# contrairement au bras sop_deit qui a besoin d'un sop_deit_lora.yaml dedie
+# (schedule MultiStepLR different).
+#
+# model=dino_lora (nouveau, config/model/dino_lora.yaml) : RetrievalNet +
+# lora_config, comparable point par point a model=dino (ce meme fichier
+# avant la version LoRA), seule difference le lora_config.
+#
+# Tout le reste (loss=roadmap non modifiee, transform=cub, dataset=cub_indomain,
+# max_iter=50 -- inchange, OBLIGATOIRE car T_max=50 de CosineAnnealingLR
+# definit la duree totale du schedule -- reglages d'evaluation, dsch_train=false)
+# reste identique a la version full fine-tune precedente. Seul batch_size
+# passe de 96 a 32 (demande explicite d'Arsene), pour rester comparable au
+# bras sop_deit+LoRA de cette meme phase (batch_size aussi passe a 32 la-bas).
+base_overrides:
+  loss: roadmap
+  optimizer: lora
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+
+  experience.max_iter: 50
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien : 3 (rank) x 2 (scope) = 6 jobs, dispatches sequentiellement
+# par le sweeper Hydra par defaut (un seul GPU -- cf. run_plan.py).
+sweep:
+  model.kwargs.lora_config.rank: [4, 8, 16]
+  model.kwargs.lora_config.scope: [attn_only, attn_mlp]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

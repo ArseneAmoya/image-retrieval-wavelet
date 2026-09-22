@@ -1,0 +1,64 @@
+study_name: cub_dino_baseline_dsch_bs96
+
+# Pivot du 22 sept. 2026 : voir studies/cub_dino_baseline_csq_bs96.yaml pour la
+# justification complete (abandon MIRFLICKR multi-label -> CUB-200 in-domain,
+# mono-label). DSCH (SCHLoss) n'a aucune dependance a num_classes ni a des
+# centres fixes (config/loss/dsch.yaml verifie dataset-agnostique) : seul le
+# dataset/optimizer/top_k changent par rapport au pattern MIRFLICKR
+# (studies/mflickr_dino_baseline_dsch_bs32.yaml), la loss elle-meme est
+# inchangee a l'identique.
+#
+# DEUX REGLAGES INDISPENSABLES, sans lesquels cette baseline est fausse
+# (memes garde-fous que sur MIRFLICKR) :
+#
+#   apply_tanh: true  -- la formule BI_BI = (k - batch @ batch.T) / 2 n'est une
+#     distance de Hamming que si les valeurs sont dans [-1, 1]. DINOHashBaseline
+#     sort des logits bruts non bornes, donc sans tanh les bornes lambda_l /
+#     lambda_u n'ont aucun sens. Le defaut de la loss est false : il FAUT le
+#     surcharger.
+#
+#   n_bits: 64  -- doit valoir exactement model.kwargs.binary_config.nbits.
+#
+# Protocole / duree / top_k : identiques a cub_dino_baseline_csq_bs96.yaml
+# (Cub200Indomain, 90 epochs pour le MultiStepLR [30,70] de config/optimizer/cub.yaml,
+# top_k=2048 = convention mAP@2048 du papier MBW-DINO, confirmee par Arsene).
+base_overrides:
+  loss: dsch
+  loss.0.kwargs.n_bits: 64
+  loss.0.kwargs.apply_tanh: true
+  loss.0.kwargs.alpha: 1
+  loss.0.kwargs.beta: 1
+  optimizer: cub
+  model: dino_hashing
+  transform: basic
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 96
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 90
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

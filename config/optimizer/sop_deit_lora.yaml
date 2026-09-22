@@ -1,0 +1,33 @@
+# @package _group_
+#
+# Meme optimizer que sop_deit.yaml (le recipe d'origine du papier MBW-DINO),
+# MODULO un LR dedie pour les parametres LoRA (noms contenant 'lora_' --
+# lora_A/lora_B, cf. main/models/lora_utils.py::LoRALinear) via le hook
+# 'modules' deja existant dans get_optimizer (main/getter.py) -- meme
+# mecanisme que config/optimizer/lora.yaml (deja utilise pour la piste LoRA
+# MIRFLICKR), applique ici au schedule sop_deit plutot qu'a basic.
+#
+# Pourquoi un LR different pour les matrices LoRA : lr=1e-5 (sop_deit.yaml)
+# a ete choisi pour du FULL fine-tuning, ou les poids du backbone partent
+# deja d'un bon point pretraine. Les matrices LoRA partent d'une init
+# aleatoire/nulle (A kaiming, B=0) sans cet avantage -- a lr=1e-5 seul,
+# meme sur 100 epochs, risqueraient de ne quasiment pas bouger. lr=1e-4
+# (x10 vs le lr global) reprend la meme valeur que config/optimizer/lora.yaml,
+# pour rester comparable au bras basic/cosine+LoRA de cette meme phase.
+- name: AdamW
+  params:
+  modules:
+    - name: lora_
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0005
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0005
+  scheduler_on_epoch:
+    name: MultiStepLR
+    kwargs:
+      milestones: [25, 50]
+      gamma: 0.3
+  scheduler_on_step:
+  scheduler_on_val:

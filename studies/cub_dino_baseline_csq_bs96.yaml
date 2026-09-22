@@ -1,0 +1,82 @@
+study_name: cub_dino_baseline_csq_bs96
+
+# Pivot du 22 sept. 2026 : abandon de MIRFLICKR (multi-label) pour repartir sur
+# les datasets de mon papier MBW-DINO (CIFAR-100/CUB-200), mono-label -- voir
+# claude/shc-baseline-reproduction-notes.md, section "Hypothese testee :
+# conflit multi-label sur les centres fixes (CSQ/SHC)" et
+# claude/proxy-collapse-analyse-complete-et-etat-de-lart.md pour le contexte :
+# deux mecanismes structurels distincts (conflit multi-label sur centres
+# fixes CSQ/SHC, effondrement des proxies apprenables HashLossV2/Minority
+# Collapse) etaient tous les deux specifiquement causes par la nature
+# multi-label + desequilibree de MIRFLICKR (R=82.5, 87.5% de negatifs). Un
+# dataset mono-label et equilibre (CUB-200 ici) elimine les deux d'un coup :
+# un seul label actif -> label2center() se reduit exactement au centre de la
+# vraie classe (jamais de tie arbitraire) -- et plus de pression de
+# desequilibre sur des proxies appris.
+#
+# Protocole : Cub200Indomain (config/dataset/cub_indomain.yaml) -- MEMES 200
+# classes en train et test (split 50/50 par classe, pas un split zero-shot a
+# classes disjointes) -- choisi car coherent avec un centre fixe par classe
+# (CSQ/SHC ont besoin de voir chaque classe a l'entrainement) et avec la
+# methodologie deja suivie sur MIRFLICKR. Confirme par Arsene comme le
+# protocole utilise dans le papier MBW-DINO.
+#
+# 90 epochs pour que le MultiStepLR de config/optimizer/cub.yaml (deja
+# present dans le repo, jamais utilise dans une etude jusqu'ici -- milestones
+# [30, 70]) ait un sens complet (20 epochs de fin a lr x 0.3^2).
+#
+# top_k=2048 : valeur du papier MBW-DINO (confirmee par Arsene, "si je ne me
+# trompe pas") -- PAS le mAP@all (taille totale de la galerie) comme sur
+# MIRFLICKR (top_k=19581 = taille exacte du gallery). C'est un mAP@2048
+# tronque, convention courante en hashing profond sur CUB/CIFAR/ImageNet.
+#
+# ATTENTION centres CSQ : a 200 classes et 64 bits, une matrice de Hadamard
+# pure ne fournit que 2*64=128 lignes -- le mecanisme de repli Bernoulli de
+# hadamard_centers() (main/losses/center_hash_loss.py) s'active donc pour la
+# premiere fois dans ce projet (72 classes sur 200). Verifie manuellement
+# avant de lancer : centres tous uniques (200/200), contrainte geometrique
+# interne respectee (hamming min=18 > 16, mean=32.09 >= 32), coherent sur
+# plusieurs seeds. Qualite un peu plus heterogene que le cas MIRFLICKR
+# (38 classes, jamais besoin du repli, distance exactement 32 partout) --
+# a mentionner comme limitation si pertinent pour le papier.
+base_overrides:
+  loss: center_hash
+  loss.0.kwargs.num_classes: 200
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.centers: hadamard
+  loss.0.kwargs.centers_seed: 0
+  loss.0.kwargs.multi_label: false   # CUB-200 in-domain : un seul label actif par image
+  optimizer: cub
+  model: dino_hashing
+  transform: basic
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 96
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.dino_backbone: dinov2_vits14
+  model.kwargs.embed_dim: 384
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 90
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 10
+  experience.num_workers: 8
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  # OBLIGATOIRE : config/experience/default.yaml met dsch_train a True par defaut,
+  # ce qui detourne run.py vers la boucle autonome des auteurs de DSCH
+  # (engine/DSCH/train.py) et court-circuite tout ce pipeline.
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

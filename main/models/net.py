@@ -16,6 +16,7 @@ from .dino_models import DinoModel_ce, Multi_DinoModel
 from transformers import AutoModel
 from .hugging_face_models import HuggingFaceVisionWrapper
 from .hub_utils import load_dinov2
+from .lora_utils import inject_lora
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -427,6 +428,7 @@ class RetrievalNet(nn.Module):
         pooling='default',
         projection_normalization_layer='none',
         pretrained=False,
+        lora_config=None,
         *args, **kwargs
     ):
         super().__init__()
@@ -444,10 +446,38 @@ class RetrievalNet(nn.Module):
         self.with_classifier = bool(kwargs.get('num_classes', None))
         if with_autocast:
             lib.LOGGER.info("Using mixed precision")
-        
+
         self.backbone_name = backbone_name
 
         self.backbone, default_pooling, out_features = get_backbone(backbone_name, pretrained=pretrained, embed_dim=embed_dim, **kwargs)
+
+        # LoRA injection, mirrored from DINOHashBaseline (dino_baseline.py) -- same
+        # inject_lora() helper, same config shape ({enabled, rank, scope, alpha?,
+        # dropout?}), same mutual-exclusion-with-frozen guard. get_backbone() itself
+        # has no concept of LoRA (it only ever freezes some backbones' params
+        # outright via a 'frozen' kwarg, never wraps Linear layers) -- so without
+        # this block, an override.kwargs.lora_config on a RetrievalNet-based study
+        # (e.g. model=dino) would be silently swallowed into get_backbone()'s
+        # **kwargs and have zero effect. Applied to self.backbone (whatever
+        # get_backbone() returned) so it works for any backbone_name that exposes
+        # nn.Linear submodules matching lora_utils.LORA_SCOPES, not just 'dino'.
+        if lora_config is not None and lora_config.get('enabled', True):
+            assert not kwargs.get('frozen', False), (
+                "lora_config and frozen=True are mutually exclusive -- LoRA already "
+                "freezes the backbone's own weights (inject_lora) while leaving it "
+                "grad-enabled for the new lora_A/lora_B parameters; frozen=True would "
+                "additionally force backbone.eval()/no-train, freezing those too."
+            )
+            n_wrapped = inject_lora(
+                self.backbone,
+                scope=lora_config['scope'],
+                rank=lora_config['rank'],
+                alpha=lora_config.get('alpha'),
+                dropout=lora_config.get('dropout', 0.05),
+            )
+            self._lora_layers_wrapped = n_wrapped
+        self.lora_config = lora_config
+
         if pooling == 'default':
             self.pooling = default_pooling
         elif pooling == 'none':

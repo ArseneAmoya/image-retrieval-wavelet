@@ -1,0 +1,37 @@
+# @package _group_
+#
+# LoRA sur DINOv2 nu en mode CONTINU (RetrievalNet, pas DINOHashBaseline) --
+# backbone gele + adaptateurs bas-rang injectes dans les Linear qkv/proj
+# (+ mlp.fc1/fc2 selon scope), cf. main/models/lora_utils.py. Comparable
+# point par point a config/model/dino.yaml (baseline continue full
+# fine-tune), seule difference : lora_config.
+#
+# Necessite le support LoRA ajoute a RetrievalNet.__init__ (main/models/net.py)
+# le 22 sept. 2026 : get_backbone()/RetrievalNet n'avait jusque-la aucun
+# mecanisme LoRA (contrairement a DINOHashBaseline, qui l'avait deja) --
+# un lora_config passe ici sans ce changement de code aurait ete
+# silencieusement avale par **kwargs et n'aurait eu aucun effet. Meme
+# fonction inject_lora() reutilisee telle quelle (main/models/lora_utils.py),
+# meme garde-fou d'exclusion mutuelle avec frozen=True.
+#
+# rank et scope sont les deux axes du sweep (voir les etudes
+# cub_dino_roadmap_*_lora_bs32.yaml, sweep cartesien rank x scope).
+# alpha n'est PAS renseigne ici : inject_lora() utilise alpha = 2*rank par
+# defaut quand lora_config.alpha est absent, pour garder un scaling
+# alpha/rank constant (=2) a travers le sweep de rank.
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: dino
+  dino_backbone: 'dinov2_vits14'
+  embed_dim: 384
+  norm_features: False
+  without_fc: True
+  with_autocast: True
+  pretrained: True
+  lora_config:
+    enabled: true
+    rank: 8            # swept: 4, 8, 16
+    scope: attn_only    # swept: attn_only, attn_mlp
+    dropout: 0.05

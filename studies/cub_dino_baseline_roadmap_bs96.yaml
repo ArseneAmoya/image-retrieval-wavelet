@@ -1,0 +1,84 @@
+study_name: cub_dino_roadmap_sopdeit_lora_bs32
+
+# Historique de ce fichier (nom de fichier garde pour continuite avec les
+# commandes deja communiquees, meme si study_name a change) :
+#   1. Reproduction fidele du run MBW-DINO d'origine retrouve sur le Drive
+#      (cub_dino_384d) : model=dino/RetrievalNet, loss=roadmap, optimizer=sop_deit,
+#      full fine-tune, batch_size=96, max_iter=100.
+#   2. 22 sept. 2026, 1ere correction (Arsene) : j'avais substitue optimizer=cub
+#      a la place de sop_deit -- revert, sop_deit garde tel quel pour comparer
+#      a un 2e bras (optimizer=basic/cosine, voir cub_dino_roadmap_basic_bs96.yaml).
+#   3. 22 sept. 2026, 2e demande (Arsene) : "diminuons le batch size a 32" +
+#      "j'espere que pour les deux runs tu les fais en lora avec sweep" -- ce
+#      fichier devient donc la version LoRA (sweep rank x scope) a batch_size 32
+#      du bras sop_deit, plutot que le full fine-tune bs96 d'origine.
+#
+# Necessite le support LoRA ajoute a RetrievalNet.__init__ (main/models/net.py,
+# 22 sept. 2026) : get_backbone()/RetrievalNet n'avait jusque-la aucun mecanisme
+# LoRA (a la difference de DINOHashBaseline, qui l'avait deja depuis la piste
+# LoRA MIRFLICKR) -- sans ce changement, un lora_config passe ici aurait ete
+# silencieusement avale par **kwargs de get_backbone() et n'aurait eu aucun
+# effet (LoRA "actif" sur le papier mais backbone en fait toujours full
+# fine-tune, un bug silencieux du meme genre que le double-tanh/autocast-BCE
+# deja rencontres sur ce projet). Meme inject_lora() reutilise telle quelle
+# (main/models/lora_utils.py), meme garde-fou d'exclusion mutuelle avec
+# frozen=True, meme formule alpha=2*rank par defaut (scaling constant sur le
+# sweep de rank).
+#
+# Grille : rank in {4, 8, 16} x scope in {attn_only, attn_mlp} = 6 runs
+# (sweep cartesien -- 'sweep', pas 'sweep_zip').
+#
+# optimizer=sop_deit_lora (nouveau, config/optimizer/sop_deit_lora.yaml) :
+# meme lr global (1e-5) + schedule (MultiStepLR [25,50]) que sop_deit.yaml,
+# MAIS lr=1e-4 specifiquement pour les parametres LoRA -- meme raisonnement
+# et meme valeur que config/optimizer/lora.yaml (deja utilise pour LoRA
+# MIRFLICKR), applique ici au schedule sop_deit plutot qu'a basic.
+#
+# model=dino_lora (nouveau, config/model/dino_lora.yaml) : RetrievalNet +
+# lora_config, comparable point par point a model=dino (ce meme fichier
+# avant la version LoRA), seule difference le lora_config.
+#
+# Tout le reste (loss=roadmap non modifiee, transform=cub, dataset=cub_indomain,
+# max_iter=100 -- inchange, coherent avec le schedule sop_deit MultiStepLR
+# [25,50] -- reglages d'evaluation top_k/distance_metric/principal_metric,
+# dsch_train=false) reste identique a la version full fine-tune precedente.
+# Seul batch_size passe de 96 a 32 (demande explicite d'Arsene).
+base_overrides:
+  loss: roadmap
+  optimizer: sop_deit_lora
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien : 3 (rank) x 2 (scope) = 6 jobs, dispatches sequentiellement
+# par le sweeper Hydra par defaut (un seul GPU -- cf. run_plan.py).
+sweep:
+  model.kwargs.lora_config.rank: [4, 8, 16]
+  model.kwargs.lora_config.scope: [attn_only, attn_mlp]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]
