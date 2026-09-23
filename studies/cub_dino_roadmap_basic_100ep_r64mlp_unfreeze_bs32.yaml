@@ -1,0 +1,69 @@
+study_name: cub_dino_roadmap_basic_lora_bs32_100ep_r64_attnmlp_unfreeze
+
+# Rebase du fichier dégel partiel sur la nouvelle meilleure config, 23 sept.
+# 2026 : cub_dino_roadmap_basic_100ep_r16mlp_unfreeze_bs32.yaml (premiere
+# version, rank=16) est superseded par ce fichier -- le rang etendu (32, 64)
+# a ete lance entre-temps et rank=64 depasse deja le papier (full FT) sur
+# les 3 metriques (MAP@R=75.02 vs 74.60, RP=79.47 vs 78.94, MAP=83.03 vs
+# 82.61 -- cf. section "Resultat du rang etendu" du doc de suivi). Arsene a
+# choisi de tester le degel partiel par-dessus CETTE config plutot que sur
+# l'ancienne base rank=16, pour voir si un axe different (vrais poids
+# degeles sur les derniers blocks vs. augmenter encore le rang LoRA)
+# ameliore encore un modele deja au-dessus du baseline papier.
+#
+# Reprend exactement cub_dino_roadmap_basic_100ep_rank_ext_bs32.yaml
+# (rank=64, run deja execute et retenu) et sweepe le nouvel axe
+# model.kwargs.lora_config.unfreeze_last_n_blocks (main/models/lora_utils.py
+# ::unfreeze_last_n_blocks, degele ENTIEREMENT les N derniers blocks du
+# backbone ViT-S/14, poids de base compris, en plus de -- pas a la place de
+# -- l'adaptateur LoRA de ces blocks). Meme mecanisme, meme validation par
+# test unitaire local (5 tests, cf. section "Dégel partiel du backbone" du
+# doc de suivi) que la premiere version de cette etude -- rien ne change
+# cote code, seule la base (rank 16 -> 64) change.
+#
+# Meme sweep [1, 2, 4] blocks -- meme philosophie "un facteur a la fois",
+# rank/scope fixes a la config gagnante actuelle, pas resweepes ici.
+#
+# Aucun changement d'optimizer necessaire (cf. lora_utils.py::
+# unfreeze_last_n_blocks et config/model/dino_lora.yaml) : les parametres
+# nouvellement degeles tombent dans le groupe de base lr=1e-5 de
+# get_optimizer, pas dans le groupe boost LoRA lr=1e-4.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+  model.kwargs.lora_config.rank: 64
+  model.kwargs.lora_config.scope: attn_mlp
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien a 1 seul axe (unfreeze_last_n_blocks) -- 3 jobs.
+sweep:
+  model.kwargs.lora_config.unfreeze_last_n_blocks: [1, 2, 4]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]
