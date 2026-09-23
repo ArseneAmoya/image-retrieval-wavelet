@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .hub_utils import load_dinov2
+from .lora_utils import inject_lora, unfreeze_last_n_blocks
 
 
 class BasicConv(nn.Module):
@@ -840,6 +841,105 @@ class SharedDinoHashing(nn.Module):
         # Same class of bug as the autocast/BCE fix earlier in this session -- fixed
         # the same way: match DINOHashBaseline's contract (raw logits, sign() at eval).
         return logits if self.training else torch.sign(logits)
+
+class SharedDinoRetrieval(nn.Module):
+    """Continuous-embedding counterpart to SharedDinoHashing, 23 sept. 2026 :
+    reprend exactement le meme mecanisme -- UN SEUL backbone DINOv2 partage,
+    les 4 sous-bandes ondelette (LL/LH/HL/HH, meme reshape batch*4 que
+    SharedDinoHashing.forward) passent dedans en un seul forward, puis fusion
+    -- mais sort un EMBEDDING CONTINU normalise L2 (contrat RetrievalNet,
+    cf. main/models/net.py) au lieu d'un code de hashing : pas de hash_fc, pas
+    de BatchNorm sur les bits, pas de tanh/sign. Prevu pour etre entraine avec
+    une loss de ranking (ROADMAP, deja utilisee telle quelle sur CUB-200 via
+    RetrievalNet) plutot qu'une loss de hashing a centres fixes.
+
+    Ajoute le support LoRA + degel partiel sur le backbone partage, en
+    reutilisant SANS AUCUN CHANGEMENT inject_lora()/unfreeze_last_n_blocks()
+    (main/models/lora_utils.py) -- exactement le mecanisme deja valide sur
+    DINOHashBaseline et RetrievalNet (cf. phase2-multifrequency-shareddino-
+    plan.md, sections LoRA + degel partiel), applique ici a l'architecture
+    shareddino pour la premiere fois. self.shared_backbone est chargee par le
+    meme load_dinov2() que SharedDinoHashing -- meme structure ViT hub
+    standard (attn.qkv/proj, mlp.fc1/fc2, .blocks) deja validee pour ces deux
+    fonctions sur des dizaines de runs reels, donc aucune nouvelle
+    verification structurelle necessaire pour l'injection elle-meme.
+
+    Note sur with_autocast : SharedDinoHashing accepte ce kwarg mais ne s'en
+    sert jamais (aucun torch.amp.autocast dans son forward) -- trouve en
+    ecrivant cette classe, pas corrige la-bas (hors perimetre de cette
+    tache), mais implemente correctement ici puisque le protocole CUB-200
+    continu gagnant (cf. doc de suivi) s'appuie dessus.
+    """
+
+    def __init__(self, backbone_config, fusion_config, with_autocast=False, lora_config=None, **kwargs):
+        super().__init__()
+
+        self.with_autocast = bool(with_autocast)
+
+        self.shared_backbone = load_dinov2(backbone_config['name'])
+
+        frozen = backbone_config.get('frozen', True)
+        self.lora_config = lora_config
+
+        if lora_config is not None and lora_config.get('enabled', True):
+            # Meme garde-fou d'exclusion mutuelle que DINOHashBaseline/RetrievalNet :
+            # LoRA gele deja les poids de base du backbone (inject_lora) tout en le
+            # laissant grad-enabled pour lora_A/lora_B ; frozen=True forcerait en plus
+            # backbone.eval()/train=no-op, gelant aussi les adaptateurs LoRA.
+            assert not frozen, (
+                "lora_config et backbone_config.frozen=True sont mutuellement "
+                "exclusifs -- voir le commentaire ci-dessus. Mettre frozen: false "
+                "(la valeur par defaut) quand LoRA est utilise."
+            )
+            n_wrapped = inject_lora(
+                self.shared_backbone,
+                scope=lora_config['scope'],
+                rank=lora_config['rank'],
+                alpha=lora_config.get('alpha'),
+                dropout=lora_config.get('dropout', 0.05),
+            )
+            self._lora_layers_wrapped = n_wrapped
+
+            n_unfrozen_params, unfrozen_block_idx = unfreeze_last_n_blocks(
+                self.shared_backbone, lora_config.get('unfreeze_last_n_blocks', 0)
+            )
+            self._unfrozen_block_params = n_unfrozen_params
+            self._unfrozen_block_indices = unfrozen_block_idx
+        elif frozen:
+            for p in self.shared_backbone.parameters():
+                p.requires_grad = False
+            self.shared_backbone.eval()
+            self.shared_backbone.train = lambda mode=False: None
+
+        embed_dim = self.shared_backbone.embed_dim
+        output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
+        self.fusion_head = get_fusion_head(fusion_config, output_dims)
+
+    def forward(self, x):
+        with torch.amp.autocast('cuda', enabled=self.with_autocast):
+            # Identique a SharedDinoHashing.forward() jusqu'a la fusion : x a la
+            # forme (b, c, s=4, h, w) -- les 4 sous-bandes ondelette produites par
+            # SWTTransform/DWTTransform -- reshapees en (b*4, c, h, w) pour un seul
+            # forward backbone, puis les 4 embeddings CLS sont re-separes par bande.
+            b, c, s, h, w = x.shape
+            x_concat = x.permute(2, 0, 1, 3, 4).contiguous()
+            x_concat = x_concat.view(b * s, c, h, w)
+            out = self.shared_backbone(x_concat)
+
+            cls_tokens = out['x_norm_clstoken'] if isinstance(out, dict) else out
+
+            feat_LL, feat_LH, feat_HL, feat_HH = cls_tokens.chunk(4, dim=0)
+            features_list = [feat_LL, feat_LH, feat_HL, feat_HH]
+
+            fused_embedding = self.fusion_head(features_list)
+
+            # Contrat RetrievalNet (main/models/net.py) : embedding continu toujours
+            # normalise L2, en training comme en eval -- pas de tete de hashing, pas
+            # de tanh/sign. C'est ce qui permet distance_metric=l2 d'etre
+            # rigoureusement equivalent a une similarite cosinus pour le ranking
+            # (cf. echange precedent sur ce point).
+            return F.normalize(fused_embedding, p=2, dim=1)
+
 
 class PromptedSharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):

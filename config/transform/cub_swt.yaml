@@ -1,4 +1,20 @@
 # @package _group_
+#
+# Pipeline d'augmentation CUB-200 (config/transform/cub.yaml, meme
+# RandomResizedCrop scale/ratio + ColorJitter + flip que le protocole continu
+# gagnant) suivi de la decomposition ondelette SWT au lieu de ToTensor +
+# Normalize(ImageNet) -- meme patron que config/transform/basic_swt.yaml
+# (utilise pour le shareddino hashing sur MIRFLICKR), transpose a
+# l'augmentation CUB-200 plutot que l'augmentation MIRFLICKR "basic".
+#
+# SWTTransform (main/transforms/custom_transforms.py) convertit lui-meme
+# l'image PIL en tenseur normalise [0,1] (division par 255, PAS de
+# normalisation ImageNet mean/std) et produit la forme [C, 4, H, W] (4 =
+# LL/LH/HL/HH) attendue par SharedDinoRetrieval.forward() -- coherent avec
+# l'usage deja valide de basic_swt.yaml pour SharedDinoHashing, pas de
+# normalisation supplementaire ajoutee ici pour rester dans la meme
+# convention (et ne pas alterer la semantique de la decomposition ondelette,
+# calculee sur les intensites de pixel brutes).
 train:
   Resize:
     size: 256

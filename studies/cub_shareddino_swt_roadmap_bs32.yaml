@@ -1,0 +1,71 @@
+study_name: cub_shareddino_swt_roadmap_lora_bs32_r64mlp_unfreeze2
+
+# Reprise de la piste decomposition multi-frequence shareddino (mise en pause
+# depuis le pivot MIRFLICKR -> CUB-200, cf. sections "Piste LoRA sur le
+# backbone" et "Pivot majeur" du doc de suivi) sur le protocole CUB-200
+# CONTINU (ROADMAP), avec la config gagnante etablie sur RetrievalNet :
+# basic/cosine (optimizer=lora_100ep, 100 epochs), LoRA rank=64/attn_mlp +
+# degel des 2 derniers blocks (deja fixes dans
+# config/model/shareddino_swt_continuous.yaml, pas resweepes ici -- un seul
+# run, pas un sweep, puisque l'objectif est de tester l'architecture
+# shareddino AVEC ces hyperparametres deja optimises, pas de les re-optimiser
+# a partir de zero).
+#
+# model=shareddino_swt_continuous (nouveau, SharedDinoRetrieval) au lieu de
+# dino_lora (RetrievalNet) : seule variable changee par rapport a l'ablation
+# gagnante (cub_dino_roadmap_basic_100ep_r64mlp_unfreeze_bs32.yaml) est
+# l'architecture (decomposition multi-frequence + backbone partage + fusion
+# vs backbone DINOv2 simple sur l'image entiere) -- meme loss (roadmap, non
+# modifiee), meme optimizer, meme nombre d'epochs, meme dataset, meme
+# batch_size, comparaison directe possible.
+#
+# transform=cub_swt (nouveau) au lieu de cub : meme augmentation CUB-200
+# (RandomResizedCrop/ColorJitter/flip) mais terminee par SWTTransform
+# (decomposition en 4 sous-bandes LL/LH/HL/HH) au lieu de ToTensor+Normalize
+# -- obligatoire, SharedDinoRetrieval.forward() attend une entree
+# (b, c, 4, h, w), pas (b, c, h, w).
+#
+# ATTENTION COUT CALCUL (deja documente pour SharedDinoHashing sur MIRFLICKR,
+# meme mecanisme ici) : le backbone partage traite les 4 sous-bandes en un
+# seul forward (reshape batch*4), donc a batch_size nominal 32 le backbone
+# voit 128 images/step -- environ x4 temps/memoire par epoch vs le
+# RetrievalNet simple a batch_size egal (deja mesure sur MIRFLICKR : ~x4-4.5
+# en training, ~x2.7 en eval). A prevoir avant de lancer sur Colab (deadline
+# ICAART 22 oct.) : 100 epochs ici coutera significativement plus cher que
+# les runs LoRA simples precedents (qui prenaient dans les ~2h30-3h pour 100
+# epochs) -- reduire max_iter pour un premier sanity check est une option si
+# le temps presse, a la discretion d'Arsene au moment de lancer.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: shareddino_swt_continuous
+  transform: cub_swt
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Pas de bloc 'sweep' : un seul run (config gagnante deja fixee dans
+# shareddino_swt_continuous.yaml). Une seule graine, meme contrainte de temps
+# que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

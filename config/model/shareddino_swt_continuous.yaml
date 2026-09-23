@@ -1,0 +1,42 @@
+# @package _group_
+#
+# Pendant continu de shareddino_swt_standard.yaml (23 sept. 2026) : meme
+# architecture (SharedDinoRetrieval au lieu de SharedDinoHashing -- UN SEUL
+# backbone DINOv2 partage, les 4 sous-bandes ondelette LL/LH/HL/HH passent
+# dedans en un seul forward, puis fusion), mais sortie CONTINUE (embedding
+# normalise L2, pas de code de hashing) -- pour reprendre la piste
+# decomposition multi-frequence sur le protocole CUB-200 continu (ROADMAP)
+# plutot que sur le hashing MIRFLICKR abandonne.
+#
+# lora_config reprend EXACTEMENT la config finale gagnante etablie sur
+# RetrievalNet (dino_lora.yaml) sur ce meme protocole CUB-200 continu :
+# rank=64, scope=attn_mlp, unfreeze_last_n_blocks=2 -- MAP@R=75.80/RP=80.03/
+# MAP=83.39, au-dessus du papier full fine-tune (74.60/78.94/82.61). Reutilise
+# telle quelle sur le backbone shareddino (meme mecanisme LoRA/degel partiel,
+# main/models/lora_utils.py, aucun changement de code entre les deux usages).
+#
+# fusion_config.type: standard -> StandardFusionHead, le fusion head le plus
+# simple du fichier (cross-attention a 1 requete apprise sur les 4 bandes) --
+# meme choix que shareddino_swt_standard.yaml, pour isoler l'effet de la
+# decomposition + fusion la plus simple, sans regularisation ortho ni hook
+# d'instrumentation (ces facteurs restent pour une etape ulterieure de la
+# roadmap, comme prevu depuis le debut de la phase 2).
+name: SharedDinoRetrieval
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: false
+  fusion_config:
+    type: 'standard'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+  with_autocast: true
+  lora_config:
+    enabled: true
+    rank: 64
+    scope: attn_mlp
+    dropout: 0.05
+    unfreeze_last_n_blocks: 2
