@@ -19,6 +19,18 @@
 # alpha n'est PAS renseigne ici : inject_lora() utilise alpha = 2*rank par
 # defaut quand lora_config.alpha est absent, pour garder un scaling
 # alpha/rank constant (=2) a travers le sweep de rank.
+#
+# unfreeze_last_n_blocks (nouveau, 23 sept. 2026) : 2e axe, additif a LoRA
+# -- dégèle entièrement (poids de base compris, pas seulement le delta LoRA)
+# les N derniers blocks du backbone, cf. main/models/lora_utils.py::
+# unfreeze_last_n_blocks (appele juste apres inject_lora dans
+# RetrievalNet.__init__). 0 = desactive (comportement LoRA seul, inchange
+# pour toutes les etudes existantes qui ne le renseignent pas). Pas de
+# changement d'optimizer necessaire : ces parametres nouvellement degeles ne
+# contiennent pas 'lora_' dans leur nom, ils tombent donc dans le groupe de
+# base (lr=1e-5, meme lr que hash_head/fc) plutot que dans le groupe boost
+# LoRA (lr=1e-4) -- coherent avec le fait que ce sont de vrais poids
+# pretraines, pas un adaptateur initialise a zero.
 name: RetrievalNet
 freeze_batch_norm: False
 freeze_pos_embedding: False
@@ -35,3 +47,4 @@ kwargs:
     rank: 8            # swept: 4, 8, 16
     scope: attn_only    # swept: attn_only, attn_mlp
     dropout: 0.05
+    unfreeze_last_n_blocks: 0   # swept in cub_dino_roadmap_basic_100ep_r16mlp_unfreeze_bs32.yaml

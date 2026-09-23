@@ -1,0 +1,74 @@
+study_name: cub_dino_roadmap_basic_lora_bs32_100ep_r16_attnmlp_unfreeze
+
+# Point 4 du plan d'amelioration ("Analyse des 12 runs LoRA CUB-200", cf.
+# phase2-multifrequency-shareddino-plan.md) -- combiner LoRA avec un degel
+# partiel des derniers blocks du backbone. Prepare le 23 sept. 2026, apres
+# la decision d'Arsene "les deux [rang et degel], rang d'abord" : ce fichier
+# est la piste degel, a lancer apres (ou en parallele de) l'extension de
+# rang (cub_dino_roadmap_basic_100ep_rank_ext_bs32.yaml).
+#
+# Reprend exactement la config gagnante de l'ablation epochs vs optimizer
+# (basic/cosine, 100 epochs, rank=16, attn_mlp -- MAP@R=71.57/RP=76.68/
+# MAP=80.87, meilleure config du projet a date) et sweepe le nouvel axe
+# model.kwargs.lora_config.unfreeze_last_n_blocks (main/models/lora_utils.py
+# ::unfreeze_last_n_blocks, nouveau -- degele ENTIEREMENT les N derniers
+# blocks du backbone DINOv2 ViT-S/14, poids de base compris, pas seulement
+# le delta LoRA, en plus de -- pas a la place de -- l'adaptateur LoRA de ces
+# blocks ; les blocks plus precoces restent LoRA-seul). Valide par un test
+# unitaire local avant tout push (synthetic ViT block tree, 5 tests :
+# no-op a n<=0, erreur si pas d'attribut .blocks, erreur si n > nb de
+# blocks, seuls les N derniers blocks sont entierement degeles -- les autres
+# et patch_embed inchanges -- et un vrai forward/backward confirme les
+# gradients exactement la ou attendus).
+#
+# ViT-S/14 a 12 blocks : sweep [1, 2, 4] -- de "quasi rien" a un tiers du
+# reseau, en restant sur la meme philosophie "un facteur a la fois" que le
+# reste du projet (pas de saut direct a un degel massif). rank/scope fixes
+# a la config gagnante, pas resweepes ici.
+#
+# Aucun changement d'optimizer necessaire (cf. commentaire dans
+# config/model/dino_lora.yaml et lora_utils.py::unfreeze_last_n_blocks) :
+# les parametres nouvellement degeles n'ont pas 'lora_' dans leur nom, donc
+# get_optimizer (main/getter.py) les fait tomber dans le groupe de base
+# lr=1e-5 (meme lr que hash_head/fc), pas dans le groupe boost LoRA lr=1e-4
+# -- coherent avec le fait que ce sont de vrais poids pretraines qui
+# reprennent un fine-tuning normal, pas un adaptateur initialise a zero.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+  model.kwargs.lora_config.rank: 16
+  model.kwargs.lora_config.scope: attn_mlp
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien a 1 seul axe (unfreeze_last_n_blocks) -- 3 jobs.
+sweep:
+  model.kwargs.lora_config.unfreeze_last_n_blocks: [1, 2, 4]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

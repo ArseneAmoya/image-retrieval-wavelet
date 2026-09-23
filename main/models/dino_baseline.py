@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .hub_utils import load_dinov2
-from .lora_utils import inject_lora
+from .lora_utils import inject_lora, unfreeze_last_n_blocks
 
 class DINOHashBaseline(nn.Module):
     def __init__(self, dino_backbone='dinov2_vits14', embed_dim=384, binary_config={'nbits': 64}, frozen=False, lora_config=None, **kwargs):
@@ -41,6 +41,17 @@ class DINOHashBaseline(nn.Module):
                 dropout=lora_config.get('dropout', 0.05),
             )
             self._lora_layers_wrapped = n_wrapped
+
+            # Optional 2nd axis, additive to LoRA (not a replacement for it):
+            # fully unfreeze the last N transformer blocks on top of their LoRA
+            # adapters, so those blocks get real fine-tuning while earlier ones
+            # stay LoRA-only. See lora_utils.unfreeze_last_n_blocks for the
+            # exact mechanics and why no optimizer/getter.py change is needed.
+            n_unfrozen_params, unfrozen_block_idx = unfreeze_last_n_blocks(
+                self.backbone, lora_config.get('unfreeze_last_n_blocks', 0)
+            )
+            self._unfrozen_block_params = n_unfrozen_params
+            self._unfrozen_block_indices = unfrozen_block_idx
         elif frozen:
             for p in self.backbone.parameters():
                 p.requires_grad = False

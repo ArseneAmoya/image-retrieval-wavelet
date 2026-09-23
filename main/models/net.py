@@ -16,7 +16,7 @@ from .dino_models import DinoModel_ce, Multi_DinoModel
 from transformers import AutoModel
 from .hugging_face_models import HuggingFaceVisionWrapper
 from .hub_utils import load_dinov2
-from .lora_utils import inject_lora
+from .lora_utils import inject_lora, unfreeze_last_n_blocks
 
 
 def get_backbone(name, pretrained=True, **kwargs):
@@ -476,6 +476,16 @@ class RetrievalNet(nn.Module):
                 dropout=lora_config.get('dropout', 0.05),
             )
             self._lora_layers_wrapped = n_wrapped
+
+            # Optional 2nd axis, additive to LoRA (not a replacement for it) --
+            # mirrors DINOHashBaseline (dino_baseline.py), same
+            # unfreeze_last_n_blocks() helper, same reasoning: see there for
+            # why no optimizer/getter.py change is needed.
+            n_unfrozen_params, unfrozen_block_idx = unfreeze_last_n_blocks(
+                self.backbone, lora_config.get('unfreeze_last_n_blocks', 0)
+            )
+            self._unfrozen_block_params = n_unfrozen_params
+            self._unfrozen_block_indices = unfrozen_block_idx
         self.lora_config = lora_config
 
         if pooling == 'default':

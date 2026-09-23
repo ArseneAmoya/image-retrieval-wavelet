@@ -121,3 +121,74 @@ def inject_lora(root_module: nn.Module, scope: str, rank: int, alpha: float = No
             f"actually found: {available[:10]}{'...' if len(available) > 10 else ''}"
         )
     return n_wrapped
+
+
+def unfreeze_last_n_blocks(root_module: nn.Module, n: int):
+    """Re-enables gradients on every parameter of the last `n` transformer
+    blocks of `root_module.blocks`, on top of an already-applied `inject_lora`.
+
+    Meant to be called AFTER `inject_lora` (which freezes everything first,
+    then wraps the targeted nn.Linear layers). Calling this afterwards on the
+    last `n` blocks re-opens requires_grad on EVERY parameter in those blocks:
+    - LayerNorm affine weights/biases and any layer-scale parameter (`ls1`,
+      `ls2`) -- never touched by inject_lora, since it only wraps nn.Linear --
+      become trainable for the first time.
+    - The *base* weight of any nn.Linear that inject_lora wrapped in one of
+      these blocks (frozen inside LoRALinear.__init__) is unfrozen too, so
+      those blocks get real full fine-tuning on top of (not instead of) their
+      LoRA delta, while every earlier block keeps training through its LoRA
+      adapter only. `lora_A`/`lora_B` in these blocks were already trainable,
+      so re-setting them is a no-op.
+
+    No optimizer/getter.py change needed for this: get_optimizer
+    (main/getter.py) already buckets by requires_grad + a 'lora_' name
+    substring hook, so these newly-unfrozen block params (their names don't
+    contain 'lora_') fall through to the base param group -- the same lr
+    already used for the hash_head/fc (1e-5 in every optimizer config on this
+    project), appropriate for genuine pretrained backbone weights rather than
+    a from-scratch LoRA adapter.
+
+    Args:
+        root_module: the backbone (e.g. DINOHashBaseline.backbone /
+            RetrievalNet.backbone) -- must expose a `.blocks` ModuleList,
+            the standard DINOv2 hub ViT layout (same assumption already
+            relied upon by inject_lora's LORA_SCOPES substring matching).
+        n: number of trailing blocks to unfreeze. n <= 0 is a no-op
+            (returns 0, 0 blocks touched) rather than an error, so callers
+            can pass `lora_config.get('unfreeze_last_n_blocks', 0)` directly
+            without an extra conditional.
+
+    Returns:
+        (n_params_unfrozen, block_indices): total parameter count now
+        requires_grad=True across the targeted blocks (not just newly
+        flipped -- includes already-trainable LoRA A/B in those blocks, so
+        the count is directly comparable to what the optimizer will see),
+        and the list of block indices that were touched.
+    """
+    if n <= 0:
+        return 0, []
+
+    if not hasattr(root_module, "blocks"):
+        raise RuntimeError(
+            "unfreeze_last_n_blocks expected root_module.blocks (standard DINOv2 "
+            "hub ViT layout, same assumption inject_lora's LORA_SCOPES matching "
+            "relies on) but found no 'blocks' attribute on "
+            f"{type(root_module).__name__}."
+        )
+
+    blocks = root_module.blocks
+    n_blocks = len(blocks)
+    if n > n_blocks:
+        raise ValueError(
+            f"unfreeze_last_n_blocks: asked to unfreeze the last {n} blocks but "
+            f"root_module.blocks only has {n_blocks}."
+        )
+
+    block_indices = list(range(n_blocks - n, n_blocks))
+    n_params_unfrozen = 0
+    for idx in block_indices:
+        for p in blocks[idx].parameters():
+            p.requires_grad = True
+            n_params_unfrozen += 1
+
+    return n_params_unfrozen, block_indices

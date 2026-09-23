@@ -12,6 +12,12 @@
 # alpha n'est PAS renseigne ici : main/models/lora_utils.py::inject_lora
 # utilise alpha = 2*rank par defaut quand lora_config.alpha est absent, pour
 # garder un scaling alpha/rank constant (=2) a travers le sweep de rank.
+#
+# unfreeze_last_n_blocks (nouveau, 23 sept. 2026, cf. config/model/dino_lora.yaml
+# pour le detail complet du raisonnement) : 2e axe additif a LoRA, degele
+# entierement les N derniers blocks. 0 = desactive, inchange pour cette etude
+# hashing (pas encore utilise ici, ajoute pour rester symetrique avec
+# dino_lora.yaml puisque DINOHashBaseline recoit le meme changement de code).
 name: DINOHashBaseline
 freeze_batch_norm: false
 freeze_pos_embedding: false
@@ -26,4 +32,5 @@ kwargs:
     rank: 8            # swept: 4, 8, 16 (studies/mflickr_dino_lora_csq_bs32.yaml)
     scope: attn_only    # swept: attn_only, attn_mlp
     dropout: 0.05
+    unfreeze_last_n_blocks: 0   # not swept on MIRFLICKR yet -- see dino_lora.yaml
   with_autocast: true

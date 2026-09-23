@@ -1,0 +1,54 @@
+study_name: cub_dino_roadmap_basic_lora_bs32_100ep_rank_ext_attnmlp
+
+# Point 2 du plan d'amelioration ("Analyse des 12 runs LoRA CUB-200", cf.
+# phase2-multifrequency-shareddino-plan.md) -- pousser le rang au-dela de 16
+# sur la branche gagnante, mise a jour le 23 sept. 2026 apres l'ablation
+# epochs vs optimizer : la branche gagnante est `basic`/cosine (100 epochs,
+# rank=16, attn_mlp -- MAP@R=71.57, RP=76.68, MAP=80.87), pas `sop_deit`
+# comme suppose initialement. Ce fichier reprend exactement la config
+# gagnante (cub_dino_roadmap_basic_100ep_r16mlp_bs32.yaml : optimizer=
+# lora_100ep, max_iter=100, scope=attn_mlp fixe) et sweepe uniquement le rank
+# au-dela de 16 : [32, 64]. rank=16 deja en main (pas reswepe ici, cf. la
+# comparaison de la section "Resultat de l'ablation epochs vs optimizer").
+#
+# alpha n'est pas un axe independant (inject_lora derive alpha=2*rank par
+# defaut, scaling alpha/rank constant a travers tout rang, y compris ces
+# deux nouvelles valeurs).
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+  model.kwargs.lora_config.scope: attn_mlp
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Sweep cartesien a 1 seul axe (rank) -- 2 jobs.
+sweep:
+  model.kwargs.lora_config.rank: [32, 64]
+
+# Une seule graine : meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]
