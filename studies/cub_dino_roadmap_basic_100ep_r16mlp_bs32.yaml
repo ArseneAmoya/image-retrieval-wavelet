@@ -1,0 +1,62 @@
+study_name: cub_dino_roadmap_basic_lora_bs32_100ep_r16_attnmlp
+
+# Ablation ponctuelle (1 seul run, pas de sweep), demandee par Arsene le
+# 23 sept. 2026 pour isoler l'effet "nombre d'epochs" de l'effet "optimizer"
+# dans l'analyse du sweep LoRA CUB-200 (cf. section "Analyse des 12 runs LoRA
+# CUB-200" du doc de suivi de phase 2) : la meilleure config du sweep basic/
+# cosine a 50 epochs (rank=16, scope=attn_mlp) est relancee ici a 100 epochs,
+# pour comparer directement a son equivalent sop_deit/100 epochs
+# (cub_dino_baseline_roadmap_bs96.yaml, meme rank/scope) a nombre d'epochs egal.
+#
+# Copie exacte de cub_dino_roadmap_basic_bs96.yaml (bras basic/cosine+LoRA du
+# sweep), SEULES DIFFERENCES :
+#   - optimizer: lora_100ep (nouveau, config/optimizer/lora_100ep.yaml) au lieu
+#     de lora -- meme mecanisme (AdamW + LR dedie 1e-4 pour les params LoRA)
+#     mais CosineAnnealingLR T_max=100 au lieu de 50, pour que le schedule
+#     coure sur la duree reelle des 100 epochs (sinon le lr serait deja tombe
+#     a eta_min des l'epoch 50, schedule fini pour les 50 epochs restantes --
+#     pas un vrai test a 100 epochs).
+#   - experience.max_iter: 100 au lieu de 50.
+#   - rank/scope fixes directement en base_overrides (16 / attn_mlp -- la
+#     meilleure combinaison du sweep a 50 epochs), pas de bloc 'sweep' : un
+#     seul run, pas un sweep cartesien.
+#
+# Tout le reste (loss=roadmap non modifiee, transform=cub, dataset=cub_indomain,
+# batch_size=32, model=dino_lora, reglages d'evaluation top_k/distance_metric/
+# principal_metric, dsch_train=false) identique au fichier compagnon.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: dino_lora
+  transform: cub
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+  model.kwargs.lora_config.rank: 16
+  model.kwargs.lora_config.scope: attn_mlp
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Pas de bloc 'sweep' : un seul run (rank/scope fixes ci-dessus). Une seule
+# graine, meme contrainte de temps que les etudes precedentes.
+sweep_zip:
+  experience.seed: [333]

@@ -1,0 +1,34 @@
+# @package _group_
+#
+# Identique a config/optimizer/lora.yaml (AdamW lr=1e-5, wd=5e-4, LoRA a
+# lr=1e-4 via le hook 'modules' -- cf. lora.yaml pour le detail du raisonnement
+# sur le LR dedie), SEULE DIFFERENCE : CosineAnnealingLR T_max=100 au lieu de
+# 50.
+#
+# 23 sept. 2026 (Arsene) : ablation "epochs vs optimizer" -- objectif isoler si
+# l'ecart observe entre le bras basic/cosine (50 epochs) et le bras sop_deit
+# (100 epochs, MultiStepLR) sur le sweep LoRA CUB-200 vient du nombre de pas de
+# gradient (2x plus pour sop_deit) ou du schedule lui-meme. Meme raisonnement
+# que sop_deit_lora.yaml/lora.yaml pour T_max : le schedule cosinus doit courir
+# sur la duree totale reelle de l'entrainement, pas etre tronque au milieu --
+# necessite donc ce fichier dedie plutot que de reutiliser lora.yaml
+# (T_max=50) avec experience.max_iter=100, ce qui aurait laisse le lr a
+# eta_min des l'epoch 50 pour les 50 epochs restantes (schedule fini, pas un
+# vrai test a 100 epochs).
+- name: AdamW
+  params:
+  modules:
+    - name: lora_
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0005
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0005
+  scheduler_on_epoch:
+    name: CosineAnnealingLR
+    kwargs:
+      T_max: 100
+      eta_min: 0.0000001
+  scheduler_on_step:
+  scheduler_on_val:
