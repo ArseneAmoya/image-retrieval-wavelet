@@ -1,0 +1,47 @@
+study_name: cub_dino_roadmap_basic_lora_bs32_100ep_r64_attnmlp_unfreeze2_crop
+
+# 24 sept. 2026 -- controle RGB de cub_shareddino_swt_crop_bs32.yaml :
+# RetrievalNet a la config finale gagnante (rank 64, attn_mlp, 2 blocks
+# degeles, basic/cosine 100 epochs ; log #44 : MAP@R 75.80 avec transform=cub)
+# avec la MEME augmentation que le run shareddino (cub_crop : Resize 256 ->
+# RandomCrop 224 -> flip, sans RandomResizedCrop ni ColorJitter). Sert a
+# comparer shareddino et RetrievalNet a augmentation identique, et a mesurer
+# l'effet du changement d'augmentation sur le RGB seul. ~30 min sur L4.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: dino_lora
+  transform: cub_crop
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+  model.kwargs.lora_config.dropout: 0.05
+  model.kwargs.lora_config.rank: 64
+  model.kwargs.lora_config.scope: attn_mlp
+  model.kwargs.lora_config.unfreeze_last_n_blocks: 2
+
+  experience.max_iter: 100
+  # Evaluation finale seule (convention du 24 sept.) -- ne pas mettre -1.
+  experience.train_eval_freq: 1000
+  experience.test_eval_freq: 1000
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  # 10 workers (12 vCPU sur le L4 Colab) : l augmentation change de toute
+  # facon, la comparabilite de tirage avec #46 est deja perdue.
+  experience.num_workers: 10
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  experience.seed: [333]

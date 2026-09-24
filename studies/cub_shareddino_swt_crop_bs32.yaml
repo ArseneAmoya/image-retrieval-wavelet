@@ -1,0 +1,42 @@
+study_name: cub_shareddino_swt_crop_roadmap_lora_bs32_r64mlp_unfreeze2
+
+# 24 sept. 2026 -- identique a cub_shareddino_swt_roadmap_bs32.yaml (log #46 :
+# MAP@R 74.72) SAUF l'augmentation : transform=cub_swt_crop (Resize 256 ->
+# RandomCrop 224 -> flip -> SWT, sans RandomResizedCrop ni ColorJitter) au
+# lieu de cub_swt. Voir config/transform/cub_swt_crop.yaml pour la raison.
+# Fusion au lr de base (lora_100ep) : 1e-5 reste le meilleur (logs #47/#48).
+# 1 run, ~2h20 sur L4.
+base_overrides:
+  loss: roadmap
+  optimizer: lora_100ep
+  model: shareddino_swt_continuous
+  transform: cub_swt_crop
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 100
+  # Evaluation finale seule (convention du 24 sept.) -- ne pas mettre -1.
+  experience.train_eval_freq: 1000
+  experience.test_eval_freq: 1000
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  # 10 workers (12 vCPU sur le L4 Colab) : l augmentation change de toute
+  # facon, la comparabilite de tirage avec #46 est deja perdue.
+  experience.num_workers: 10
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+sweep_zip:
+  experience.seed: [333]

@@ -1,0 +1,36 @@
+# @package _group_
+#
+# 24 sept. 2026 (Arsene) : augmentation adaptee a la SWT. Remplace, pour le
+# shareddino continu, cub_swt.yaml (RandomResizedCrop + ColorJitter).
+#
+# Pourquoi : RandomResizedCrop(scale 0.16-1) agrandit ~69 % des crops
+# d'entrainement (x1.11 en mediane, jusqu'a >x1.5 pour 16 %), alors que le
+# test (Resize 256 + CenterCrop 224) n'agrandit jamais. L'interpolation d'un
+# agrandissement est un passe-bas : les sous-bandes LH/HL/HH vues a
+# l'entrainement sont plus faibles et plus lisses qu'au test (ecart-type
+# relatif ~0.78/0.78/0.57 a x1.12 sur image a spectre naturel) -> decalage
+# de distribution train/test propre aux hautes frequences.
+#
+# Ici : Resize(256) puis RandomCrop(224), SANS rééchantillonnage apres le
+# Resize -- meme echelle de pixels qu'au test (le Resize(256) est une
+# reduction depuis les originaux CUB ~500x375, comme au test). ColorJitter
+# retire (decision d'Arsene). Flip garde. Test identique a cub_swt.yaml.
+train:
+  Resize:
+    size: 256
+  RandomCrop:
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  SWTTransform:
+    level: 1
+    wavelet: 'haar'
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  SWTTransform:
+    level: 1
+    wavelet: 'haar'
