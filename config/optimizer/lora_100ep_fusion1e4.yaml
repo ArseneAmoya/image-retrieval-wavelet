@@ -1,0 +1,43 @@
+# @package _group_
+#
+# Identique a config/optimizer/lora_100ep.yaml (AdamW lr=1e-5, wd=5e-4, LoRA a
+# lr=1e-4, CosineAnnealingLR T_max=100), SEULE DIFFERENCE : un groupe de
+# parametres dedie pour la tete de fusion de SharedDinoRetrieval/
+# SharedDinoHashing (tous les parametres dont le nom contient 'fusion_head')
+# a lr=0.0001, via le meme hook 'modules' de get_optimizer (main/getter.py) que
+# le boost LoRA -- aucun changement de code.
+#
+# 24 sept. 2026 (Arsene) : le run shareddino continu
+# (cub_shareddino_swt_roadmap_bs32, log #46) finit a -1.08 pt de MAP@R sous
+# RetrievalNet a hyperparametres identiques. Hypothese testee ici : la tete de
+# fusion part d'une init aleatoire (comme LoRA) mais etait entrainee au lr du
+# backbone pre-entraine (1e-5, groupe par defaut) -- meme raisonnement que
+# pour le boost LoRA dans lora.yaml. RetrievalNet (without_fc) n'a AUCUNE tete
+# aleatoire entre le CLS DINOv2 et la loss, shareddino en a une (~1.8M
+# params : MHA + MLP 384->1536->384 + 2 LayerNorm + query_token), donc c'est
+# une difference structurelle que l'optimizer actuel ne compense pas.
+#
+# Ordre des modules : 'lora_' puis 'fusion_head' -- aucun chevauchement de
+# noms (inject_lora n'est applique qu'a shared_backbone), verifie par test.
+# Les blocks degeles (unfreeze_last_n_blocks=2) restent au lr de base 1e-5.
+- name: AdamW
+  params:
+  modules:
+    - name: lora_
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0005
+    - name: fusion_head
+      kwargs:
+        lr: 0.0001
+        weight_decay: 0.0005
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0005
+  scheduler_on_epoch:
+    name: CosineAnnealingLR
+    kwargs:
+      T_max: 100
+      eta_min: 0.0000001
+  scheduler_on_step:
+  scheduler_on_val:

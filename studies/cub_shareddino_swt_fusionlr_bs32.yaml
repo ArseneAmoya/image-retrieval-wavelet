@@ -1,0 +1,47 @@
+study_name: cub_shareddino_swt_roadmap_lora_bs32_r64mlp_unfreeze2_fusionlr
+
+# 24 sept. 2026 -- suite directe de cub_shareddino_swt_roadmap_bs32.yaml
+# (log #46 : MAP@R=74.72, soit -1.08 pt sous RetrievalNet a hyperparametres
+# LoRA/degel identiques). IDENTIQUE a cette etude en tout point (modele
+# shareddino_swt_continuous, transform cub_swt, roadmap, 100 epochs, bs 32,
+# rank=64/attn_mlp/unfreeze=2, seed 333) SAUF l'optimizer : la tete de
+# fusion (init aleatoire, ~1.8M params) recoit son propre groupe de lr au lieu
+# du lr du backbone pre-entraine (1e-5). Voir
+# config/optimizer/lora_100ep_fusion1e4.yaml pour le raisonnement.
+# Reference de comparaison : log #46 (fusion a 1e-5) = 3e point de la courbe.
+base_overrides:
+  loss: roadmap
+  model: shareddino_swt_continuous
+  transform: cub_swt
+  dataset: cub_indomain
+
+  dataset.sampler.kwargs.batch_size: 32
+  model.kwargs.with_autocast: true
+
+  experience.max_iter: 100
+  experience.train_eval_freq: 5
+  experience.test_eval_freq: 5
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 2048
+  experience.evaluation.distance_metric: l2
+  experience.principal_metric: mean_average_precision_at_r_level0
+
+  experience.save_model: 10
+  experience.num_workers: 6
+  experience.eval_bs: 500
+  experience.sub_batch: 128
+  experience.clip_grad: null
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+  experience.csv_log_dir: ./csv_metrics
+
+# Seul axe balaye : le lr du groupe dedie 'fusion_head' (1e-4 = meme
+# traitement que LoRA ; 1e-3 = haut de la fourchette usuelle pour une tete
+# initialisee from scratch). 2 runs (~3h15 chacun sur L4, cf. log #46).
+sweep:
+  optimizer: [lora_100ep_fusion1e4, lora_100ep_fusion1e3]
+
+sweep_zip:
+  experience.seed: [333]
