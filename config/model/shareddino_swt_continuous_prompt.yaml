@@ -1,0 +1,30 @@
+# @package _group_
+#
+# 25 sept. 2026 -- prompt tuning (VPT shallow) sur le shareddino continu.
+# Identique a shareddino_swt_continuous.yaml (meme backbone, meme fusion
+# standard, meme LoRA rank 64 / attn_mlp / 2 blocks degeles, autocast) SAUF
+# le modele : PromptedSharedDinoRetrieval (main/models/multi_dino_attention.py),
+# qui herite de SharedDinoRetrieval et ajoute un jeu de `num_prompts` tokens
+# appris par sous-bande (LL/LH/HL/HH), inseres apres le CLS a l'entree du ViT.
+# Les prompts tombent dans le groupe de base de l'optimizer (lr 1e-5 avec
+# lora_100ep) -- choix d'Arsene, a revoir s'il n'y a pas d'amelioration.
+name: PromptedSharedDinoRetrieval
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: false
+  fusion_config:
+    type: 'standard'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+  num_prompts: 10
+  with_autocast: true
+  lora_config:
+    enabled: true
+    rank: 64
+    scope: attn_mlp
+    dropout: 0.05
+    unfreeze_last_n_blocks: 2

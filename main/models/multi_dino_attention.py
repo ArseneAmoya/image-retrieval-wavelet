@@ -941,6 +941,74 @@ class SharedDinoRetrieval(nn.Module):
             return F.normalize(fused_embedding, p=2, dim=1)
 
 
+class PromptedSharedDinoRetrieval(SharedDinoRetrieval):
+    """Prompt tuning (VPT « shallow ») sur SharedDinoRetrieval, 25 sept. 2026.
+
+    Pendant continu de PromptedSharedDinoHashing : meme mecanisme de prompts
+    (un jeu de `num_prompts` tokens appris PAR SOUS-BANDE, shape
+    (4, num_prompts, embed_dim), init randn*0.02, inseres une seule fois a
+    l'entree du ViT entre le CLS et les patches, sans embedding de position ;
+    seul le CLS de sortie est utilise), mais :
+      - sortie continue normalisee L2 (contrat RetrievalNet) au lieu du
+        hash_fc/BatchNorm/tanh -- le bug du double tanh de
+        PromptedSharedDinoHashing ne se pose donc pas ici ;
+      - LoRA + degel partiel + autocast herites TELS QUELS de
+        SharedDinoRetrieval (super().__init__), aucune logique dupliquee.
+
+    Les prompts par bande servent surtout a dire au backbone PARTAGE quelle
+    sous-bande il traite (le backbone recoit LL/LH/HL/HH dans le meme batch).
+
+    Optimizer : le parametre s'appelle `prompts` (pas de 'lora_' ni de
+    'fusion_head' dans son nom) -> groupe de base de get_optimizer (lr=1e-5
+    avec lora_100ep). Pour un lr dedie : ajouter `- name: prompts` dans
+    `modules:` de la config optimizer.
+
+    use_dsln (LayerNorm par sous-bande) n'est PAS supporte ici : inject_lora
+    gelerait ces LayerNorms fraichement copiees (elles resteraient identiques
+    a l'original, donc sans effet) -- a traiter comme une etape distincte.
+    """
+
+    def __init__(self, backbone_config, fusion_config, num_prompts=10, with_autocast=False,
+                 lora_config=None, **kwargs):
+        if backbone_config.get('use_dsln', False):
+            raise NotImplementedError(
+                "use_dsln n'est pas supporte par PromptedSharedDinoRetrieval (voir docstring)."
+            )
+        super().__init__(backbone_config, fusion_config, with_autocast=with_autocast,
+                         lora_config=lora_config, **kwargs)
+        num_prompts = int(num_prompts)
+        if num_prompts < 1:
+            raise ValueError(f"num_prompts doit etre >= 1, recu {num_prompts}")
+        self.num_prompts = num_prompts
+        embed_dim = self.shared_backbone.embed_dim
+        self.prompts = nn.Parameter(torch.randn(4, num_prompts, embed_dim) * 0.02)
+
+    def forward(self, x):
+        with torch.amp.autocast('cuda', enabled=self.with_autocast):
+            b, c, s, h, w = x.shape
+            if s != 4:
+                raise ValueError(f"attendu 4 sous-bandes (b, c, 4, h, w), recu s={s}")
+            # Ordre band-major (b*4) : les b premiers elements sont LL, puis LH,
+            # HL, HH -- meme reshape que SharedDinoRetrieval.
+            x_flat = x.permute(2, 0, 1, 3, 4).contiguous().view(b * s, c, h, w)
+
+            # Meme chemin que DINOv2 forward_features (prepare_tokens -> blocks ->
+            # norm -> CLS), avec les prompts inseres juste apres le CLS.
+            tokens = self.shared_backbone.prepare_tokens_with_masks(x_flat)
+            prompts = self.prompts.unsqueeze(1).expand(-1, b, -1, -1)
+            prompts = prompts.reshape(b * s, self.num_prompts, -1).to(tokens.dtype)
+            tokens = torch.cat([tokens[:, :1], prompts, tokens[:, 1:]], dim=1)
+
+            for blk in self.shared_backbone.blocks:
+                tokens = blk(tokens)
+            tokens = self.shared_backbone.norm(tokens)
+            cls_out = tokens[:, 0]
+
+            features_list = list(cls_out.chunk(4, dim=0))
+            fused_embedding = self.fusion_head(features_list)
+            return F.normalize(fused_embedding, p=2, dim=1)
+
+
 class PromptedSharedDinoHashing(nn.Module):
     def __init__(self, backbone_config, fusion_config, binary_config, num_prompts=10, **kwargs):
         super().__init__()
