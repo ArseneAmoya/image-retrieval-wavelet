@@ -226,8 +226,18 @@ class TemperatureFusionHead(nn.Module):
         return self.norm2(x).squeeze(1)
 
 class SemanticFusionHead(nn.Module):
-    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1):
+    """Requete = projection de la 1re bande (LL), cross-attention sur les 4 bandes.
+
+    residual (26 sept. 2026, defaut False = comportement historique inchange) :
+    si True, la requete LL est ajoutee a la sortie de l'attention avant norm1
+    (`norm1(q + attn)`, comme CrossAttentionBottleneckHeadDecoupled), ce qui donne
+    au CLS de LL un chemin direct jusqu'a la sortie : LL sert de base, les bandes
+    HF viennent en correction. Sans residual, LL n'atteint la sortie qu'a travers
+    les projections (aleatoires a l'init) de l'attention.
+    """
+    def __init__(self, input_dims, embed_dim=512, num_heads=4, dropout=0.1, residual=False):
         super().__init__()
+        self.residual = bool(residual)
         self.projections = nn.ModuleList([nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity() for dim in input_dims])
         self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm1 = nn.LayerNorm(embed_dim)
@@ -239,9 +249,68 @@ class SemanticFusionHead(nn.Module):
         q = projected_feats[0].unsqueeze(1)
         kv = torch.stack(projected_feats, dim=1)
         attn_output, _ = self.attn(query=q, key=kv, value=kv)
-        x = self.norm1(attn_output)
+        x = self.norm1(q + attn_output) if self.residual else self.norm1(attn_output)
         x = x + self.mlp(x)
         return self.norm2(x).squeeze(1)
+
+
+class SelfAttentionPoolFusionHead(nn.Module):
+    """Self-attention multi-tetes classique entre les tokens de bande, puis pooling
+    et couche lineaire finale (26 sept. 2026).
+
+    - Les 4 CLS (LL, LH, HL, HH) forment une sequence de 4 tokens, auxquels on
+      ajoute un embedding appris par bande (sinon la self-attention, invariante par
+      permutation, ne saurait pas quel token est LL ou HH).
+    - Une couche Transformer pre-norm standard : x = x + MHA(LN(x)),
+      x = x + MLP(LN(x)). Les connexions residuelles laissent passer chaque CLS de
+      bande tel quel (chemin identite).
+    - Pooling sur les 4 tokens : 'gem' ou 'mean'.
+      GeM = (moyenne de x^p)^(1/p) suppose x >= 0 : on applique une ReLU avant
+      (la partie negative des features est donc perdue), p appris (init gem_p).
+      Calcule en float32 (x^p peut deborder en fp16 sous autocast).
+    - Linear(embed_dim, embed_dim) finale. La normalisation L2 est faite par le
+      modele (SharedDinoRetrieval).
+    """
+
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1,
+                 pooling='gem', gem_p=3.0, gem_eps=1e-6):
+        super().__init__()
+        if pooling not in ('gem', 'mean'):
+            raise ValueError(f"pooling doit etre 'gem' ou 'mean', recu {pooling!r}")
+        self.pooling = pooling
+        self.gem_eps = float(gem_eps)
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity()
+            for dim in input_dims
+        ])
+        self.band_embed = nn.Parameter(torch.zeros(1, len(input_dims), embed_dim))
+        nn.init.trunc_normal_(self.band_embed, std=0.02)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout),
+        )
+        if pooling == 'gem':
+            self.gem_p = nn.Parameter(torch.tensor(float(gem_p)))
+        self.fc = nn.Linear(embed_dim, embed_dim)
+
+    def pool(self, x):
+        if self.pooling == 'mean':
+            return x.mean(dim=1)
+        x = F.relu(x.float()).clamp(min=self.gem_eps)
+        p = self.gem_p.float()
+        return x.pow(p).mean(dim=1).pow(1.0 / p)
+
+    def forward(self, features_list):
+        x = torch.stack([proj(f) for proj, f in zip(self.projections, features_list)], dim=1)
+        x = x + self.band_embed.to(x.dtype)
+        h = self.norm1(x)
+        x = x + self.attn(h, h, h, need_weights=False)[0]
+        x = x + self.mlp(self.norm2(x))
+        pooled = self.pool(x).to(x.dtype)
+        return self.fc(pooled)
 
 class GatedFusionHead(nn.Module):
     def __init__(self, input_dims, embed_dim=512, dropout=0.1):
@@ -610,7 +679,12 @@ def get_fusion_head(fusion_config, output_dims):
         temp = fusion_config.get('temperature', 0.1)
         return TemperatureFusionHead(output_dims, embed_dim, num_heads, dropout, temperature=temp)
     elif fusion_type == 'semantic':
-        return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout)
+        return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout,
+                                  residual=fusion_config.get('residual', False))
+    elif fusion_type == 'self_attention_pool':
+        return SelfAttentionPoolFusionHead(output_dims, embed_dim, num_heads, dropout,
+                                           pooling=fusion_config.get('pooling', 'gem'),
+                                           gem_p=fusion_config.get('gem_p', 3.0))
     elif fusion_type == 'gated':
         return GatedFusionHead(output_dims, embed_dim, dropout)
     elif fusion_type == 'temperature_gated':

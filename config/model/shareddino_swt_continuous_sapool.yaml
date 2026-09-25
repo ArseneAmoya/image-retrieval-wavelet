@@ -1,0 +1,31 @@
+# @package _group_
+#
+# 26 sept. 2026 -- identique a shareddino_swt_continuous.yaml SAUF la fusion :
+# SelfAttentionPoolFusionHead. Les 4 CLS de bande (+ embedding appris par bande)
+# passent dans une couche Transformer pre-norm classique (self-attention
+# multi-tetes + MLP, connexions residuelles), puis pooling sur les 4 tokens et
+# Linear finale. pooling: gem (ReLU puis GeM, p appris, init 3) ou mean.
+name: SharedDinoRetrieval
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: false
+    # LayerNorm par sous-bande (MultiDomainLayerNorm), false par defaut.
+    # Cle declaree ici pour pouvoir la surcharger en CLI (Hydra struct mode).
+    use_dsln: false
+  fusion_config:
+    type: 'self_attention_pool'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+    pooling: 'gem'
+    gem_p: 3.0
+  with_autocast: true
+  lora_config:
+    enabled: true
+    rank: 64
+    scope: attn_mlp
+    dropout: 0.05
+    unfreeze_last_n_blocks: 2
