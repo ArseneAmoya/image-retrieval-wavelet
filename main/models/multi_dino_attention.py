@@ -878,6 +878,18 @@ class SharedDinoRetrieval(nn.Module):
 
         self.shared_backbone = load_dinov2(backbone_config['name'])
 
+        # LayerNorm par sous-bande (25 sept. 2026) : remplace norm1/norm2 de chaque
+        # bloc et la norm finale par des MultiDomainLayerNorm a 4 domaines, chacune
+        # initialisee avec les poids pre-entraines de la LayerNorm d'origine (donc
+        # comportement strictement identique a l'initialisation). Le routage se fait
+        # par chunk(4) sur la dimension batch, ce qui correspond exactement a l'ordre
+        # band-major (LL, LH, HL, HH) du reshape de forward(). Suppose que les blocs
+        # voient toujours le batch complet : vrai pour DINOv2 hub (drop_path_rate=0,
+        # pas de sous-echantillonnage stochastic depth).
+        self.use_dsln = bool(backbone_config.get('use_dsln', False))
+        if self.use_dsln:
+            self.shared_backbone = inject_domain_specific_layernorms(self.shared_backbone, num_domains=4)
+
         frozen = backbone_config.get('frozen', True)
         self.lora_config = lora_config
 
@@ -910,6 +922,20 @@ class SharedDinoRetrieval(nn.Module):
                 p.requires_grad = False
             self.shared_backbone.eval()
             self.shared_backbone.train = lambda mode=False: None
+
+        # inject_lora (et le chemin frozen) gele TOUT le backbone, y compris les
+        # MultiDomainLayerNorm fraichement creees : elles resteraient des copies
+        # identiques de l'original, donc sans aucun effet. On les re-ouvre ici,
+        # dans tous les blocs (pas seulement les blocs degeles). Elles tombent dans
+        # le groupe de base de l'optimizer (pas de 'lora_' dans leur nom) : lr 1e-5
+        # avec lora_100ep, coherent avec des poids pre-entraines.
+        self._dsln_params = 0
+        if self.use_dsln:
+            for m in self.shared_backbone.modules():
+                if isinstance(m, MultiDomainLayerNorm):
+                    for p in m.parameters():
+                        p.requires_grad = True
+                        self._dsln_params += p.numel()
 
         embed_dim = self.shared_backbone.embed_dim
         output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
@@ -963,17 +989,15 @@ class PromptedSharedDinoRetrieval(SharedDinoRetrieval):
     avec lora_100ep). Pour un lr dedie : ajouter `- name: prompts` dans
     `modules:` de la config optimizer.
 
-    use_dsln (LayerNorm par sous-bande) n'est PAS supporte ici : inject_lora
-    gelerait ces LayerNorms fraichement copiees (elles resteraient identiques
-    a l'original, donc sans effet) -- a traiter comme une etape distincte.
+    use_dsln (LayerNorm par sous-bande, backbone_config.use_dsln) : herite de
+    SharedDinoRetrieval (25 sept. 2026), qui injecte les MultiDomainLayerNorm
+    avant LoRA puis les re-ouvre a l'entrainement. Le routage par chunk(4) sur
+    le batch n'est pas affecte par les prompts (inseres sur la dimension
+    tokens, pas batch).
     """
 
     def __init__(self, backbone_config, fusion_config, num_prompts=10, with_autocast=False,
                  lora_config=None, **kwargs):
-        if backbone_config.get('use_dsln', False):
-            raise NotImplementedError(
-                "use_dsln n'est pas supporte par PromptedSharedDinoRetrieval (voir docstring)."
-            )
         super().__init__(backbone_config, fusion_config, with_autocast=with_autocast,
                          lora_config=lora_config, **kwargs)
         num_prompts = int(num_prompts)

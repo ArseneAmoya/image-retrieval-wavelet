@@ -15,6 +15,9 @@ kwargs:
   backbone_config:
     name: 'dinov2_vits14'
     frozen: false
+    # LayerNorm par sous-bande (MultiDomainLayerNorm), false par defaut.
+    # Cle declaree ici pour pouvoir la surcharger en CLI (Hydra struct mode).
+    use_dsln: false
   fusion_config:
     type: 'standard'
     output_dim: 384
