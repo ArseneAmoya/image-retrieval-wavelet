@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -669,6 +670,74 @@ class CrossAttentionBottleneckHeadPooled(nn.Module):
         return self.norm2(x)
 
 
+class LLOnlyFusionHead(nn.Module):
+    """Controle (26 sept. 2026) : renvoie uniquement le CLS de la 1re bande (LL),
+    sans aucun parametre. Mesure le plancher « DINOv2 sur LL seul » : ce que la
+    fusion doit depasser pour prouver que les bandes HF apportent quelque chose."""
+
+    def __init__(self, input_dims, **kwargs):
+        super().__init__()
+
+    def forward(self, features_list, patch_tokens=None):
+        return features_list[0]
+
+
+class LLAnchoredFusionHead(nn.Module):
+    """Fusion ancree sur LL avec porte initialisee a zero (26 sept. 2026).
+
+        sortie = CLS_LL + gamma * delta,   gamma (par dimension) initialise a 0
+
+    delta = cross-attention (requete = CLS de LL normalise) sur les bandes HF,
+    puis un MLP en residuel. A l'initialisation la sortie est EXACTEMENT le CLS de
+    LL : la geometrie pre-entrainee de DINOv2 est intacte, et les hautes frequences
+    ne peuvent qu'y ajouter de l'information au fil de l'entrainement (principe
+    ReZero / LayerScale applique a la fusion).
+
+    kv_source :
+      - 'cls'     : les 3 CLS des bandes HF (LH, HL, HH) ;
+      - 'patches' : les patch tokens des 3 bandes HF (3 x N tokens), pour exploiter
+                    l'information spatiale que le CLS d'une image HF resume mal.
+    Un embedding appris par bande HF est ajoute aux cles/valeurs.
+    """
+
+    def __init__(self, input_dims, embed_dim=384, num_heads=8, dropout=0.1,
+                 kv_source='cls', gate_init=0.0):
+        super().__init__()
+        if kv_source not in ('cls', 'patches'):
+            raise ValueError(f"kv_source doit etre 'cls' ou 'patches', recu {kv_source!r}")
+        if any(d != embed_dim for d in input_dims):
+            raise ValueError("LLAnchoredFusionHead suppose input_dims == embed_dim (CLS DINOv2 non projete).")
+        self.kv_source = kv_source
+        self.uses_patch_tokens = (kv_source == 'patches')
+        n_hf = len(input_dims) - 1
+        self.band_embed = nn.Parameter(torch.zeros(1, n_hf, embed_dim))
+        nn.init.trunc_normal_(self.band_embed, std=0.02)
+        self.norm_q = nn.LayerNorm(embed_dim)
+        self.norm_kv = nn.LayerNorm(embed_dim)
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm_mlp = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout),
+        )
+        self.gamma = nn.Parameter(torch.full((embed_dim,), float(gate_init)))
+
+    def forward(self, features_list, patch_tokens=None):
+        ll = features_list[0]
+        if self.kv_source == 'cls':
+            kv = torch.stack(features_list[1:], dim=1) + self.band_embed.to(ll.dtype)
+        else:
+            if patch_tokens is None:
+                raise ValueError("kv_source='patches' : le modele doit fournir patch_tokens.")
+            kv = torch.cat([patch_tokens[k] + self.band_embed[:, k - 1:k].to(patch_tokens[k].dtype)
+                            for k in range(1, len(patch_tokens))], dim=1)
+        q = self.norm_q(ll).unsqueeze(1)
+        kvn = self.norm_kv(kv)
+        delta = self.attn(q, kvn, kvn, need_weights=False)[0]
+        delta = delta + self.mlp(self.norm_mlp(delta))
+        return ll + self.gamma.to(ll.dtype) * delta.squeeze(1)
+
+
 def get_fusion_head(fusion_config, output_dims):
     fusion_type = fusion_config.get('type', 'standard')
     embed_dim = fusion_config['output_dim']
@@ -681,6 +750,12 @@ def get_fusion_head(fusion_config, output_dims):
     elif fusion_type == 'semantic':
         return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout,
                                   residual=fusion_config.get('residual', False))
+    elif fusion_type == 'll_only':
+        return LLOnlyFusionHead(output_dims)
+    elif fusion_type == 'll_anchored':
+        return LLAnchoredFusionHead(output_dims, embed_dim, num_heads, dropout,
+                                    kv_source=fusion_config.get('kv_source', 'cls'),
+                                    gate_init=fusion_config.get('gate_init', 0.0))
     elif fusion_type == 'self_attention_pool':
         return SelfAttentionPoolFusionHead(output_dims, embed_dim, num_heads, dropout,
                                            pooling=fusion_config.get('pooling', 'gem'),
@@ -916,6 +991,55 @@ class SharedDinoHashing(nn.Module):
         # the same way: match DINOHashBaseline's contract (raw logits, sign() at eval).
         return logits if self.training else torch.sign(logits)
 
+class BandRoutedBlock(nn.Module):
+    """Route par sous-bande (26 sept. 2026) : 4 copies independantes d'un bloc ViT,
+    une par sous-bande (LL, LH, HL, HH). Le batch arrive en ordre band-major
+    (4*b lignes : b LL, puis b LH, ...) ; chaque quart passe dans sa propre copie.
+    Les copies partent des memes poids (pre-entraines + LoRA) et divergent ensuite ;
+    leurs parametres entrainables (LoRA, ou tout le bloc s'il fait partie des blocs
+    degeles) sont donc specifiques a chaque bande. Meme cout de calcul qu'un bloc
+    partage."""
+
+    def __init__(self, block, n_bands=4):
+        super().__init__()
+        self.n_bands = n_bands
+        self.copies = nn.ModuleList([copy.deepcopy(block) for _ in range(n_bands)])
+
+    def forward(self, x, *args, **kwargs):
+        if x.shape[0] % self.n_bands != 0:
+            raise ValueError(f"batch {x.shape[0]} non divisible par {self.n_bands} bandes")
+        chunks = x.chunk(self.n_bands, dim=0)
+        return torch.cat([blk(c, *args, **kwargs) for blk, c in zip(self.copies, chunks)], dim=0)
+
+
+class JointBandBlock(nn.Module):
+    """Attention jointe entre sous-bandes (26 sept. 2026) : pour ce bloc, les tokens
+    des 4 bandes d'une meme image sont concatenes en UNE sequence de 4*N tokens,
+    si bien que chaque token peut attendre tous les tokens des autres bandes
+    (fusion intermediaire, dans le backbone, au lieu d'une fusion finale seule).
+    Un embedding appris par bande (initialise a zero) est ajoute avant le bloc
+    pour que les bandes restent distinguables. Cout de l'attention x4 pour ce bloc.
+    (4*b, N, D) band-major  ->  (b, 4*N, D)  ->  bloc  ->  (4*b, N, D)."""
+
+    def __init__(self, block, embed_dim, n_bands=4):
+        super().__init__()
+        self.n_bands = n_bands
+        self.block = block
+        self.band_embed = nn.Parameter(torch.zeros(n_bands, 1, 1, embed_dim))
+
+    def forward(self, x, *args, **kwargs):
+        nb = self.n_bands
+        if x.shape[0] % nb != 0:
+            raise ValueError(f"batch {x.shape[0]} non divisible par {nb} bandes")
+        b = x.shape[0] // nb
+        n, d = x.shape[1], x.shape[2]
+        x = x.view(nb, b, n, d) + self.band_embed.to(x.dtype)
+        x = x.permute(1, 0, 2, 3).reshape(b, nb * n, d)
+        x = self.block(x, *args, **kwargs)
+        x = x.view(b, nb, n, d).permute(1, 0, 2, 3).reshape(nb * b, n, d)
+        return x
+
+
 class SharedDinoRetrieval(nn.Module):
     """Continuous-embedding counterpart to SharedDinoHashing, 23 sept. 2026 :
     reprend exactement le meme mecanisme -- UN SEUL backbone DINOv2 partage,
@@ -945,7 +1069,8 @@ class SharedDinoRetrieval(nn.Module):
     continu gagnant (cf. doc de suivi) s'appuie dessus.
     """
 
-    def __init__(self, backbone_config, fusion_config, with_autocast=False, lora_config=None, **kwargs):
+    def __init__(self, backbone_config, fusion_config, with_autocast=False, lora_config=None,
+                 routing_config=None, **kwargs):
         super().__init__()
 
         self.with_autocast = bool(with_autocast)
@@ -1012,11 +1137,45 @@ class SharedDinoRetrieval(nn.Module):
                         self._dsln_params += p.numel()
 
         embed_dim = self.shared_backbone.embed_dim
+
+        # Routes par bande et attention jointe entre bandes (26 sept. 2026).
+        # Appliquees APRES LoRA / degel / DSLN : les blocs concernes sont remplaces
+        # dans shared_backbone.blocks par des wrappers (BandRoutedBlock /
+        # JointBandBlock), donc le forward DINOv2 standard les utilise sans changement.
+        routing_config = routing_config or {}
+        routed = [int(i) for i in (routing_config.get('band_specific_blocks') or [])]
+        joint = [int(i) for i in (routing_config.get('joint_band_blocks') or [])]
+        n_blocks = len(self.shared_backbone.blocks)
+        for name, idx in (('band_specific_blocks', routed), ('joint_band_blocks', joint)):
+            if len(set(idx)) != len(idx) or any(i < 0 or i >= n_blocks for i in idx):
+                raise ValueError(f"{name}={idx} : indices invalides (0..{n_blocks - 1}, sans doublon)")
+        if set(routed) & set(joint):
+            raise ValueError(f"un bloc ne peut pas etre a la fois route et joint : {sorted(set(routed) & set(joint))}")
+        if (routed or joint) and self.use_dsln:
+            raise ValueError("use_dsln est incompatible avec les routes/l'attention jointe "
+                             "(MultiDomainLayerNorm decoupe le batch par 4 a l'interieur des blocs).")
+        for i in routed:
+            self.shared_backbone.blocks[i] = BandRoutedBlock(self.shared_backbone.blocks[i])
+        for i in joint:
+            self.shared_backbone.blocks[i] = JointBandBlock(self.shared_backbone.blocks[i], embed_dim)
+        self.band_specific_blocks = routed
+        self.joint_band_blocks = joint
+
         output_dims = [embed_dim, embed_dim, embed_dim, embed_dim]
         self.fusion_head = get_fusion_head(fusion_config, output_dims)
 
     def forward(self, x):
         with torch.amp.autocast('cuda', enabled=self.with_autocast):
+            if getattr(self.fusion_head, 'uses_patch_tokens', False):
+                # Tete qui a besoin des patch tokens (ll_anchored, kv_source='patches') :
+                # forward_features renvoie CLS et patch tokens normalises.
+                b, c, s, h, w = x.shape
+                x_concat = x.permute(2, 0, 1, 3, 4).contiguous().view(b * s, c, h, w)
+                ff = self.shared_backbone.forward_features(x_concat)
+                features_list = list(ff['x_norm_clstoken'].chunk(4, dim=0))
+                patch_list = list(ff['x_norm_patchtokens'].chunk(4, dim=0))
+                fused_embedding = self.fusion_head(features_list, patch_tokens=patch_list)
+                return F.normalize(fused_embedding, p=2, dim=1)
             # Identique a SharedDinoHashing.forward() jusqu'a la fusion : x a la
             # forme (b, c, s=4, h, w) -- les 4 sous-bandes ondelette produites par
             # SWTTransform/DWTTransform -- reshapees en (b*4, c, h, w) pour un seul
@@ -1103,7 +1262,11 @@ class PromptedSharedDinoRetrieval(SharedDinoRetrieval):
             cls_out = tokens[:, 0]
 
             features_list = list(cls_out.chunk(4, dim=0))
-            fused_embedding = self.fusion_head(features_list)
+            if getattr(self.fusion_head, 'uses_patch_tokens', False):
+                patch_list = list(tokens[:, 1 + self.num_prompts:].chunk(4, dim=0))
+                fused_embedding = self.fusion_head(features_list, patch_tokens=patch_list)
+            else:
+                fused_embedding = self.fusion_head(features_list)
             return F.normalize(fused_embedding, p=2, dim=1)
 
 

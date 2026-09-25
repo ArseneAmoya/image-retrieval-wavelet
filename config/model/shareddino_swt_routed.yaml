@@ -1,0 +1,42 @@
+# @package _group_
+#
+# 26 sept. 2026 -- « tout pour le tout » sur shareddino : un seul fichier modele
+# qui declare toutes les options de fusion et de routage, pour pouvoir les
+# surcharger depuis les etudes (Hydra struct mode). Par defaut : la meilleure
+# config shareddino a ce jour (fusion self-attention + GeM, log du 25 sept. :
+# MAP@R 77.08), sans route ni attention jointe.
+#
+# routing_config :
+#   band_specific_blocks : blocs dupliques en 4 copies, une par sous-bande
+#                          (routes separees ; en debut ou en fin de reseau).
+#   joint_band_blocks    : blocs ou les tokens des 4 bandes d'une image forment
+#                          une seule sequence (attention jointe entre bandes).
+# fusion_config.type : self_attention_pool | ll_anchored | ll_only | semantic | standard
+name: SharedDinoRetrieval
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbone_config:
+    name: 'dinov2_vits14'
+    frozen: false
+    use_dsln: false
+  fusion_config:
+    type: 'self_attention_pool'
+    output_dim: 384
+    num_heads: 8
+    dropout: 0.1
+    pooling: 'gem'
+    gem_p: 3.0
+    kv_source: 'cls'
+    gate_init: 0.0
+    residual: false
+  routing_config:
+    band_specific_blocks: []
+    joint_band_blocks: []
+  with_autocast: true
+  lora_config:
+    enabled: true
+    rank: 64
+    scope: attn_mlp
+    dropout: 0.05
+    unfreeze_last_n_blocks: 2
