@@ -169,6 +169,55 @@ class SWTTransform(BaseWaveletTransform):
         return f"SWTTransform(shape='C,S,H,W', wavelet={self.wavelet}, level={self.level})"
 
 
+class NormalizedSWTTransform(BaseWaveletTransform):
+    """SWT (niveau 1) sur une image normalisee comme DINOv2 l'attend (26 sept. 2026).
+
+    SWTTransform divise seulement par 255 : la sous-bande LL (Haar orthonormal,
+    somme 2x2 / 2) vaut alors [0, 2] et n'est pas centree-reduite, alors que
+    DINOv2 a ete pre-entraine sur du RGB normalise ImageNet. Controle LL seul :
+    -0.9 pt de MAP@R par rapport au RGB.
+
+    Ici :
+      1. x = (image/255 - mean) / std, par canal (ImageNet par defaut) ;
+      2. SWT de x, puis division de toutes les sous-bandes par 2 (convention
+         « moyenne » au lieu d'orthonormale, gain DC 2 en 2D au niveau 1).
+    Resultat : LL = moyenne 2x2 (bords periodiques) de l'image normalisee
+    ImageNet, soit exactement la distribution que DINOv2 attend, en version
+    legerement lissee. Par linearite, LH/HL/HH = sous-bandes de l'ancienne
+    SWTTransform divisees par (2 * std du canal) : environ x2.2, sans decalage.
+    hf_scale (scalaire ou liste de 3, pour LH, HL, HH) multiplie en plus les
+    sous-bandes HF (defaut 1.0, aucune modification).
+    """
+
+    def __init__(self, level=1, wavelet='haar', mean=(0.485, 0.456, 0.406),
+                 std=(0.229, 0.224, 0.225), hf_scale=1.0):
+        super().__init__(level=level, wavelet=wavelet)
+        if int(level) != 1:
+            raise ValueError("NormalizedSWTTransform ne gere que level=1.")
+        self.mean = np.asarray(list(mean), dtype=np.float32).reshape(1, 1, 3)
+        self.std = np.asarray(list(std), dtype=np.float32).reshape(1, 1, 3)
+        hs = list(hf_scale) if isinstance(hf_scale, (list, tuple)) or hasattr(hf_scale, '__len__') else [hf_scale] * 3
+        if len(hs) != 3:
+            raise ValueError("hf_scale : un scalaire ou 3 valeurs (LH, HL, HH).")
+        self.hf_scale = np.asarray([float(v) for v in hs], dtype=np.float32)
+
+    def __call__(self, img):
+        img = self.fix_size(img)
+        x = (np.array(img).astype(np.float32) / 255.0 - self.mean) / self.std
+        channels_output = []
+        for c in range(3):
+            coeffs = pywt.swt2(x[:, :, c], self.wavelet, level=1)
+            cA, (cH, cV, cD) = coeffs[0]
+            bands = np.stack([cA, cH * self.hf_scale[0], cV * self.hf_scale[1], cD * self.hf_scale[2]]) / 2.0
+            channels_output.append(bands)
+        return torch.from_numpy(np.stack(channels_output).astype(np.float32))
+
+    def __repr__(self):
+        return (f"NormalizedSWTTransform(shape='C,S,H,W', wavelet={self.wavelet}, level={self.level}, "
+                f"mean={self.mean.ravel().tolist()}, std={self.std.ravel().tolist()}, "
+                f"hf_scale={self.hf_scale.tolist()})")
+
+
 class RawStackTransform(BaseWaveletTransform):
     """Parameter-matched control for the wavelet decomposition: outputs the same
     [C, 4, H, W] layout as SWTTransform, but every 'subband' is an identical copy

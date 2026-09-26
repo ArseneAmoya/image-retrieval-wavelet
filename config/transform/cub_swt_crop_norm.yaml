@@ -1,0 +1,34 @@
+# @package _group_
+#
+# 26 sept. 2026 -- identique a cub_swt_crop.yaml (Resize 256 -> RandomCrop 224
+# -> flip, test Resize 256 -> CenterCrop 224) SAUF la fin : NormalizedSWTTransform
+# au lieu de SWTTransform. L'image est normalisee ImageNet AVANT la SWT, et les
+# sous-bandes sont divisees par 2 : LL devient exactement la moyenne 2x2 de
+# l'image normalisee (ce que DINOv2 attend), LH/HL/HH sont l'ancienne SWT / (2 x
+# std du canal). Motif : controle LL seul a -0.9 pt de MAP@R sous le RGB, avec
+# une LL dans [0, 2] non centree-reduite.
+train:
+  Resize:
+    size: 256
+  RandomCrop:
+    size: 224
+  RandomHorizontalFlip:
+    p: 0.5
+  NormalizedSWTTransform:
+    level: 1
+    wavelet: 'haar'
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    hf_scale: 1.0
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  NormalizedSWTTransform:
+    level: 1
+    wavelet: 'haar'
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    hf_scale: 1.0

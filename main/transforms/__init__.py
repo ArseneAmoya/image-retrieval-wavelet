@@ -1,1 +1,1 @@
-from .custom_transforms import CustomTransform, ResizeSubBands, SWTTransform, DWTTransform, RawStackTransform
+from .custom_transforms import CustomTransform, ResizeSubBands, SWTTransform, NormalizedSWTTransform, DWTTransform, RawStackTransform
