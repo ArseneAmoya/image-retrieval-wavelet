@@ -1,0 +1,13 @@
+# @package _group_
+# CE recipe as written in the ComNet 2025 paper (Sec. IV-B): "trained with an Adam optimizer
+# with a learning rate and weight decay of 1e-5 and 4e-4 respectively without a scheduler", 200 epochs.
+# Same values as sdd_ce.yaml. NB: the July 2025 CE runs reported in Table II actually used
+# cifar_ce = AdamW 3e-4 / wd 1e-4 + OneCycleLR (see .hydra/config.yaml of those runs).
+- name: Adam
+  params:
+  kwargs:
+    lr: 0.00001
+    weight_decay: 0.0004
+  scheduler_on_epoch:
+  scheduler_on_step:
+  scheduler_on_val:
