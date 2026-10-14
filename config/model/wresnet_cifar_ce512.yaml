@@ -1,0 +1,22 @@
+# @package _group_
+# CE counterpart of wresnet_cifar_sap: same backbone (4 x ResNet50 branches, 2048 per branch,
+# CBAM fusion) and same 2048 -> 512 linear head as the SmoothAP model. The classifier
+# Linear(512 -> 100) is used for training only; the evaluated embedding is the
+# L2-normalised 512-d projection, exactly like RetrievalNet's fc + normalize for SmoothAP.
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: wresnet_ce
+  embed_dim: 512
+  norm_features: False
+  without_fc: True               # RetrievalNet's fc is bypassed: the projection lives in WaveResNetCE
+  with_autocast: True
+  attention: True
+  decom_level: 1
+  wave: haar
+  feature_size: 2048
+  attention_type: cbam
+  num_classes: 100
+  proj_dim: 512
+  normalize_embeddings: True

@@ -14,3 +14,5 @@ kwargs:
   feature_size: 512
   attention_type: eca
   num_classes: 100
+  proj_dim: null                 # null = legacy: embedding = fused backbone feature (no projection)
+  normalize_embeddings: False    # False = legacy (July 2025): raw embedding at eval

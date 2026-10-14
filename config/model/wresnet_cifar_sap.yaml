@@ -1,0 +1,19 @@
+# @package _group_
+# SmoothAP model of the WaveResNet CIFAR-100 paper (run cifar_wresnet_smoothap_128_sota_1_cbam):
+# 4 x ResNet50 branches (2048 per branch), CBAM fusion, RetrievalNet fc Linear(2048 -> 512) + L2.
+# No num_classes on purpose: since 2026-07-23 RetrievalNet bypasses fc + normalisation
+# whenever num_classes is set (with_classifier).
+name: RetrievalNet
+freeze_batch_norm: False
+freeze_pos_embedding: False
+kwargs:
+  backbone_name: wresnet
+  embed_dim: 512
+  norm_features: False
+  without_fc: False
+  with_autocast: True
+  attention: True
+  decom_level: 1
+  wave: haar
+  feature_size: 2048
+  attention_type: cbam

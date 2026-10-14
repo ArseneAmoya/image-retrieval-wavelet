@@ -1,0 +1,19 @@
+# Recreated 2026-10-14: optimizer=cifar_ce as used by the July 2025 CE runs of the
+# WaveResNet CIFAR-100 paper (cifar_wresnet_ce_128_sota_1, cifar_wresnet_ce_128_attention_cbam_21),
+# copied from their .hydra/config.yaml. Identical to cifar_ap.yaml (SmoothAP runs).
+- name: AdamW
+  params:
+  kwargs:
+    lr: 0.0003
+    weight_decay: 0.0001
+  scheduler_on_step:
+    name: OneCycleLR
+    kwargs:
+      max_lr: 0.001
+      pct_start: 0.3
+      div_factor: 10
+      final_div_factor: 100
+      epochs: 200
+      steps_per_epoch: 375
+  scheduler_on_epoch:
+  scheduler_on_val:

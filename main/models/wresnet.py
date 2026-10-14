@@ -250,7 +250,7 @@ class Eca1D_layer(nn.Module):
 
         return y
 class WaveResNet(nn.Module):
-    def __init__(self, decom_level = 3, wave="haar", *args, **kwargs) -> None:
+    def __init__(self, decom_level = 3, wave="haar", ll_only=False, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WaveResNet, self).__init__()
         self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=decom_level, wave= wave, mode='zero')
@@ -275,9 +275,10 @@ class WaveResNet(nn.Module):
 #             #if ct < 7:
 #             for param in child.parameters():
 #                 param.requires_grad = False
-        self.lh_backbone = copy.deepcopy(self.backbone)
-        self.hl_backbone = copy.deepcopy(self.backbone)
-        self.hh_backbone = copy.deepcopy(self.backbone)
+        if not ll_only:
+            self.lh_backbone = copy.deepcopy(self.backbone)
+            self.hl_backbone = copy.deepcopy(self.backbone)
+            self.hh_backbone = copy.deepcopy(self.backbone)
         if self.att:
             if kwargs.get('attention_type', None) == "eca":
                 self.attention = Eca1D_layer(4)
@@ -323,7 +324,17 @@ class WaveResNet(nn.Module):
             return None
 
 class WaveResNetCE(nn.Module):
-    def __init__(self, decom_level = 3, wave="haar", ll_only =False, *args, **kwargs) -> None:
+    """WaveResNet + classification head for cross-entropy training.
+
+    proj_dim (None by default = legacy behaviour): if set, a Linear(feature -> proj_dim)
+    projection is inserted between the fused feature and the classifier, i.e. the
+    same 2048 -> 512 head as RetrievalNet's fc for the metric-learning (SmoothAP)
+    model. Training returns logits = classifier(proj(x)); evaluation returns
+    proj(x) (the retrieval embedding), the classifier being dropped.
+    normalize_embeddings (False by default = legacy behaviour): L2-normalise the
+    embedding returned at evaluation, as RetrievalNet does for the SmoothAP model.
+    """
+    def __init__(self, decom_level = 3, wave="haar", ll_only =False, proj_dim=None, normalize_embeddings=False, *args, **kwargs) -> None:
         self.OUT_SIZE = kwargs.get("feature_size", 2048)
         super(WaveResNetCE, self).__init__()
         self.dwt = Cdf97Lifting(n_levels = decom_level) if wave == "cdf97" else DWTForward(J=decom_level, wave= wave, mode='zero')
@@ -366,7 +377,17 @@ class WaveResNetCE(nn.Module):
         self.ll_only = ll_only
 
         in_features = self.OUT_SIZE * (4 if (not ll_only) and not self.att else 1)
+        self.proj_dim = int(proj_dim) if proj_dim else None
+        self.normalize_embeddings = bool(normalize_embeddings)
+        if self.proj_dim:
+            self.proj = nn.Linear(in_features, self.proj_dim)
+            lib.LOGGER.info(f"WaveResNetCE projection head : {self.proj}")
+            in_features = self.proj_dim
+        else:
+            self.proj = nn.Identity()
+            lib.LOGGER.info("WaveResNetCE : no projection head (embedding = fused backbone feature)")
         self.classifier = nn.Linear(in_features, kwargs.get("num_classes", 100))
+        lib.LOGGER.info(f"WaveResNetCE classifier : {self.classifier} (training only), L2-normalised eval embedding : {self.normalize_embeddings}")
         # ct = 0
         # for child in self.left.children():
         #     ct += 1
@@ -384,10 +405,12 @@ class WaveResNetCE(nn.Module):
         if(self.att):
             x = x.view(x.size(0), 4, self.OUT_SIZE)
             x = self.attention(x)
+        x = self.proj(x)
         if self.training:
             return self.classifier(x)
-        else:
-            return x
+        if self.normalize_embeddings:
+            x = F.normalize(x, p=2, dim=1)
+        return x
     def alphas(self, x):
         x, high = self.dwt(x)
         high = high[self.level]
