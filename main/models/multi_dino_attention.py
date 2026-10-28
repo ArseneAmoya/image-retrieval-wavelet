@@ -738,6 +738,50 @@ class LLAnchoredFusionHead(nn.Module):
         return ll + self.gamma.to(ll.dtype) * delta.squeeze(1)
 
 
+class SimpleCLSFusionHead(nn.Module):
+    """Attention-free fusion baselines for the ICAART revision (2026-10-28).
+
+    Answers reviewers R3/R4 (MMM 2027): does the learnable-query cross-attention
+    do better than a plain combination of the four subband CLS tokens?
+
+      pool='mean'  : Z = mean_b(Y_b);           F = LN(Z + MLP(Z))
+                     -- the cross-attention head with uniform attention weights and
+                        no query/key/value projections (the measured attention is
+                        nearly uniform, so this is the closest attention-free match).
+      pool='concat': Z = [Y_LL; Y_LH; Y_HL; Y_HH] (4d); F = LN(MLP_cat(Z))
+                     -- "concatenation + MLP" baseline requested by R4.
+
+    MLP = Linear(d, 4d) -> GELU -> Dropout -> Linear(4d, d) -> Dropout (same shape as
+    the Advanced head's MLP). MLP_cat = Linear(4d, 4d) -> GELU -> Dropout -> Linear(4d, d).
+    No last_ortho_loss attribute: base_update.py only adds an ortho term when the head
+    exposes one, so nothing else changes in training.
+    """
+
+    def __init__(self, input_dims, embed_dim=384, dropout=0.1, pool='mean'):
+        super().__init__()
+        if pool not in ('mean', 'concat'):
+            raise ValueError(f"pool must be 'mean' or 'concat', got {pool!r}")
+        self.pool = pool
+        self.projections = nn.ModuleList([
+            nn.Linear(dim, embed_dim) if dim != embed_dim else nn.Identity()
+            for dim in input_dims
+        ])
+        n = len(input_dims)
+        in_dim = embed_dim if pool == 'mean' else n * embed_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(in_dim, embed_dim * 4), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(embed_dim * 4, embed_dim), nn.Dropout(dropout),
+        )
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, features_list):
+        x = torch.stack([proj(f) for proj, f in zip(self.projections, features_list)], dim=1)
+        if self.pool == 'mean':
+            z = x.mean(dim=1)
+            return self.norm(z + self.mlp(z))
+        return self.norm(self.mlp(x.flatten(1)))
+
+
 def get_fusion_head(fusion_config, output_dims):
     fusion_type = fusion_config.get('type', 'standard')
     embed_dim = fusion_config['output_dim']
@@ -747,6 +791,9 @@ def get_fusion_head(fusion_config, output_dims):
     if fusion_type == 'temperature':
         temp = fusion_config.get('temperature', 0.1)
         return TemperatureFusionHead(output_dims, embed_dim, num_heads, dropout, temperature=temp)
+    elif fusion_type == 'cls_simple':
+        return SimpleCLSFusionHead(output_dims, embed_dim, dropout,
+                                   pool=fusion_config.get('pool', 'mean'))
     elif fusion_type == 'semantic':
         return SemanticFusionHead(output_dims, embed_dim, num_heads, dropout,
                                   residual=fusion_config.get('residual', False))

@@ -1,0 +1,57 @@
+study_name: mflickr_icaart_n1_seeds
+
+# ICAART revision (2026-10-28): two extra seeds for the headline MIRFLICKR-25K
+# configuration (N=1, 64 bits), so that Table 2 can report mean +/- std instead of a
+# single run. Seed 333 already exists (mflickr_final_headline, 85.06 at best epoch).
+# Every training setting is copied from mflickr_final_headline.yaml; only the seed
+# changes. ortho_weight is kept at 0.1 exactly as in the headline run: with a single
+# query the Gram matrix is 1x1 and the orthogonality term is identically zero, so this
+# is the method described in the paper (no orthogonality), with the same code path.
+#
+# Model selection, as in the paper: evaluate every saved checkpoint afterwards with
+#   python studies/evaluate_all_checkpoints.py studies/mflickr_icaart_n1_seeds.yaml \
+#       --set test --bs 256 --k 19581 --distance-metric hamming \
+#       --csv results_icaart_n1_seeds.csv
+base_overrides:
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1   # identically zero at N=1 (see above)
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep:
+  experience.seed: [111, 222]

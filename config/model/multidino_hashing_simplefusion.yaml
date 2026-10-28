@@ -1,0 +1,33 @@
+# @package _group_
+# ICAART revision (2026-10-28): attention-free fusion baselines.
+# Identical to multidino_attention_hashing_ortho.yaml (4 unshared fine-tuned
+# DINOv2-S/14 branches on the SWT subbands, BN hash layer, 64 bits) except for the
+# fusion head: 'cls_simple' (SimpleCLSFusionHead) replaces the learnable-query
+# cross-attention. Choose fusion_config.pool = 'mean' or 'concat' (see the class
+# docstring in main/models/multi_dino_attention.py).
+name: MultiDinoHashing
+freeze_batch_norm: false
+freeze_pos_embedding: false
+kwargs:
+  backbones_config:
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+    - name: 'dinov2_vits14'
+      frozen: False
+
+  binary_config:
+    nbits: 64
+
+  use_bn: True
+
+  fusion_config:
+    type: 'cls_simple'
+    output_dim: 384
+    dropout: 0.1
+    pool: 'mean'
+
+  with_autocast: false

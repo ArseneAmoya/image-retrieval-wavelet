@@ -1,0 +1,50 @@
+study_name: mflickr_icaart_backbone_seeds
+
+# ICAART revision (2026-10-28): two extra seeds for the single-backbone baselines of
+# Table 2 (DINOv2 ViT-S/14 and ViT-B/14 on the RGB image, same HashLoss head), paired
+# with mflickr_icaart_n1_seeds. Seed 333 already exists (81.34 / 84.05).
+# Settings copied from mflickr_backbone_grid_hashloss.yaml (transform basic_rrc, i.e.
+# the same Resize / RandomResizedCrop / flip as basic_swt without the SWT step).
+# DINOHashBaseline's frozen-backbone bug is fixed (RESULTS.md section 4): backbones
+# are fine-tuned.
+#
+# Model selection, same rule as MF-DINO-H:
+#   python studies/evaluate_all_checkpoints.py studies/mflickr_icaart_backbone_seeds.yaml \
+#       --set test --bs 256 --k 19581 --distance-metric hamming \
+#       --csv results_icaart_backbone_seeds.csv
+base_overrides:
+  loss: hash_loss
+  optimizer: basic
+  transform: basic_rrc
+  dataset: mflickr
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  experience.max_iter: 50
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep:
+  model: [baseline_vitb_hash, baseline_vits_hash]
+  experience.seed: [111, 222]

@@ -1,0 +1,56 @@
+study_name: mflickr_icaart_simple_fusion
+
+# ICAART revision (2026-10-28): attention-free fusion baselines requested by the MMM
+# reviewers (R3: "simple concatenation or averaging of the subband features"; R4:
+# "a concatenation + MLP fusion baseline (no attention, no queries)").
+# Same four fine-tuned DINOv2-S/14 branches, SWT input, hash layer, loss and training
+# protocol as the headline MIRFLICKR run (mflickr_final_headline, seed 333, 64 bits);
+# only the fusion head changes (model multidino_hashing_simplefusion, class
+# SimpleCLSFusionHead):
+#   pool=mean   : average of the 4 CLS tokens + residual MLP + LayerNorm
+#   pool=concat : concatenation of the 4 CLS tokens + MLP + LayerNorm
+# Compare each with MF-DINO-H N=1 at seed 333 (85.06).
+#
+#   python studies/evaluate_all_checkpoints.py studies/mflickr_icaart_simple_fusion.yaml \
+#       --set test --bs 256 --k 19581 --distance-metric hamming \
+#       --csv results_icaart_simple_fusion.csv
+base_overrides:
+  optimizer: basic
+  model: multidino_hashing_simplefusion
+  transform: basic_swt
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.with_autocast: false
+  experience.seed: 333
+  experience.max_iter: 50
+
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep:
+  model.kwargs.fusion_config.pool: [mean, concat]
