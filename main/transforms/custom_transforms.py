@@ -252,3 +252,36 @@ class DWTTransform(BaseWaveletTransform):
     def __repr__(self):
         factor = 2 ** self.level
         return f"DWTTransform(shape='C,S,H/{factor},W/{factor}', wavelet={self.wavelet}, level={self.level})"
+
+
+class MultiViewRawTransform(object):
+    """Four-branch RGB control with independent views (ICAART revision, 2026-10-29).
+
+    RawStackTransform feeds the SAME tensor to the four branches. Since the four
+    branches start from the same DINOv2 checkpoint, identical inputs keep them
+    (almost) identical during training -- only the dropout in the fusion head breaks
+    the symmetry -- so that control is close to a single ViT-S with four times the
+    compute. Here each branch receives its own random view of the image during
+    training (independent Resize / RandomResizedCrop / RandomHorizontalFlip, exactly
+    the steps of basic_swt), so the branches can diverge into a genuine ensemble of
+    four RGB encoders. At test time use the deterministic pipeline
+    Resize -> CenterCrop -> RawStackTransform (four identical copies).
+
+    Output: [C, copies, H, W], values in [0, 1] (same scale and layout as
+    SWTTransform / RawStackTransform, no further normalization).
+    """
+
+    def __init__(self, copies=4, resize=256, size=224, flip_p=0.5):
+        import torchvision.transforms as T
+        self.copies = copies
+        self.view = T.Compose([T.Resize(resize), T.RandomResizedCrop(size), T.RandomHorizontalFlip(flip_p)])
+        self._desc = f"copies={copies}, resize={resize}, size={size}, flip_p={flip_p}"
+
+    def __call__(self, img):
+        views = [np.asarray(self.view(img), dtype=np.float32) / 255.0 for _ in range(self.copies)]
+        out = np.stack(views, axis=0)            # [copies, H, W, C]
+        out = np.ascontiguousarray(out.transpose(3, 0, 1, 2))   # [C, copies, H, W]
+        return torch.from_numpy(out).float()
+
+    def __repr__(self):
+        return f"MultiViewRawTransform(shape='C,S,H,W', {self._desc})"

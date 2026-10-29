@@ -23,8 +23,9 @@ scripts
 data
 
 experiments/
-
+notebooks/
 #test_*
 
 /?*RETRIEVAL*
 /?*ROADMAP*
+

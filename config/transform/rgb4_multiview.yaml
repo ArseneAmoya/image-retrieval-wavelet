@@ -1,0 +1,21 @@
+# ICAART revision (2026-10-29): four-branch RGB control with independent views.
+# Training: each of the four branches gets its own random view of the image
+# (Resize 256 / RandomResizedCrop 224 / RandomHorizontalFlip, the steps of basic_swt),
+# see MultiViewRawTransform. Test: deterministic Resize / CenterCrop, then four
+# identical copies (RawStackTransform), exactly as voc_raw4.yaml.
+# Same output layout and value scale ([C, 4, H, W], /255, no normalization) as basic_swt.
+train:
+  MultiViewRawTransform:
+    copies: 4
+    resize: 256
+    size: 224
+    flip_p: 0.5
+
+test:
+  Resize:
+    size: 256
+  CenterCrop:
+    size: 224
+  RawStackTransform:
+    level: 1
+    copies: 4

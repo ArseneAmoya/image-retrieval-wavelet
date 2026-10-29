@@ -1,0 +1,65 @@
+study_name: mflickr_icaart_rgb4_control
+
+# ICAART revision (2026-10-29): four-branch RGB control requested by MMM reviewers
+# R1 and R3 ("a four-branch architecture operating directly on the original images").
+# MIRFLICKR-25K only (disjoint train / query / database sets), 64 bits.
+#
+# Identical to the headline MF-DINO-H run (mflickr_final_headline / mflickr_icaart_n1_seeds:
+# 4 unshared fine-tuned DINOv2-S/14 branches, 1-query cross-attention, BN hash layer,
+# HashLoss, same optimizer, schedule and batch) except for the last input step:
+#   transform=voc_raw4       : the four branches see four IDENTICAL copies of the RGB
+#                              crop (literal reviewer request; the name is historical,
+#                              the transform is dataset-agnostic). Since the branches
+#                              start from the same checkpoint, identical inputs keep them
+#                              nearly identical -- this arm is close to one ViT-S branch.
+#   transform=rgb4_multiview : each branch sees its own random view during training
+#                              (independent crops / flips), identical copies at test --
+#                              a genuine ensemble of four RGB encoders.
+# Reference arm (SWT input): MF-DINO-H N=1, seeds 333 / 111 / 222 = 85.06 / 83.45 / 82.61.
+#
+#   python studies/evaluate_all_checkpoints.py studies/mflickr_icaart_rgb4_control.yaml \
+#       --set test --bs 256 --k 19581 --distance-metric hamming \
+#       --csv results_icaart_rgb4_control.csv
+base_overrides:
+  optimizer: basic
+  model: multidino_attention_hashing_ortho
+  dataset: mflickr
+  loss: hash_loss
+
+  dataset.kwargs.data_dir: /content/data/mirflickr
+
+  dataset.sampler.kwargs.batch_size: 96
+  loss.0.kwargs.num_classes: 38
+  loss.0.kwargs.embedding_size: 64
+  loss.0.kwargs.quant_weight: 0.1
+  loss.0.kwargs.scale: 15.0
+  model.kwargs.binary_config.nbits: 64
+  model.kwargs.use_bn: true
+  model.kwargs.fusion_config.num_queries: 1
+  model.kwargs.fusion_config.use_all_tokens: false
+  model.kwargs.fusion_config.sub_band_dropout_p: 0
+  model.kwargs.fusion_config.ortho_weight: 0.1   # identically zero at N=1
+  model.kwargs.with_autocast: false
+  experience.max_iter: 50
+
+  experience.train_eval_freq: -1
+  experience.test_eval_freq: -1
+  experience.fast_eval_freq: -1
+  experience.evaluation.top_k: 19581
+  experience.evaluation.distance_metric: hamming
+
+  experience.save_model: 5
+  experience.clip_grad: 5.0
+  experience.num_workers: 10
+  experience.eval_bs: 200
+  experience.sub_batch: 96
+  experience.batch_map_proxy: false
+  experience.hooks_configs.active: false
+  experience.dsch_train: false
+  experience.log_dir: ./experiments_runs
+
+rsync_dest: /content/drive/MyDrive/experiments_cub_retrieval/
+
+sweep:
+  transform: [voc_raw4, rgb4_multiview]
+  experience.seed: [333, 111, 222]
