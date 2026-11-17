@@ -1,14 +1,49 @@
-numpy==1.20.3
-torch==1.8.1
-torchvision==0.9.1
-faiss-gpu==1.6.5
-pillow==8.2.0
-pandas==1.2.4
-tqdm==4.61.0
-tensorboard==2.5.0
-matplotlib==3.4.2
-pytorch-metric-learning==0.9.99
-timm==0.4.12
-hydra-core==1.0.6
-hydra_colorlog==1.0.1
-termcolor==1.1.0
+# Retrieval Framework (MF-DINO-H, MBW-DINO, hashing baselines)
+# Python 3.10 – 3.12
+#
+# PyTorch is NOT listed here: install it first, with the build matching your CUDA driver
+# (check the driver with `nvidia-smi`, then pick the command on https://pytorch.org/get-started/locally/).
+# Quadro P5000 (Pascal, sm_61): CUDA 13 wheels do not support it; use the cu126 build.
+# PyTorch 2.14 is the last release shipping cu126 wheels:
+#   pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cu126
+# torch >= 2.1 is required (studies/measure_cost.py uses torch.utils.flop_counter).
+
+# --- Configuration and experiment management (Hydra version_base="1.1" needs hydra-core >= 1.2)
+hydra-core>=1.3
+hydra_colorlog>=1.2          # config/default.yaml overrides hydra/job_logging: colorlog
+omegaconf>=2.3
+pyyaml
+termcolor
+loguru                       # main/engine/DSCH
+
+# --- Models and backbones
+timm>=0.9
+open_clip_torch>=2.24        # imported by main/models/net.py
+transformers>=4.40           # main/models/hugging_face_models.py
+pytorch-metric-learning>=2.4
+
+# --- Wavelets
+PyWavelets>=1.5              # import pywt (SWT)
+pytorch_wavelets>=1.3        # main/models/wresnet.py, custom_transforms.py
+
+# --- Retrieval / evaluation
+faiss-cpu>=1.8               # main/engine/get_knn.py (swap for faiss-gpu-cu12 if you want GPU k-NN)
+torchmetrics>=1.3
+scikit-learn>=1.3
+scipy>=1.11
+
+# --- Data and utilities
+numpy>=1.26,<2.2
+pandas>=2.1
+pillow>=10.0
+tqdm
+openpyxl                     # main/engine/DSCH/_utils.py
+matplotlib>=3.8
+tensorboard>=2.15
+
+# --- Model summaries (test_models.py, main/getter.py)
+torchinfo
+torchsummary
+
+# --- Optional: hyperparameter search (run.py, train.py when tuning is enabled)
+# ray[tune]>=2.9
