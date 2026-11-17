@@ -1,6 +1,6 @@
 name: VOC2012Hashing
 kwargs:
-  data_dir: /content/voc2012
+  data_dir: ${oc.env:DATA_ROOT,/content/data}/voc
   
 sampler:
   name: RandomSampler # Plus de MPerClass !

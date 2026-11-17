@@ -29,7 +29,6 @@ base_overrides:
   dataset: mflickr
   loss: hash_loss
 
-  dataset.kwargs.data_dir: /content/data/mirflickr
 
   # --- Protected: identical to mflickr_lph_vs_ortho_multiseed, except num_queries ---
   dataset.sampler.kwargs.batch_size: 96

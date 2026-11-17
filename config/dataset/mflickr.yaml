@@ -1,6 +1,6 @@
 name: MIRFlickrHashing
 kwargs:
-  data_dir: /content/data/mirflickr
+  data_dir: ${oc.env:DATA_ROOT,/content/data}/mirflickr
   
 sampler:
   name: RandomSampler

@@ -23,7 +23,6 @@ base_overrides:
   dataset: mflickr
   loss: hash_loss
 
-  dataset.kwargs.data_dir: /content/data/mirflickr
 
   # --- Protected: must match the reference hashing setup exactly ---
   dataset.sampler.kwargs.batch_size: 96

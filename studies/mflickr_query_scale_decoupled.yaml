@@ -46,7 +46,6 @@ base_overrides:
   dataset: mflickr
   loss: hash_loss
 
-  dataset.kwargs.data_dir: /content/data/mirflickr
 
   # --- Protected: matches mflickr_lph_vs_ortho_multiseed exactly, so results are
   #     directly comparable to the ortho_weight=0.1 / seed=333 baseline ---

@@ -11,7 +11,7 @@ kwargs:
   # remontait seulement jusqu'a experiments_runs/, jamais jusqu'a la racine.
   # 22 sept. 2026 (Arsene) : le dataset est extrait sous /content/data/cub/CUB_200_2011
   # sur cette instance Colab (pas /content/CUB_200_2011 comme le run d'origine).
-  data_dir: /content/data/cub/CUB_200_2011
+  data_dir: ${oc.env:DATA_ROOT,/content/data}/cub/CUB_200_2011
   seed: 42 # Pour garantir que le split Train/Query/Gallery reste fixe
 
 sampler:

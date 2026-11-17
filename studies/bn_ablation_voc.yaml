@@ -7,7 +7,6 @@ base_overrides:
   transform: voc_swt
   dataset: mflickr
   loss: hash_loss
-  dataset.kwargs.data_dir: /content/data/mirflickr
   experience.num_workers: 10
   experience.max_iter: 50
   experience.eval_bs: 200

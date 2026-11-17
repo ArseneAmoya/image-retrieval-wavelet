@@ -1,6 +1,6 @@
 name: COCOHashing
 kwargs:
-  data_dir: ../data/coco_hashing
+  data_dir: ${oc.env:DATA_ROOT,/content/data}/coco
   
 sampler:
   name: RandomSampler

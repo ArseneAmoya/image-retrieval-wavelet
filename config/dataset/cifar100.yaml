@@ -2,7 +2,7 @@
 name: Cifar100RetrievalDataset
 kwargs:
   # Chemin vers le dossier racine où 'cifar-100-python' sera téléchargé/trouvé
-  data_dir: ../../data/cifar100 
+  data_dir: ${oc.env:DATA_ROOT,/content/data}/cifar100
   seed: 42 # Pour garantir que le split Train/Query/Gallery reste fixe
 
 sampler:

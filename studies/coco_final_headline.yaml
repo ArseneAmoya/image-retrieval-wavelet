@@ -46,7 +46,6 @@ base_overrides:
   dataset: coco
   loss: hash_loss
 
-  dataset.kwargs.data_dir: /content/coco_images
 
   dataset.sampler.kwargs.batch_size: 96
   loss.0.kwargs.num_classes: 80

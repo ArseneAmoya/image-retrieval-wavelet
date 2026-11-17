@@ -14,7 +14,6 @@ base_overrides:
   loss: hash_loss
 
   # Dataset location (not a hyperparameter) -- matches the reference config exactly
-  dataset.kwargs.data_dir: /content/voc
 
   # --- Protected: must match the reference config exactly, fixed across the whole sweep ---
   dataset.sampler.kwargs.batch_size: 96

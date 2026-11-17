@@ -13,7 +13,6 @@ base_overrides:
   transform: basic_rrc
   dataset: mflickr
 
-  dataset.kwargs.data_dir: /content/data/mirflickr
 
   dataset.sampler.kwargs.batch_size: 96
   experience.seed: 333
